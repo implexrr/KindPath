@@ -50,3 +50,13 @@ test('unknown API routes return JSON 404', async () => {
   assert.equal(response.status, 404);
   assert.equal((await response.json()).error, 'API route not found.');
 });
+
+test('OPTIONS analysis requests preserve the JSON 404 response', async () => {
+  for (const path of ['/api/analyze', '/api/analyze/']) {
+    const response = await fetch(`${origin}${path}`, { method: 'OPTIONS' });
+    assert.equal(response.status, 404);
+    assert.match(response.headers.get('content-type') ?? '', /^application\/json\b/);
+    assert.equal(response.headers.get('allow'), null);
+    assert.deepEqual(await response.json(), { error: 'API route not found.' });
+  }
+});
