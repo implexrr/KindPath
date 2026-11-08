@@ -28,6 +28,10 @@ test('valid URL returns explicit demo findings without requiring a reachable hos
   assert.equal(body.mode, 'demo');
   assert.equal(body.url, 'https://kindpath-test.invalid/');
   assert.equal(body.findings.length, 3);
+  assert.deepEqual(body.findings[0].elements, [{
+    targets: ['Example newsletter · email input'],
+    guidance: 'Add a visible <label> and connect its htmlFor to the input id.',
+  }]);
   assert.equal(body.manualChecks.length, 3);
   assert.ok(Number.isFinite(Date.parse(body.generatedAt)));
 });

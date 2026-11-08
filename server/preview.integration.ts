@@ -8,13 +8,16 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { captureFixturePreview } from './scanner/fixturePreview.js';
 import { scanFixture } from './scanner/fixtureScanner.js';
+import { createDemoReport } from './services/analyze.js';
 import { openLocalDockerSession, removeAndConfirm } from './scanner/dockerWorker.js';
 import { assertContainerIsolation, containerArguments, IMAGE } from './scanner/containerPolicy.js';
 
 // Fulfill the app's requests from the built assets and real fixture responses, entirely inside network none.
-test('fixture preview supports isolated snapshots, composable vision controls, keyboard interaction, and mobile layout', { timeout: 90000 }, async () => {
+test('fixture reports and previews support actionable findings, keyboard controls, isolation, and mobile layout', { timeout: 90000 }, async () => {
   const snapshot = await captureFixturePreview();
   const report = await scanFixture('barriers');
+  const clearReport = await scanFixture('clear');
+  const demoReport = createDemoReport(new URL('https://example.com'));
   const root = fileURLToPath(new URL('../', import.meta.url));
   const assets: Record<string, { body: string; type: string }> = {
     '/': { body: await readFile(join(root, 'dist/index.html'), 'utf8'), type: 'text/html' },
@@ -42,10 +45,10 @@ test('fixture preview supports isolated snapshots, composable vision controls, k
         { env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' }, timeout: 60000, maxBuffer: 5 * 1024 * 1024 },
         (error, output) => error ? reject(error) : resolve(output));
       child.stdin!.on('error', () => {});
-      child.stdin!.end(JSON.stringify({ snapshot, report, assets }));
+      child.stdin!.end(JSON.stringify({ snapshot, report, clearReport, demoReport, assets }));
     });
     const result = JSON.parse(stdout); assert.equal(result.passed, true);
-    for (const size of ['desktop', 'mobile']) {
+    for (const size of ['desktop', 'mobile', 'findingsDesktop', 'findingsMobile']) {
       await writeFile(join(tmpdir(), `kindpath-static-preview-${size}.png`), Buffer.from(result[size], 'base64'));
     }
   } finally {
