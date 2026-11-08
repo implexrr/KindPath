@@ -7,6 +7,7 @@ import { captureFixtureSnapshot } from './preview.mjs';
 
 const fixtures = new Set(['barriers', 'clear']);
 const task = process.argv[2];
+const previewFiles = new Map([['preview-garden', 'preview-garden'], ['preview-barriers', 'barriers'], ['preview-clear', 'clear']]);
 const deadline = setTimeout(() => process.exit(2), 30_000);
 let browser;
 try {
@@ -43,8 +44,8 @@ try {
     if (writable) throw new Error('Root filesystem is writable');
     process.stdout.write(JSON.stringify({ isolation: 'passed' }));
   } else {
-    if (!fixtures.has(task) && task !== 'preview-garden') throw new Error('Unknown fixture');
-    const html = await readFile(new URL(`./fixtures/${task}.html`, import.meta.url), 'utf8');
+    if (!fixtures.has(task) && !previewFiles.has(task)) throw new Error('Unknown fixture');
+    const html = await readFile(new URL(`./fixtures/${previewFiles.get(task) ?? task}.html`, import.meta.url), 'utf8');
     browser = await chromium.launch({ headless: true, chromiumSandbox: true });
     const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: false });
     // Defense in depth; --network=none is the actual outbound-network boundary.
@@ -53,8 +54,8 @@ try {
     const page = await context.newPage();
     page.setDefaultTimeout(10_000);
     await page.setContent(html, { waitUntil: 'load', timeout: 10_000 });
-    if (task === 'preview-garden') {
-      process.stdout.write(JSON.stringify(await captureFixtureSnapshot(page)));
+    if (previewFiles.has(task)) {
+      process.stdout.write(JSON.stringify(await captureFixtureSnapshot(page, task)));
     } else {
       const result = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])

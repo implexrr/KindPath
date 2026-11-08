@@ -1,11 +1,10 @@
 export const IMAGE = 'kindpath-fixture-scanner:local';
-export const FIXTURES = ['barriers', 'clear'] as const;
-export type FixtureId = typeof FIXTURES[number];
-export function isFixture(value: unknown): value is FixtureId {
-  return typeof value === 'string' && (FIXTURES as readonly string[]).includes(value);
-}
+import type { FixtureId, PreviewFixtureId } from '../../shared/fixtures.js';
+export { FIXTURES, isFixture } from '../../shared/fixtures.js';
+export type { FixtureId } from '../../shared/fixtures.js';
+export type WorkerTask = FixtureId | 'verify-isolation' | `preview-${PreviewFixtureId}`;
 
-export function containerArguments(name: string, profile: string, task: FixtureId | 'verify-isolation' | 'preview-garden'): string[] {
+export function containerArguments(name: string, profile: string, task: WorkerTask): string[] {
   return [
     'create', '--pull=never', '--rm', '--name', name,
     '--label', 'kindpath.scanner=fixture', '--network=none', '--read-only',
