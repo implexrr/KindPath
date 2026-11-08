@@ -10,3 +10,5 @@
 !gateway/*.mjs
 !public-report.mjs
 !public-report.test.mjs
+!firewall/
+!firewall/*.mjs
