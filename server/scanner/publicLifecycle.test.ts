@@ -1,49 +1,87 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createPublicWorkerRunner } from './publicDockerWorker.js';
+import { createResourceRunner } from './resources.js';
 import { ScannerError } from './dockerWorker.js';
+import type { Resources } from './resources.js';
+import type { Command } from './dockerWorker.js';
 
 function daemon() {
-  const containers = new Set<string>(); const volumes = new Set<string>();
-  let volumeCleanupFails = true; let created = 0;
-  const command = async (args: string[]) => {
-    const verb=args[0];
-    if (verb==='volume') {
-      if(args[1]==='create'){volumes.add(args.at(-1)!);return args.at(-1)!;}
-      if(args[1]==='inspect')return JSON.stringify([{Driver:'local',Options:{type:'tmpfs',device:'tmpfs',o:'uid=1000,gid=1000,mode=0700,size=1m'}}]);
-      if(args[1]==='ls')return [...volumes].join('\n');
-      if(args[1]==='rm'){if(volumeCleanupFails)throw Error('Volume cleanup failed');volumes.delete(args[2]);return '';}
+  const containers = new Set<string>(); const volumes = new Set<string>(); const networks = new Set<string>();
+  let removalFails: 'volume' | 'network' | undefined;
+  let absenceQueryFails = false; let partialCreate = false; let startFails = false; let created = 0;
+  const command: Command = async args => {
+    if (args[0] === 'volume' || args[0] === 'network') {
+      const kind = args[0]; const set = kind === 'volume' ? volumes : networks;
+      if (args[1] === 'create') { set.add(args.at(-1)!); if (partialCreate) throw Error('Interrupted create'); return ''; }
+      if (args[1] === 'ls') {
+        if (absenceQueryFails && args.at(-1)!.startsWith('name=')) throw Error('Daemon absence query failed');
+        return [...set].filter(name => args.at(-1)!.startsWith('label=') || args.at(-1) === `name=^${name}$`).join('\n');
+      }
+      if (args[1] === 'rm') { if (removalFails === kind) throw Error('Removal failed'); set.delete(args[2]); return ''; }
     }
-    if(verb==='ps') {
-      const filter=args.at(-1)!;
-      if(filter.startsWith('name='))return [...containers].filter(name=>filter===`name=^/${name}$`).join('\n');
-      return filter==='label=kindpath.scanner=public'?[...containers].join('\n'):'';
+    if (args[0] === 'create') { containers.add(args.at(-1)!); created++; return ''; }
+    if (args[0] === 'start') { if (startFails) throw Error('Cancelled worker'); return '{}'; }
+    if (args[0] === 'rm') { containers.delete(args[2]); return ''; }
+    if (args[0] === 'ps') {
+      const filter = args.at(-1)!;
+      if (filter.startsWith('name=')) return [...containers].filter(name => filter === `name=^/${name}$`).join('\n');
+      return filter === 'label=kindpath.scanner=public' ? [...containers].join('\n') : '';
     }
-    if(verb==='create'){containers.add(args[args.indexOf('--name')+1]);created++;return '';}
-    if(verb==='inspect') {
-      const browser=args[1].startsWith('kindpath-public-browser-');
-      return JSON.stringify([{State:{Running:false},Config:{User:'1000:1000'},Mounts:[{Type:'volume',Name:[...volumes][0],Destination:'/run/kindpath',RW:!browser}],HostConfig:{NetworkMode:browser?'none':'bridge',Privileged:false,ReadonlyRootfs:true,AutoRemove:true,IpcMode:'private',CapDrop:['ALL'],Memory:browser?536870912:134217728,NanoCpus:browser?1000000000:500000000,PidsLimit:browser?256:64,SecurityOpt:['no-new-privileges:true','seccomp={"defaultAction":"SCMP_ACT_ERRNO"}']}}]);
-    }
-    if(verb==='start')return args[1]==='--attach'?'{}':'';
-    if(verb==='rm'){containers.delete(args[2]);return '';}
-    throw Error('Unexpected command');
+    throw Error('Unexpected daemon command');
   };
-  const session = async () => ({command,dispose:async()=>{}});
-  return {run:createPublicWorkerRunner(session),restart:()=>createPublicWorkerRunner(session),volumes,containers,get created(){return created;},restoreCleanup:()=>{volumeCleanupFails=false;}};
+  let sequence = 0;
+  const operation = async (cmd: Command, resources: Resources) => {
+    const id = ++sequence;
+    const network = `owned-network-${id}`; resources.networks.push(network); await cmd(['network', 'create', network]);
+    const volume = `owned-volume-${id}`; resources.volumes.push(volume); await cmd(['volume', 'create', volume]);
+    for (const role of ['gateway', 'browser']) {
+      const name = `${role}-${id}`; resources.containers.push(name); await cmd(['create', name]);
+    }
+    return JSON.parse(await cmd(['start', '--attach', `browser-${id}`]));
+  };
+  const session = async () => ({ command, dispose: async () => {} });
+  return {
+    run: createResourceRunner(operation, session), restart: () => createResourceRunner(operation, session),
+    volumes, containers, networks, get created() { return created; },
+    set removalFails(value: typeof removalFails) { removalFails = value; },
+    set absenceQueryFails(value: boolean) { absenceQueryFails = value; },
+    set partialCreate(value: boolean) { partialCreate = value; },
+    set startFails(value: boolean) { startFails = value; },
+  };
 }
-const failed=(error:unknown)=>error instanceof ScannerError && error.code==='SCANNER_CLEANUP_FAILED';
-test('unconfirmed socket-volume removal suppresses results and prevents new workers until recovery',async()=>{
-  const docker=daemon();
-  await assert.rejects(docker.run('verify-public-isolation'),failed);
-  assert.equal(docker.volumes.size,1); assert.equal(docker.containers.size,0);
-  await assert.rejects(docker.run('verify-public-isolation'),failed);
-  assert.equal(docker.created,2);
-  docker.restoreCleanup(); await docker.run('verify-public-isolation');
-  assert.equal(docker.created,4); assert.equal(docker.volumes.size,0); assert.equal(docker.containers.size,0);
+const failed = (error: unknown) => error instanceof ScannerError && error.code === 'SCANNER_CLEANUP_FAILED';
+for (const kind of ['volume', 'network'] as const) {
+  test(`unconfirmed ${kind} removal suppresses results and blocks work until recovery`, async () => {
+    const docker = daemon(); docker.removalFails = kind;
+    await assert.rejects(docker.run('fixture'), failed);
+    assert.equal(docker.containers.size, 0);
+    await assert.rejects(docker.run('fixture'), failed); assert.equal(docker.created, 2);
+    docker.removalFails = undefined; await docker.run('fixture');
+    assert.equal(docker.created, 4); assert.equal(docker.volumes.size, 0); assert.equal(docker.networks.size, 0);
+  });
+  test(`restart blocks unknown orphan ${kind}s without deleting user resources`, async () => {
+    const docker = daemon(); docker.removalFails = kind;
+    await assert.rejects(docker.run('fixture'), failed);
+    await assert.rejects(docker.restart()('fixture'), failed);
+    assert.equal(docker.created, 2); assert.equal(kind === 'volume' ? docker.volumes.size : docker.networks.size, 1);
+    docker.removalFails = undefined; await docker.run('fixture');
+  });
+}
+test('successful removal is insufficient when a resource absence query fails', async () => {
+  const docker = daemon(); docker.absenceQueryFails = true;
+  await assert.rejects(docker.run('fixture'), failed);
+  await assert.rejects(docker.run('fixture'), failed); assert.equal(docker.created, 2);
+  docker.absenceQueryFails = false; await docker.run('fixture');
 });
-test('a restarted controller blocks orphaned socket volumes without deleting unknown resources',async()=>{
-  const docker=daemon(); await assert.rejects(docker.run('verify-public-isolation'),failed);
-  await assert.rejects(docker.restart()('verify-public-isolation'),failed);
-  assert.equal(docker.created,2); assert.equal(docker.volumes.size,1);
-  docker.restoreCleanup(); await docker.run('verify-public-isolation');
+test('interrupted network creation is cleaned before another worker is admitted', async () => {
+  const docker = daemon(); docker.partialCreate = true;
+  await assert.rejects(docker.run('fixture'));
+  assert.equal(docker.networks.size, 0); assert.equal(docker.created, 0);
+  docker.partialCreate = false; await docker.run('fixture');
+});
+test('worker cancellation plus network cleanup failure blocks subsequent work', async () => {
+  const docker = daemon(); docker.startFails = true; docker.removalFails = 'network';
+  await assert.rejects(docker.run('fixture'), failed);
+  await assert.rejects(docker.run('fixture'), failed); assert.equal(docker.created, 2);
+  docker.startFails = false; docker.removalFails = undefined; await docker.run('fixture');
 });

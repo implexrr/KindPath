@@ -14,6 +14,8 @@ function fakeDocker() {
   let failVerification = false;
   let publicVolume = false;
   let volumeQueryFails = false;
+  let publicNetwork = false;
+  let networkQueryFails = false;
   const command = async (args: string[]) => {
     calls.push(args);
     if (daemonDown) throw new Error('Daemon unavailable');
@@ -42,6 +44,9 @@ function fakeDocker() {
         if (failRemovals > 0) { failRemovals--; throw new Error('Temporary removal failure'); }
         if (!containers.delete(args[2])) throw new Error('Container already removed');
         return args[2];
+      case 'network':
+        if (networkQueryFails) throw new Error('Cannot inspect networks');
+        return publicNetwork ? 'orphaned-firewall-network' : '';
       case 'volume':
         assert.deepEqual(args.slice(0, 3), ['volume', 'ls', '--quiet']);
         if (volumeQueryFails) throw new Error('Cannot inspect volumes');
@@ -55,6 +60,8 @@ function fakeDocker() {
   const run = createWorkerRunner(async () => ({ command, dispose: async () => {} }));
   return {
     run, calls, containers,
+    set publicNetwork(value: boolean) { publicNetwork = value; },
+    set networkQueryFails(value: boolean) { networkQueryFails = value; },
     set publicVolume(value: boolean) { publicVolume = value; },
     set volumeQueryFails(value: boolean) { volumeQueryFails = value; },
     newRunner: () => createWorkerRunner(async () => ({ command, dispose: async () => {} })),
@@ -148,4 +155,14 @@ test('fixture scans fail closed if public volume absence cannot be checked', asy
   assert.equal(docker.calls.filter(args => args[0] === 'create').length, 0);
   docker.volumeQueryFails = false;
   await docker.run('clear');
+});
+
+test('fixture admission blocks orphaned firewall networks and unconfirmed network queries', async () => {
+  const docker = fakeDocker(); docker.publicNetwork = true;
+  await assert.rejects(docker.run('clear'), cleanupFailed);
+  assert.equal(docker.calls.some(args => args[0] === 'create' || (args[0] === 'network' && args[1] === 'rm')), false);
+  docker.publicNetwork = false; docker.networkQueryFails = true;
+  await assert.rejects(docker.run('clear'), cleanupFailed);
+  assert.equal(docker.calls.some(args => args[0] === 'create'), false);
+  docker.networkQueryFails = false; await docker.run('clear');
 });

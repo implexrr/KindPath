@@ -63,6 +63,7 @@ export function createWorkerRunner(openSession: () => Promise<DockerSession>) {
       // A removed gateway container does not prove its private socket volume was removed.
       try {
         if ((await session.command(['volume', 'ls', '--quiet', '--filter', 'label=kindpath.scanner=public'], signal)).trim()) throw cleanupError();
+        if ((await session.command(['network', 'ls', '--quiet', '--filter', 'label=kindpath.scanner=public'], signal)).trim()) throw cleanupError();
       } catch { throw cleanupError(); }
       name = `kindpath-fixture-${randomUUID()}`;
       pendingContainer = name;
