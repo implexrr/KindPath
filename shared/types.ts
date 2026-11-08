@@ -7,10 +7,11 @@ export interface Finding {
   fix: string;
 }
 export interface Report {
-  mode: 'demo' | 'fixture';
+  mode: 'demo' | 'fixture' | 'public';
   url: string;
   generatedAt: string;
   manualChecks: string[];
   findings: Finding[];
+  limitations?: string[];
   scanner?: { engineVersion: string; fixture: string; incomplete: Finding[]; passedChecks: number; inapplicableChecks: number };
 }

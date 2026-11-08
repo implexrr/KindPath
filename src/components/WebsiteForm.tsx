@@ -2,6 +2,8 @@ import type { FormEvent } from 'react';
 
 interface WebsiteFormProps {
   url: string;
+  publicScanningEnabled: boolean;
+  allowedHosts: string[];
   busy: boolean;
   error: string;
   onUrlChange: (url: string) => void;
@@ -10,7 +12,7 @@ interface WebsiteFormProps {
   onFixtureScan: () => void;
 }
 
-export function WebsiteForm({ url, busy, error, onUrlChange, onSubmit, onExample, onFixtureScan }: WebsiteFormProps) {
+export function WebsiteForm({ url, busy, error, onUrlChange, onSubmit, onExample, onFixtureScan, publicScanningEnabled, allowedHosts }: WebsiteFormProps) {
   return <>
     <form onSubmit={onSubmit} aria-busy={busy}>
       <label htmlFor="website">Your website URL</label>
@@ -22,10 +24,10 @@ export function WebsiteForm({ url, busy, error, onUrlChange, onSubmit, onExample
           aria-describedby={error ? 'url-error demo-note' : 'demo-note'}
         />
         <button disabled={busy} type="submit">
-          {busy ? 'Preparing…' : 'Explore accessibility'} <span aria-hidden="true">→</span>
+          {busy ? 'Preparing…' : publicScanningEnabled ? 'Scan allowlisted website' : 'Explore accessibility'} <span aria-hidden="true">→</span>
         </button>
       </div>
-      <p id="demo-note" className="form-note">Demo mode · URLs aren’t fetched. Findings are illustrative.</p>
+      <p id="demo-note" className="form-note">{publicScanningEnabled ? `Allowed hosts: ${allowedHosts.join(', ')}. Automated single-page checks only.` : 'Demo mode · URLs aren’t fetched. Findings are illustrative.'}</p>
       {error && <p role="alert" id="url-error" className="error">{error}</p>}
     </form>
     <button className="text-button" disabled={busy} onClick={onExample}>

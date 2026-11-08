@@ -5,3 +5,10 @@
 !worker.mjs
 !fixtures/
 !fixtures/*.html
+!public-worker.mjs
+!gateway/
+!gateway/*.mjs
+!public-report.mjs
+!public-report.test.mjs
+!firewall/
+!firewall/*.mjs
