@@ -6,6 +6,7 @@ KindPath explores website accessibility through automated checks, actionable exa
 
 - Website URL submission with server-side validation and clear error messages.
 - Real axe-core checks on two controlled fixtures, with violations separated from checks needing review.
+- Impact-first findings, severity counts/filtering, and repair guidance paired with each affected element.
 - Example accessibility findings with severity, impact, and suggested improvements.
 - Side-by-side previews with adjustable colour, contrast, blur, and peripheral field effects.
 - Backend-generated snapshots of a built-in display fixture, with CSS hover styles, disabled navigation/forms, and a static advertisement placeholder.
@@ -95,6 +96,26 @@ The browser sends `POST /api/analyze` with a JSON URL payload. Vite proxies deve
 
 URLs must use HTTP or HTTPS, contain no embedded credentials, and be at most 2,048 characters. Invalid input returns a JSON error with an appropriate HTTP status.
 
+## Actionable accessibility reports
+
+The findings view orders rules by Critical, Serious, Moderate, Minor, then Unknown impact. Severity counts describe rules with violations, not individual elements. The severity selector filters confirmed violations only; **Clear severity filter** restores all findings and returns keyboard focus to the selector. Filters persist across report-tab switches and reset for a newly generated report.
+
+Expand **Affected elements and repair guidance** to inspect each returned selector path beside its own repair summary. Selectors and summaries are rendered as text; they are not executed, used to query the app, or turned into live links. **Checks needing manual review** lists inconclusive checks separately with their own element details. These checks are not counted as confirmed violations or hidden by severity filtering. Empty states distinguish no matching severity, no reported violations, and no inconclusive checks. None of these states establishes accessibility conformance.
+
+Report findings now use this structure, including `scanner.incomplete` entries:
+
+```ts
+{
+  id: string;
+  severity: 'Critical' | 'Serious' | 'Moderate' | 'Minor' | 'Unknown';
+  title: string;
+  impact: string;
+  elements: { targets: string[]; guidance: string }[];
+}
+```
+
+`elements` replaces the previous flattened `location` and `fix` fields. An empty target list means no selector was supplied; an empty element list receives a manual-review prompt. Worker summaries are validated before mapping, and raw element HTML is omitted. Scanner output is bounded to 100 rules per category and 20 elements per rule; displayed counts describe returned results. Demo findings use the same structure and remain clearly illustrative. Public URL capture and scanning remain disabled.
+
 ## Technology
 
 React, TypeScript, Vite, and Express. Tests use Node's built-in test runner through tsx. The lockfile records resolved dependency versions.
@@ -156,7 +177,7 @@ Source labels and timestamps distinguish this fixture preview from the report. F
 ```sh
 npm run build
 npm run scanner:build
-npm run test:preview
+npm run test:preview # Isolated browser checks for reports and previews
 ```
 
-The browser check runs Chromium inside the existing isolated Docker image, with no host mounts or network access. Only public build assets and generated fixture responses are passed through standard input. It exercises loading/failure/retry, hover behavior, disabled navigation/forms, independent and combined visual effects, rendered-image changes, keyboard interaction, presets/pause/reset, refresh/tab persistence, and a 390px layout. Screenshots are written to the operating system's temporary directory. No browser is installed or launched on the host.
+The browser check runs Chromium inside the existing isolated Docker image, with no host mounts or network access. Only public build assets and generated fixture responses are passed through standard input. It exercises report sorting/filtering, per-element guidance, manual-review and empty states, demo/fixture reports, loading/failure/retry, hover behavior, disabled navigation/forms, independent and combined visual effects, rendered-image changes, keyboard interaction, presets/pause/reset, refresh/tab persistence, and a 390px layout. Screenshots are written to the operating system's temporary directory. No browser is installed or launched on the host.
