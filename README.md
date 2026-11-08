@@ -50,7 +50,7 @@ npm run test:scanner
 
 Run the app and choose **Run isolated fixture scan**. A missing engine or image produces an unavailable error; there is no fallback to Chromium on the host. The worker dependencies are locked separately in `scanner/package-lock.json` and are installed inside the image, not in your host browser environment.
 
-The worker runs with networking disabled, no host bind mounts or forwarded credentials, a read-only root filesystem, a non-root user, no container capabilities, Chromium sandboxing, and bounded memory/CPU/processes. Temporary browser files live in container memory. The backend verifies Docker's effective configuration before starting each worker, limits concurrency, and removes the container on completion or cancellation. Removal is retried and verified through Docker; unconfirmed cleanup returns SCANNER_CLEANUP_FAILED and blocks new workers until absence is confirmed. A leftover fixture container also blocks scanning after an API restart. Only the fixed `barriers` and `clear` fixture IDs are accepted; URLs, file paths, arbitrary HTML, and extra fields are rejected.
+The worker runs with networking disabled, no host bind mounts or forwarded credentials, a read-only root filesystem, a non-root user, no container capabilities, Chromium sandboxing, and bounded memory/CPU/processes. Temporary browser files live in container memory. The backend verifies Docker's effective configuration before starting each worker, limits concurrency, and removes the container on completion or cancellation. Removal is retried and verified through Docker; unconfirmed cleanup returns SCANNER_CLEANUP_FAILED and blocks new workers until absence is confirmed. Leftover fixture or gateway containers, and leftover gateway socket volumes, also block fixture scans after an API restart. Unknown resources are not automatically deleted. Only the fixed `barriers` and `clear` fixture IDs are accepted; URLs, file paths, arbitrary HTML, and extra fields are rejected.
 
 The build context contains only allowlisted worker files. Building downloads dependencies; running fixture scans has no outbound network. The official base image is pinned by digest. The seccomp profile derives from Playwright v1.64.1, with the `chroot` syscall permitted so Chromium can restrict its own filesystem view while container capabilities remain empty. See `scanner/NOTICE.md` for attribution.
 
@@ -71,7 +71,8 @@ The browser sends `POST /api/analyze` with a JSON URL payload. Vite proxies deve
 | `server/validation/websiteUrl.ts` | URL input validation |
 | `server/index.ts` | Local HTTP listener |
 | `server/app.test.ts` | API contract and input-validation tests |
-| `server/scanner/` | Fixed fixture selection, Docker isolation policy, worker lifecycle, and report validation |
+| `server/scanner/` | Fixture and candidate URL policies, shared scanner admission, Docker lifecycle, and report validation |
+| `scanner/gateway/` | Unix-socket proxy, pinned destination policy, and controlled proxy tests |
 | `scanner/` | Narrow container build context, controlled fixtures, and worker-only dependencies |
 | `server/scanner.integration.ts` | Real isolated scans, kernel restrictions, and cancellation tests |
 | `shared/types.ts` | Shared report interfaces |
@@ -80,6 +81,8 @@ The browser sends `POST /api/analyze` with a JSON URL payload. Vite proxies deve
 ## API
 
 - `GET /api/health`: reports service status and demo mode.
+- `GET /api/scanning-capabilities`: reports public scanning disabled and the candidate allowlist.
+- `POST /api/scan-public`: currently returns 503 with `PUBLIC_SCANNING_DISABLED`; no submitted URL is fetched.
 - `POST /api/analyze`: accepts `{ "url": "https://example.com" }` and returns sample findings and manual review prompts; no URL fetching.
 - `POST /api/scan-fixture`: accepts exactly `{ "fixture": "barriers" }` or `{ "fixture": "clear" }` and returns a real fixture report. Invalid input returns 400, a busy scanner returns 429, and an unavailable or failed worker, including unconfirmed cleanup, returns 503. A failed scan never produces a clean accessibility report.
 
@@ -101,8 +104,12 @@ A prepared browser worker still uses network none. Its only gateway connection i
 The gateway itself has Docker bridge networking and enforces destination rules in Node. It does not have an independent kernel egress firewall. That trust boundary, HTTPS CONNECT handling, browser/VM risks, and runtime/image patch status need security review before activation. CONNECT validates destinations, while the browser layer restricts encrypted HTTP methods and WebSockets; the gateway does not decrypt TLS.
 
 ```sh
-npm run test:gateway:unit # Policy tests in a network-disabled container
+npm run test:gateway:unit # Policy, proxy, and report tests in a network-disabled container
 npm run test:gateway      # Socket isolation, forbidden destinations, cancellation, cleanup
 ```
 
-The integration suite skips external browsing by default. A separately authorized example.com smoke test can be run with KINDPATH_PUBLIC_SMOKE=1; this never enables the application endpoint. Reports record blocked/failed resources and top-level-only coverage, which can affect the findings. Local API Host/Origin checks are development protections, not a production authentication system.
+The integration suite skips external browsing by default. A separately authorized example.com smoke test can be run with KINDPATH_PUBLIC_SMOKE=1; this never enables the application endpoint. Prepared public reports record blocked/failed resources, omitted rule/element counts when result limits shorten the output, and top-level-only coverage. These limits can affect the findings. Local API Host/Origin checks are development protections, not a production authentication system.
+
+Plain HTTP proxy requests accept only GET/HEAD without a body. Request and response forwarding removes hop-by-hop headers, including headers named by Connection. A client disconnect during DNS resolution prevents a subsequent outbound connection. Controlled proxy tests use only Unix sockets inside a network-disabled container; they cover forwarding, CONNECT success/failure, cancellation, and the request budget.
+
+Before public scanning can be activated, review the independent egress-control design and complete an OS/container-image vulnerability assessment. Passing npm audits covers known JavaScript package advisories; it is not an OS-image scan or a guarantee of safety. The current changes add no production deployment or authentication.
