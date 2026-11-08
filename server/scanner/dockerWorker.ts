@@ -60,6 +60,10 @@ export function createWorkerRunner(openSession: () => Promise<DockerSession>) {
       const leftovers = await session.command(['ps', '--all', '--quiet', '--filter', 'label=kindpath.scanner=fixture'], signal);
       if (leftovers.trim()) throw cleanupError();
       if ((await session.command(['ps', '--all', '--quiet', '--filter', 'label=kindpath.scanner=public'], signal)).trim()) throw cleanupError();
+      // A removed gateway container does not prove its private socket volume was removed.
+      try {
+        if ((await session.command(['volume', 'ls', '--quiet', '--filter', 'label=kindpath.scanner=public'], signal)).trim()) throw cleanupError();
+      } catch { throw cleanupError(); }
       name = `kindpath-fixture-${randomUUID()}`;
       pendingContainer = name;
       await session.command(containerArguments(name, profile, task), signal);

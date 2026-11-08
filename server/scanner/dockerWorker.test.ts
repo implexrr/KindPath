@@ -12,6 +12,8 @@ function fakeDocker() {
   let failStart = false;
   let failCreate = false;
   let failVerification = false;
+  let publicVolume = false;
+  let volumeQueryFails = false;
   const command = async (args: string[]) => {
     calls.push(args);
     if (daemonDown) throw new Error('Daemon unavailable');
@@ -40,6 +42,10 @@ function fakeDocker() {
         if (failRemovals > 0) { failRemovals--; throw new Error('Temporary removal failure'); }
         if (!containers.delete(args[2])) throw new Error('Container already removed');
         return args[2];
+      case 'volume':
+        assert.deepEqual(args.slice(0, 3), ['volume', 'ls', '--quiet']);
+        if (volumeQueryFails) throw new Error('Cannot inspect volumes');
+        return publicVolume ? 'orphaned-public-socket' : '';
       case 'ps':
         if (failVerification && args.some(arg => arg.startsWith('name='))) throw new Error('Cannot verify absence');
         return [...containers].join('\n');
@@ -49,6 +55,8 @@ function fakeDocker() {
   const run = createWorkerRunner(async () => ({ command, dispose: async () => {} }));
   return {
     run, calls, containers,
+    set publicVolume(value: boolean) { publicVolume = value; },
+    set volumeQueryFails(value: boolean) { volumeQueryFails = value; },
     newRunner: () => createWorkerRunner(async () => ({ command, dispose: async () => {} })),
     set down(value: boolean) { daemonDown = value; },
     set removalFailures(value: number) { failRemovals = value; },
@@ -121,4 +129,23 @@ test('a fresh runner refuses orphaned workers after losing in-memory lifecycle s
   docker.removalFailures = 0;
   await docker.run('verify-isolation');
   assert.equal(docker.containers.size, 0);
+});
+
+test('fixture scans cannot bypass an orphaned public socket volume', async () => {
+  const docker = fakeDocker();
+  docker.publicVolume = true;
+  await assert.rejects(docker.run('clear'), cleanupFailed);
+  await assert.rejects(docker.newRunner()('clear'), cleanupFailed);
+  assert.equal(docker.calls.filter(args => args[0] === 'create').length, 0);
+  assert.equal(docker.calls.some(args => args[0] === 'volume' && args[1] === 'rm'), false);
+  docker.publicVolume = false;
+  assert.deepEqual(await docker.run('verify-isolation'), { isolation: 'passed' });
+});
+test('fixture scans fail closed if public volume absence cannot be checked', async () => {
+  const docker = fakeDocker();
+  docker.volumeQueryFails = true;
+  await assert.rejects(docker.run('clear'));
+  assert.equal(docker.calls.filter(args => args[0] === 'create').length, 0);
+  docker.volumeQueryFails = false;
+  await docker.run('clear');
 });
