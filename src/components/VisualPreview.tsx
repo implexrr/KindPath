@@ -1,18 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FixturePreview } from '../../shared/types';
 import { SnapshotFrame } from './SnapshotFrame';
-import { effects } from './visualEffects';
-import type { Effect } from './visualEffects';
+import { defaultVisionSettings } from './visualEffects';
+import { VisionControls } from './VisionControls';
 
-interface VisualPreviewProps {
-  effect: Effect;
-  strength: number;
-  onEffectChange: (effect: Effect) => void;
-  onStrengthChange: (strength: number) => void;
-  onReset: () => void;
-}
-
-export function VisualPreview({ effect, strength, onEffectChange, onStrengthChange, onReset }: VisualPreviewProps) {
+export function VisualPreview() {
+  const [settings, setSettings] = useState(defaultVisionSettings);
   const [snapshot, setSnapshot] = useState<FixturePreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -51,19 +44,10 @@ export function VisualPreview({ effect, strength, onEffectChange, onStrengthChan
     <div role="status" aria-live="polite" className="snapshot-status">{busy ? 'Capturing the built-in fixture in the isolated worker…' : snapshot ? 'Fixture snapshot ready.' : ''}</div>
     {error && <p className="error" role="alert">{error}</p>}
     {snapshot ? <>
-      <div className="preview-controls">
-        <div><label htmlFor="effect">Visual effect</label>
-          <select id="effect" value={effect} onChange={event => onEffectChange(event.target.value as Effect)}>
-            {Object.entries(effects).map(([key, value]) => <option key={key} value={key}>{value.name}</option>)}
-          </select></div>
-        <div className="strength"><label htmlFor="strength">Effect strength <output htmlFor="strength">{strength}%</output></label>
-          <input id="strength" type="range" min="0" max="100" value={strength} onChange={event => onStrengthChange(Number(event.target.value))}/></div>
-        <button className="secondary" onClick={onReset}>Reset effects</button>
-      </div>
-      <p className="effect-description">{effects[effect].description}</p>
+      <VisionControls settings={settings} onChange={setSettings}/>
       <div className="comparison" aria-busy={busy}>
-        <div><h3><span className="status-dot"/>Original snapshot</h3><SnapshotFrame snapshot={snapshot} modified={false} effect={effect} strength={strength}/></div>
-        <div><h3><span className="status-dot altered"/>With visual effect</h3><SnapshotFrame snapshot={snapshot} modified effect={effect} strength={strength}/></div>
+        <div><h3><span className="status-dot"/>Original snapshot</h3><SnapshotFrame snapshot={snapshot} modified={false} settings={settings}/></div>
+        <div><h3><span className="status-dot altered"/>{settings.enabled ? 'With visual effects' : 'Effects paused — original appearance'}</h3><SnapshotFrame snapshot={snapshot} modified settings={settings}/></div>
       </div>
       <p className="preview-caption">Hover over “Explore the garden” to see its style change. Links and form controls are inactive. The advertisement is a static placeholder.</p>
     </> : <div className="snapshot-placeholder"><h3>A page you can explore without leaving KindPath.</h3><p>Generate the built-in fixture snapshot to compare its appearance with a visual effect.</p></div>}

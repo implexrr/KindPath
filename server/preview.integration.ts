@@ -12,7 +12,7 @@ import { openLocalDockerSession, removeAndConfirm } from './scanner/dockerWorker
 import { assertContainerIsolation, containerArguments, IMAGE } from './scanner/containerPolicy.js';
 
 // Fulfill the app's requests from the built assets and real fixture responses, entirely inside network none.
-test('fixture preview supports generation, retry, hover, inactive navigation, effects, and mobile layout', { timeout: 90000 }, async () => {
+test('fixture preview supports isolated snapshots, composable vision controls, keyboard interaction, and mobile layout', { timeout: 90000 }, async () => {
   const snapshot = await captureFixturePreview();
   const report = await scanFixture('barriers');
   const root = fileURLToPath(new URL('../', import.meta.url));

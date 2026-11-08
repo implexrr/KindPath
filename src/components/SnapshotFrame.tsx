@@ -1,20 +1,21 @@
+import { useId } from 'react';
 import type { FixturePreview } from '../../shared/types';
 import { PREVIEW_GUARD } from '../../shared/previewPolicy';
-import type { Effect } from './visualEffects';
+import { colourMatrix, peripheralMask, snapshotFilter } from './visualEffects';
+import type { VisionSettings } from './visualEffects';
 
-export function SnapshotFrame({ snapshot, modified, effect, strength }: {
-  snapshot: FixturePreview; modified: boolean; effect: Effect; strength: number;
+export function SnapshotFrame({ snapshot, modified, settings }: {
+  snapshot: FixturePreview; modified: boolean; settings: VisionSettings;
 }) {
-  const filter = !modified ? undefined
-    : effect === 'colour' ? 'url(#colour-filter)'
-    : effect === 'contrast' ? `contrast(${1 - strength / 150})`
-    : effect === 'blur' ? `blur(${strength / 25}px)` : undefined;
+  const colourId = `vision-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const filter = modified ? snapshotFilter(settings, colourId) : undefined;
+  const mask = modified ? peripheralMask(settings) : undefined;
   return <div className="snapshot-window">
+    {modified && settings.enabled && settings.strengths.colour > 0 && <svg width="0" height="0" aria-hidden="true" focusable="false" className="filter-defs">
+      <defs><filter id={colourId} colorInterpolationFilters="sRGB"><feColorMatrix type="matrix" values={colourMatrix(settings.colourPreset, settings.strengths.colour).join(' ')}/></filter></defs>
+    </svg>}
     <iframe className="snapshot-frame" title={`${modified ? 'Modified' : 'Original'} ${snapshot.title} fixture snapshot`}
       sandbox="" referrerPolicy="no-referrer" srcDoc={PREVIEW_GUARD + snapshot.html} style={{ filter }}/>
-    {modified && effect === 'peripheral' && <div className="field-mask" aria-hidden="true" style={{
-      opacity: strength / 100,
-      background: `radial-gradient(ellipse at center, transparent ${48 - strength * .35}%, rgba(12,20,16,.96) ${85 - strength * .35}%)`,
-    }}/>}
+    {mask && <div className="field-mask" aria-hidden="true" style={mask}/>}
   </div>;
 }
