@@ -9,11 +9,13 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
   page.setDefaultTimeout(10000);
   let previews = 0; const unexpected = [];
+  let activeReport = data.report;
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.hostname !== 'kindpath-ui.invalid') { unexpected.push(url.hostname); await route.abort(); return; }
     if (url.pathname === '/api/scanning-capabilities') { await route.fulfill({ json: { publicScanningEnabled: false, allowedHosts: ['example.com'] } }); return; }
-    if (url.pathname === '/api/scan-fixture') { await route.fulfill({ json: data.report }); return; }
+    if (url.pathname === '/api/analyze') { await route.fulfill({ json: data.demoReport }); return; }
+    if (url.pathname === '/api/scan-fixture') { await route.fulfill({ json: activeReport }); return; }
     if (url.pathname === '/api/preview-fixture') {
       previews++;
       assert.deepEqual(route.request().postDataJSON(), { fixture: 'garden' });
@@ -25,6 +27,17 @@ try {
   });
   await page.goto('http://kindpath-ui.invalid/');
   await page.getByRole('button', { name: 'Run isolated fixture scan' }).click();
+  // First exercise the actual bounded report returned by the fixture scanner.
+  const violations = page.getByRole('region', { name: 'Confirmed automated violations', exact: true });
+  await violations.waitFor();
+  assert.equal(await violations.locator('article').count(), data.report.findings.length);
+  const firstWithElements = data.report.findings.find(finding => finding.elements.length > 0);
+  if (firstWithElements) {
+    const card = violations.locator('article').filter({ has: page.getByRole('heading', { name: firstWithElements.title, exact: true }) });
+    await card.locator('summary').click();
+    assert.equal(await card.locator('.element-target code').first().textContent(), firstWithElements.elements[0].targets.join(' → ') || 'Page (no selector provided)');
+    assert.equal(await card.locator('.element-summary').first().textContent(), firstWithElements.elements[0].guidance);
+  }
   await page.getByRole('button', { name: /Visual preview/ }).click();
   assert.equal(await page.locator('iframe').count(), 0);
   await page.getByRole('button', { name: 'Generate fixture snapshot' }).click();
@@ -129,6 +142,70 @@ try {
   for (const frame of page.frames().slice(1)) await frame.evaluate(() => scrollTo(0, 0));
   await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
   const mobile = (await page.locator('.results').screenshot()).toString('base64');
+  // Controlled UI responses cover severity ordering and review/empty states without scanning a public URL.
+  const makeFinding = (severity, index) => ({ id: `controlled-${index}`, severity,
+    title: `${severity} controlled rule`, impact: 'Controlled explanation', elements: [
+      { targets: ['#first'], guidance: 'Repair the first element' },
+      { targets: ['#second', '#nested'], guidance: '<img src=x onerror=alert(1)>\nRepair the second element' },
+    ] });
+  activeReport = { ...data.report, generatedAt: '2026-11-08T00:00:00.000Z', findings:
+    ['Minor', 'Unknown', 'Moderate', 'Critical', 'Serious'].map(makeFinding),
+    scanner: { ...data.report.scanner, incomplete: [{ ...makeFinding('Serious', 8), title: 'Controlled inconclusive check', elements: [] }] } };
+  await page.getByRole('button', { name: 'Run isolated fixture scan' }).click();
+  const filter = page.getByLabel('Filter violations by severity', { exact: true });
+  await violations.getByRole('heading', { name: 'Critical controlled rule', exact: true }).waitFor();
+  assert.deepEqual(await violations.getByRole('heading', { level: 4 }).allTextContents(),
+    ['Critical', 'Serious', 'Moderate', 'Minor', 'Unknown'].map(level => `${level} controlled rule`));
+  const reviews = page.getByRole('region', { name: 'Checks needing manual review (1)', exact: true });
+  await reviews.getByText('Controlled inconclusive check', { exact: true }).waitFor();
+  for (const item of await page.getByRole('list', { name: 'Violation counts by severity' }).getByRole('listitem').all()) {
+    assert.equal(await item.locator('strong').textContent(), '1');
+  }
+  await filter.focus(); await filter.press('Home'); await filter.press('ArrowDown');
+  assert.equal(await filter.inputValue(), 'Critical');
+  assert.equal(await violations.locator('article').count(), 1);
+  assert.equal(await reviews.locator('article').count(), 1);
+  assert.equal(await page.locator('.finding-status').textContent(), 'Showing 1 of 5 rules with violations.');
+  await page.getByRole('button', { name: /Visual preview/ }).click();
+  await page.getByRole('button', { name: /Accessibility findings/ }).click();
+  assert.equal(await filter.inputValue(), 'Critical', 'Tab switches retain the severity filter');
+  await page.getByRole('button', { name: 'Clear severity filter' }).press('Enter');
+  assert.equal(await filter.evaluate(element => element === document.activeElement), true);
+  assert.equal(await violations.locator('article').count(), 5);
+  const firstCard = violations.locator('article').first();
+  await firstCard.locator('summary').press('Enter');
+  assert.deepEqual(await firstCard.locator('.element-target code').allTextContents(), ['#first', '#second → #nested']);
+  assert.equal(await firstCard.locator('.element-summary').nth(1).textContent(), '<img src=x onerror=alert(1)>\nRepair the second element');
+  assert.equal(await firstCard.locator('img').count(), 0, 'Guidance must be displayed as text');
+  await reviews.locator('summary').click();
+  await reviews.getByText('No element details were returned. Review this rule manually.', { exact: true }).waitFor();
+  await page.setViewportSize({ width: 1280, height: 1800 });
+  const findingsDesktop = (await page.locator('.results').screenshot()).toString('base64');
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  const findingsMobile = (await page.locator('.results').screenshot()).toString('base64');
+  // A new report resets filters; a severity with no matches differs from an empty report.
+  await filter.selectOption('Minor');
+  activeReport = { ...activeReport, generatedAt: '2026-11-08T00:00:01.000Z', findings: [makeFinding('Serious', 0)] };
+  await page.getByRole('button', { name: 'Run isolated fixture scan' }).click();
+  await page.getByRole('heading', { name: 'Serious controlled rule', exact: true }).waitFor();
+  assert.equal(await filter.inputValue(), 'All');
+  await filter.selectOption('Critical');
+  await page.getByText('No violations match this severity. Other findings are still in this report.', { exact: true }).waitFor();
+  assert.equal(await reviews.locator('article').count(), 1);
+  activeReport = { ...data.clearReport, generatedAt: '2026-11-08T00:00:02.000Z' };
+  await page.getByRole('button', { name: 'Run isolated fixture scan' }).click();
+  await page.getByText('No automated violations were reported. This does not establish accessibility conformance; review the checks below and test manually.', { exact: true }).waitFor();
+  assert.equal(await filter.inputValue(), 'All');
+  if (!data.clearReport.scanner.incomplete.length) await page.getByText('No inconclusive checks were returned. Keyboard, screen reader, and usability review are still needed.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Just exploring? Try an example', exact: true }).click();
+  const examples = page.getByRole('region', { name: 'Example issues to explore', exact: true });
+  await examples.waitFor();
+  assert.equal(await examples.locator('article').count(), 3);
+  assert.equal(await page.getByRole('region', { name: /Checks needing manual review/ }).count(), 0);
+  await page.getByText('Illustrative report', { exact: true }).waitFor();
+  await examples.locator('article').first().locator('summary').click();
+  assert.equal(await examples.locator('article').first().locator('.element-summary').textContent(), data.demoReport.findings[0].elements[0].guidance);
   assert.deepEqual(unexpected, []);
-  process.stdout.write(JSON.stringify({ passed: true, desktop, mobile }));
+  process.stdout.write(JSON.stringify({ passed: true, desktop, mobile, findingsDesktop, findingsMobile }));
 } finally { await browser.close(); }

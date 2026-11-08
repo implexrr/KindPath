@@ -28,6 +28,11 @@ test('fixture API returns real axe results for the known barriers', async () => 
     const ids = report.findings.map((finding: { id: string }) => finding.id);
     for (const id of ['image-alt', 'label', 'button-name']) assert.ok(ids.includes(id), `Missing expected rule: ${id}`);
     assert.ok(report.scanner?.engineVersion);
+    const label = report.findings.find((finding: { id: string }) => finding.id === 'label');
+    assert.ok(label.elements.length > 0);
+    assert.ok(label.elements[0].targets.length > 0);
+    assert.equal(typeof label.elements[0].guidance, 'string');
+    assert.ok(!('html' in label.elements[0]));
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
 test('labelled fixture has no violations in the selected automated checks', async () => {
