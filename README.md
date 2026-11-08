@@ -33,7 +33,7 @@ Open http://127.0.0.1:5173. The development launcher starts Vite on port 5173 an
 
 ```sh
 npm run check  # Check frontend and backend TypeScript
-npm test       # Run HTTP contract and validation tests
+npm test       # Run API, validation, and visual-effect model tests
 npm run build  # Check types and create the frontend dist/ output
 ```
 
@@ -143,6 +143,14 @@ After building the scanner image and starting the app, create a demo report or r
 
 The comparison frames preserve CSS hover effects, including the garden call-to-action, and the static advertisement. Anchors have no destinations, form containers become layout groups, and inputs/buttons are disabled. Scripts and unsupported elements/attributes are excluded. Each iframe has an empty sandbox, no same-origin or script permission, and a restrictive content policy that blocks external resources and form submissions. Both panels use the same snapshot; effects apply only to the modified panel. Snapshots stay in browser memory across tab switches; **Refresh fixture snapshot** explicitly requests another capture.
 
+### Vision controls
+
+Colour, contrast reduction, blur, and peripheral restriction have independent 0–100% sliders and can be combined. Colour presets offer illustrative red–green, blue–yellow, and grayscale mixes. These are display effects, not calibrated medical simulations; the percentages do not measure vision loss.
+
+**Mild**, **Moderate**, and **Strong** set all four strengths to 25%, 50%, and 80% respectively, preserve the colour preset, and turn effects on. **Apply visual effects** pauses or restores rendering without losing settings; sliders remain adjustable while paused. **Reset effects** restores red–green at 65% with the other strengths at zero and effects on. Setting all strengths to zero leaves both panels visually unchanged.
+
+Controls support native keyboard interaction and remain outside the modified frame. Adjustments reuse the existing snapshot without requesting a new capture. Settings survive report-tab switches and snapshot refreshes, and reset when the page reloads.
+
 Source labels and timestamps distinguish this fixture preview from the report. Failed capture attempts show a retryable error; an existing snapshot remains visible if a refresh fails. The capture and serializer support this fixed fixture only, not general public-site sanitization. Public URL capture and scanning remain disabled.
 
 ```sh
@@ -151,4 +159,4 @@ npm run scanner:build
 npm run test:preview
 ```
 
-The browser check runs Chromium inside the existing isolated Docker image, with no host mounts or network access. Only public build assets and generated fixture responses are passed through standard input. It exercises loading/failure/retry, hover behavior, disabled navigation/forms, visual controls, refresh/tab persistence, and a 390px layout. Screenshots are written to the operating system's temporary directory. No browser is installed or launched on the host.
+The browser check runs Chromium inside the existing isolated Docker image, with no host mounts or network access. Only public build assets and generated fixture responses are passed through standard input. It exercises loading/failure/retry, hover behavior, disabled navigation/forms, independent and combined visual effects, rendered-image changes, keyboard interaction, presets/pause/reset, refresh/tab persistence, and a 390px layout. Screenshots are written to the operating system's temporary directory. No browser is installed or launched on the host.
