@@ -5,7 +5,7 @@ export function isFixture(value: unknown): value is FixtureId {
   return typeof value === 'string' && (FIXTURES as readonly string[]).includes(value);
 }
 
-export function containerArguments(name: string, profile: string, task: FixtureId | 'verify-isolation'): string[] {
+export function containerArguments(name: string, profile: string, task: FixtureId | 'verify-isolation' | 'preview-garden'): string[] {
   return [
     'create', '--pull=never', '--rm', '--name', name,
     '--label', 'kindpath.scanner=fixture', '--network=none', '--read-only',

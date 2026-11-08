@@ -3,6 +3,7 @@ import { networkInterfaces } from 'node:os';
 import { connect } from 'node:net';
 import { chromium } from 'playwright';
 import AxeBuilder from '@axe-core/playwright';
+import { captureFixtureSnapshot } from './preview.mjs';
 
 const fixtures = new Set(['barriers', 'clear']);
 const task = process.argv[2];
@@ -42,7 +43,7 @@ try {
     if (writable) throw new Error('Root filesystem is writable');
     process.stdout.write(JSON.stringify({ isolation: 'passed' }));
   } else {
-    if (!fixtures.has(task)) throw new Error('Unknown fixture');
+    if (!fixtures.has(task) && task !== 'preview-garden') throw new Error('Unknown fixture');
     const html = await readFile(new URL(`./fixtures/${task}.html`, import.meta.url), 'utf8');
     browser = await chromium.launch({ headless: true, chromiumSandbox: true });
     const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: false });
@@ -52,22 +53,26 @@ try {
     const page = await context.newPage();
     page.setDefaultTimeout(10_000);
     await page.setContent(html, { waitUntil: 'load', timeout: 10_000 });
-    const result = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
-      .options({ iframes: false }).analyze();
-    const summarize = rules => rules.slice(0, 100).map(rule => ({
-      id: rule.id, impact: rule.impact ?? 'unknown', help: rule.help,
-      description: rule.description, helpUrl: rule.helpUrl,
-      nodes: rule.nodes.slice(0, 20).map(node => ({
-        target: node.target.map(selector => typeof selector === 'string' ? selector : JSON.stringify(selector)),
-        summary: (node.failureSummary ?? '').slice(0, 2000),
-      })),
-    }));
-    process.stdout.write(JSON.stringify({
-      fixture: task, engine: result.testEngine.version,
-      violations: summarize(result.violations), incomplete: summarize(result.incomplete),
-      passes: result.passes.length, inapplicable: result.inapplicable.length,
-    }));
+    if (task === 'preview-garden') {
+      process.stdout.write(JSON.stringify(await captureFixtureSnapshot(page)));
+    } else {
+      const result = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+        .options({ iframes: false }).analyze();
+      const summarize = rules => rules.slice(0, 100).map(rule => ({
+        id: rule.id, impact: rule.impact ?? 'unknown', help: rule.help,
+        description: rule.description, helpUrl: rule.helpUrl,
+        nodes: rule.nodes.slice(0, 20).map(node => ({
+          target: node.target.map(selector => typeof selector === 'string' ? selector : JSON.stringify(selector)),
+          summary: (node.failureSummary ?? '').slice(0, 2000),
+        })),
+      }));
+      process.stdout.write(JSON.stringify({
+        fixture: task, engine: result.testEngine.version,
+        violations: summarize(result.violations), incomplete: summarize(result.incomplete),
+        passes: result.passes.length, inapplicable: result.inapplicable.length,
+      }));
+    }
   }
 } catch {
   // Never send browser diagnostics, environment values, or paths back to the API.

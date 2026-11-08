@@ -12,3 +12,4 @@
 !public-report.test.mjs
 !firewall/
 !firewall/*.mjs
+!preview.mjs
