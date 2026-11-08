@@ -43,3 +43,12 @@ jobs:
 
       - name: Audit production and development dependencies
         run: npm audit --include=dev --audit-level=low
+
+      - name: Audit isolated worker dependencies
+        run: npm --prefix scanner audit --audit-level=low
+
+      - name: Build isolated fixture worker
+        run: npm run scanner:build
+
+      - name: Verify isolation and real fixture scans
+        run: npm run test:scanner

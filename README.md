@@ -1,10 +1,11 @@
 # KindPath
 
-KindPath explores website accessibility through actionable example findings and side-by-side visual comparisons. It combines a React interface with an Express API and adjustable effects that illustrate potential visual barriers.
+KindPath explores website accessibility through automated checks, actionable example findings, and side-by-side visual comparisons. It combines a React interface, an Express API, and an isolated Playwright/axe-core fixture worker.
 
 ## Features
 
 - Website URL submission with server-side validation and clear error messages.
+- Real axe-core checks on two controlled fixtures, with violations separated from checks needing review.
 - Example accessibility findings with severity, impact, and suggested improvements.
 - Side-by-side previews with adjustable colour, contrast, blur, and peripheral field effects.
 - A fictional preview website with hover styles, disabled navigation, and a static advertisement placeholder.
@@ -13,7 +14,9 @@ KindPath explores website accessibility through actionable example findings and 
 
 ## Current capabilities
 
-**Reports currently use fixed sample findings. Submitted websites are not fetched, scanned, or reproduced.** The preview always displays an included fictional website. Visual effects are illustrative approximations, not reproductions of an individual's vision or a medical condition.
+**Public URL scanning is disabled.** The URL form returns illustrative demo findings and never fetches the submitted website. The separate isolated-fixture action runs real axe-core checks on a built-in example. It does not scan the submitted URL.
+
+The visual preview always displays an included fictional website, independently of the report. Effects are illustrative approximations, not reproductions of an individual's vision or a medical condition.
 
 Automated checks and visual simulations cannot establish accessibility conformance. Keyboard, screen reader, and usability evaluation remain essential.
 
@@ -36,6 +39,23 @@ npm run build  # Check types and create the frontend dist/ output
 
 The frontend build does not include the API server. Use `npm run dev` to run the complete application locally; `vite preview` alone does not provide the backend.
 
+## Isolated fixture scanning
+
+Install and start Docker Desktop on macOS (or a local Docker Engine on Linux), then build the dedicated worker image:
+
+```sh
+npm run scanner:build
+npm run test:scanner
+```
+
+Run the app and choose **Run isolated fixture scan**. A missing engine or image produces an unavailable error; there is no fallback to Chromium on the host. The worker dependencies are locked separately in `scanner/package-lock.json` and are installed inside the image, not in your host browser environment.
+
+The worker runs with networking disabled, no host bind mounts or forwarded credentials, a read-only root filesystem, a non-root user, no container capabilities, Chromium sandboxing, and bounded memory/CPU/processes. Temporary browser files live in container memory. The backend verifies Docker's effective configuration before starting each worker, limits concurrency, and removes the container on completion or cancellation. Removal is retried and verified through Docker; unconfirmed cleanup returns SCANNER_CLEANUP_FAILED and blocks new workers until absence is confirmed. A leftover fixture container also blocks scanning after an API restart. Only the fixed `barriers` and `clear` fixture IDs are accepted; URLs, file paths, arbitrary HTML, and extra fields are rejected.
+
+The build context contains only allowlisted worker files. Building downloads dependencies; running fixture scans has no outbound network. The official base image is pinned by digest. The seccomp profile derives from Playwright v1.64.1, with the `chroot` syscall permitted so Chromium can restrict its own filesystem view while container capabilities remain empty. See `scanner/NOTICE.md` for attribution.
+
+These restrictions reduce exposure; they are not a guarantee against all container, browser, or VM vulnerabilities. Public targets remain disabled and need a separately reviewed network-isolation design.
+
 ## Architecture
 
 The browser sends `POST /api/analyze` with a JSON URL payload. Vite proxies development requests to Express, which validates the URL and returns a demo report. The API never connects to the submitted website. Reports remain in browser memory and reset on reload.
@@ -51,13 +71,17 @@ The browser sends `POST /api/analyze` with a JSON URL payload. Vite proxies deve
 | `server/validation/websiteUrl.ts` | URL input validation |
 | `server/index.ts` | Local HTTP listener |
 | `server/app.test.ts` | API contract and input-validation tests |
+| `server/scanner/` | Fixed fixture selection, Docker isolation policy, worker lifecycle, and report validation |
+| `scanner/` | Narrow container build context, controlled fixtures, and worker-only dependencies |
+| `server/scanner.integration.ts` | Real isolated scans, kernel restrictions, and cancellation tests |
 | `shared/types.ts` | Shared report interfaces |
 | `public/mockups/` | SVG design boards and gallery, available at `/mockups/index.html` |
 
 ## API
 
 - `GET /api/health`: reports service status and demo mode.
-- `POST /api/analyze`: accepts `{ "url": "https://example.com" }` and returns sample findings and manual review prompts.
+- `POST /api/analyze`: accepts `{ "url": "https://example.com" }` and returns sample findings and manual review prompts; no URL fetching.
+- `POST /api/scan-fixture`: accepts exactly `{ "fixture": "barriers" }` or `{ "fixture": "clear" }` and returns a real fixture report. Invalid input returns 400, a busy scanner returns 429, and an unavailable or failed worker, including unconfirmed cleanup, returns 503. A failed scan never produces a clean accessibility report.
 
 URLs must use HTTP or HTTPS, contain no embedded credentials, and be at most 2,048 characters. Invalid input returns a JSON error with an appropriate HTTP status.
 
@@ -65,4 +89,4 @@ URLs must use HTTP or HTTPS, contain no embedded credentials, and be at most 2,0
 
 React, TypeScript, Vite, and Express. Tests use Node's built-in test runner through tsx. The lockfile records resolved dependency versions.
 
-No database, authentication, external scanning service, or production deployment is configured. Live scanning and arbitrary website capture require additional network isolation and untrusted-content controls before implementation.
+The isolated worker uses Playwright and @axe-core/playwright (including axe-core). No database, authentication, external scanning service, or production deployment is configured. Scanning public URLs and arbitrary website capture remain disabled.

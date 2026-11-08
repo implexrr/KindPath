@@ -1,6 +1,7 @@
 import express from 'express';
 import type { ErrorRequestHandler } from 'express';
 import { analyzeRouter } from './routes/analyze.js';
+import { fixtureRouter } from './routes/scanFixture.js';
 
 export const app = express();
 app.disable('x-powered-by');
@@ -12,6 +13,7 @@ app.options('/api/analyze', (_req, res) => {
   res.status(404).json({ error: 'API route not found.' });
 });
 app.use('/api', analyzeRouter);
+app.use('/api', fixtureRouter);
 app.use('/api', (_req, res) => { res.status(404).json({ error: 'API route not found.' }); });
 const handleError: ErrorRequestHandler = (error, _req, res, _next) => {
   const status = error.status === 413 ? 413 : error.status === 400 ? 400 : 500;
