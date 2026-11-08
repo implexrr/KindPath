@@ -72,3 +72,27 @@ test('supported impact values remain strings after JSON transfer', () => {
   assert.deepEqual(report.findings.map((finding: { severity: string }) => finding.severity), ['Critical', 'Serious', 'Moderate', 'Minor', 'Unknown']);
   assert.ok(report.findings.every((finding: { severity: string }) => typeof finding.severity.toLowerCase() === 'string'));
 });
+
+
+test('element selectors stay paired with their guidance in violations and manual-review results', () => {
+  const nodes = [
+    { target: ['#form', '#email'], summary: 'Label the email field', html: '<input>' },
+    { target: ['#phone'], summary: 'Label the phone field' },
+    { target: [], summary: '' },
+  ];
+  const rule = { id: 'label', impact: 'serious', help: 'Label inputs', description: 'Inputs need labels', helpUrl: 'unused', nodes };
+  const report = mapFixtureReport({ fixture: 'barriers', engine: 'test', violations: [rule], incomplete: [rule], passes: 0, inapplicable: 0 }, 'barriers');
+  for (const finding of [report.findings[0], report.scanner!.incomplete[0]]) {
+    assert.deepEqual(finding.elements, [
+      { targets: ['#form', '#email'], guidance: 'Label the email field' },
+      { targets: ['#phone'], guidance: 'Label the phone field' },
+      { targets: [], guidance: 'Review this element manually and consult the rule guidance.' },
+    ]);
+    assert.ok(!JSON.stringify(finding).includes('<input>'));
+  }
+  nodes[0].target.push('#changed');
+  assert.deepEqual(report.findings[0].elements[0].targets, ['#form', '#email']);
+  for (const node of [{ target: [42], summary: 'x' }, { target: ['#x'], summary: null }, { target: ['x'.repeat(4001)], summary: 'x' }]) {
+    assert.throws(() => mapFixtureReport({ fixture: 'barriers', engine: 'test', violations: [{ ...rule, nodes: [node] }], incomplete: [], passes: 0, inapplicable: 0 }, 'barriers'), /Invalid scanner output/);
+  }
+});

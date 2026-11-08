@@ -12,11 +12,13 @@ export function FindingsReport({ report }: { report: Report }) {
         <div>
           <span className={`severity ${finding.severity.toLowerCase()}`}>{finding.severity}</span>
           <h3>{finding.title}</h3>
-          <p className="location">{finding.location}</p>
           <p>{finding.impact}</p>
           <details>
             <summary>How to improve this</summary>
-            <p>{finding.fix}</p>
+            {finding.elements.length ? finding.elements.map((element, index) => <div key={index}>
+              <p className="location">{element.targets.join(' → ') || 'Page'}</p>
+              <p>{element.guidance}</p>
+            </div>) : <p>No element details were returned. Review this rule manually.</p>}
           </details>
         </div>
       </article>)}
@@ -28,7 +30,7 @@ export function FindingsReport({ report }: { report: Report }) {
       {report.mode !== 'demo' && report.scanner && <>
         <p>axe-core {report.scanner.engineVersion} · {report.scanner.passedChecks} checks passed. Zero findings would not establish accessibility conformance.</p>
         <h4>{report.scanner.incomplete.length} automated checks need review</h4>
-        <ul>{report.scanner.incomplete.map(finding => <li key={finding.id}>{finding.title}: {finding.location}</li>)}</ul>
+        <ul>{report.scanner.incomplete.map(finding => <li key={finding.id}>{finding.title}</li>)}</ul>
       </>}
       {report.limitations && <><h4>Scan limitations</h4><ul>{report.limitations.map(limit => <li key={limit}>{limit}</li>)}</ul></>}
       <h4>Try these checks</h4>

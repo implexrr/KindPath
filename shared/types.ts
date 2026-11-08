@@ -1,10 +1,13 @@
+export interface FindingElement {
+  targets: string[];
+  guidance: string;
+}
 export interface Finding {
   id: string;
   severity: 'Critical' | 'Serious' | 'Moderate' | 'Minor' | 'Unknown';
   title: string;
-  location: string;
   impact: string;
-  fix: string;
+  elements: FindingElement[];
 }
 export interface Report {
   mode: 'demo' | 'fixture' | 'public';

@@ -27,9 +27,11 @@ export function mapWorkerReport(raw: unknown, fixture: string): Report {
     id: rule.id,
     severity: severities.get(rule.impact) ?? 'Unknown',
     title: rule.help,
-    location: rule.nodes.flatMap(node => node.target).join(', ').slice(0, 2000) || 'Page',
     impact: rule.description,
-    fix: rule.nodes.map(node => node.summary).filter(Boolean).join('\n').slice(0, 4000) || 'Review this rule manually and consult its accessibility guidance.',
+    elements: rule.nodes.map(node => ({
+      targets: [...node.target],
+      guidance: node.summary.trim() || 'Review this element manually and consult the rule guidance.',
+    })),
   });
   return {
     mode: 'fixture', url: `fixture:${fixture}`, generatedAt: new Date().toISOString(),
