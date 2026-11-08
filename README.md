@@ -42,9 +42,13 @@ The browser sends `POST /api/analyze` with a JSON URL payload. Vite proxies deve
 
 | Location | Responsibility |
 | --- | --- |
-| `src/App.tsx` | URL submission, request states, findings, and visual preview |
+| `src/App.tsx` | Page composition, request lifecycle, and shared UI state |
+| `src/components/` | Website form, findings report, visual preview, and sample website |
 | `src/styles.css` | Responsive layout and interaction styles |
-| `server/app.ts` | API routes, validation, demo responses, and error handling |
+| `server/app.ts` | Express setup, health route, router mounting, and error handling |
+| `server/routes/analyze.ts` | Analysis HTTP request and response handling |
+| `server/services/analyze.ts` | Demo report generation |
+| `server/validation/websiteUrl.ts` | URL input validation |
 | `server/index.ts` | Local HTTP listener |
 | `server/app.test.ts` | API contract and input-validation tests |
 | `shared/types.ts` | Shared report interfaces |
