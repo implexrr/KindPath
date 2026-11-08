@@ -7,9 +7,10 @@ interface WebsiteFormProps {
   onUrlChange: (url: string) => void;
   onSubmit: (event: FormEvent) => void;
   onExample: () => void;
+  onFixtureScan: () => void;
 }
 
-export function WebsiteForm({ url, busy, error, onUrlChange, onSubmit, onExample }: WebsiteFormProps) {
+export function WebsiteForm({ url, busy, error, onUrlChange, onSubmit, onExample, onFixtureScan }: WebsiteFormProps) {
   return <>
     <form onSubmit={onSubmit} aria-busy={busy}>
       <label htmlFor="website">Your website URL</label>
@@ -30,5 +31,9 @@ export function WebsiteForm({ url, busy, error, onUrlChange, onSubmit, onExample
     <button className="text-button" disabled={busy} onClick={onExample}>
       Just exploring? Try an example <span aria-hidden="true">↗</span>
     </button>
+    <div className="fixture-scan">
+      <button className="secondary" disabled={busy} onClick={onFixtureScan}>Run isolated fixture scan</button>
+      <p className="form-note">Real axe-core checks on a built-in example. Public URL scanning is disabled.</p>
+    </div>
   </>;
 }

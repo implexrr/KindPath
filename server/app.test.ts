@@ -60,3 +60,10 @@ test('OPTIONS analysis requests preserve the JSON 404 response', async () => {
     assert.deepEqual(await response.json(), { error: 'API route not found.' });
   }
 });
+
+test('fixture endpoint rejects URLs, paths, and extra fields before starting a worker', async () => {
+  for (const body of [{ url: 'http://127.0.0.1' }, { fixture: '../clear' }, { fixture: 'barriers', url: 'https://example.com' }, {}]) {
+    const response = await fetch(`${origin}/api/scan-fixture`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    assert.equal(response.status, 400);
+  }
+});
