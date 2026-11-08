@@ -92,3 +92,11 @@ test('local API rejects untrusted hostnames and browser origins before scanner w
   const local=await fetch(`${origin}/api/scanning-capabilities`, {headers:{Origin:'http://127.0.0.1:5173'}});
   assert.equal(local.status,200);
 });
+
+test('preview endpoint accepts only its fixed fixture identifier and never a URL or HTML', async () => {
+  for (const body of [{}, { fixture: 'barriers' }, { fixture: '../garden' }, { url: 'https://example.com' },
+    { fixture: 'garden', url: 'https://example.com' }, { fixture: 'garden', html: '<script></script>' }]) {
+    const response = await fetch(`${origin}/api/preview-fixture`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    assert.equal(response.status, 400);
+  }
+});

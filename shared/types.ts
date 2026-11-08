@@ -15,3 +15,11 @@ export interface Report {
   limitations?: string[];
   scanner?: { engineVersion: string; fixture: string; incomplete: Finding[]; passedChecks: number; inapplicableChecks: number };
 }
+
+export interface FixturePreview {
+  mode: 'fixture';
+  fixture: 'garden';
+  title: string;
+  capturedAt: string;
+  html: string;
+}

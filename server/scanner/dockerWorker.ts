@@ -11,7 +11,7 @@ import type { FixtureId } from './containerPolicy.js';
 
 const exec = promisify(execFile);
 const profile = fileURLToPath(new URL('../../scanner/seccomp.json', import.meta.url));
-type WorkerTask = FixtureId | 'verify-isolation';
+type WorkerTask = FixtureId | 'verify-isolation' | 'preview-garden';
 export type Command = (args: string[], signal?: AbortSignal, timeout?: number) => Promise<string>;
 export interface DockerSession { command: Command; dispose: () => Promise<void> }
 
@@ -39,7 +39,7 @@ export function createWorkerRunner(openSession: () => Promise<DockerSession>) {
   let active = false;
   let pendingContainer: string | undefined;
   return async (task: WorkerTask, signal?: AbortSignal): Promise<unknown> => {
-    if (!isFixture(task) && task !== 'verify-isolation') throw new Error('Unknown fixture.');
+    if (!isFixture(task) && task !== 'verify-isolation' && task !== 'preview-garden') throw new Error('Unknown fixture.');
     if (active) throw new ScannerError('SCANNER_BUSY', 'A fixture scan is already running. Try again shortly.');
     const release = reserveScanner();
     if (!release) throw new ScannerError('SCANNER_BUSY', 'A scan is already running.');
