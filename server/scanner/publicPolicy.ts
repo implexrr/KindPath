@@ -14,12 +14,13 @@ export function validatePublicUrl(value: unknown): string {
   return url.href;
 }
 
-export function assertPublicIsolation(value: unknown, role: 'browser' | 'gateway', volume: string): void {
+export function assertPublicIsolation(value: unknown, role: 'browser' | 'gateway', volume: string, namespace?: string): void {
   const fail = () => { throw new Error('Public worker isolation verification failed.'); };
   if (!Array.isArray(value) || value.length !== 1) return fail();
   const c = value[0]; const h = c?.HostConfig; const mounts = c?.Mounts;
   if (!h || c.State?.Running !== false || c.Config?.User !== '1000:1000'
-    || h.NetworkMode !== (role === 'browser' ? 'none' : 'bridge')
+    || (role === 'gateway' && (!namespace || !/^[a-f0-9]{64}$/.test(namespace)))
+    || h.NetworkMode !== (role === 'browser' ? 'none' : `container:${namespace}`)
     || h.Privileged !== false || h.ReadonlyRootfs !== true || h.AutoRemove !== true
     || h.IpcMode !== 'private' || (h.PidMode ?? '') !== '' || h.PublishAllPorts
     || (h.Binds ?? []).length || (h.CapAdd ?? []).length || !h.CapDrop?.includes('ALL')
@@ -29,6 +30,7 @@ export function assertPublicIsolation(value: unknown, role: 'browser' | 'gateway
     || h.Memory !== (role === 'browser' ? 536870912 : 134217728)
     || h.NanoCpus !== (role === 'browser' ? 1000000000 : 500000000)
     || h.PidsLimit !== (role === 'browser' ? 256 : 64)
+    || h.Tmpfs?.['/tmp'] !== 'rw,nosuid,nodev,noexec,size=134217728'
     || !Array.isArray(mounts) || mounts.length !== 1
     || mounts[0].Type !== 'volume' || mounts[0].Name !== volume
     || mounts[0].Destination !== '/run/kindpath' || mounts[0].RW !== (role === 'gateway')) return fail();

@@ -12,7 +12,7 @@ test('host preflight permits only the configured public domain and standard port
   for (const url of ['file:///etc/passwd','http://127.0.0.1/','https://example.com:8080/','https://user:pass@example.com/','https://example.com.attacker.invalid/']) assert.throws(()=>validatePublicUrl(url));
 });
 test('the browser can mount only the private, read-only socket volume', () => {
-  const c: any = {State:{Running:false},Config:{User:'1000:1000'},Mounts:[{Type:'volume',Name:'owned-volume',Destination:'/run/kindpath',RW:false}],HostConfig:{NetworkMode:'none',Privileged:false,ReadonlyRootfs:true,AutoRemove:true,IpcMode:'private',CapDrop:['ALL'],Memory:536870912,NanoCpus:1000000000,PidsLimit:256,SecurityOpt:['no-new-privileges:true','seccomp={"defaultAction":"SCMP_ACT_ERRNO"}']}};
+  const c: any = {State:{Running:false},Config:{User:'1000:1000'},Mounts:[{Type:'volume',Name:'owned-volume',Destination:'/run/kindpath',RW:false}],HostConfig:{NetworkMode:'none',Privileged:false,ReadonlyRootfs:true,AutoRemove:true,IpcMode:'private',CapDrop:['ALL'],Memory:536870912,NanoCpus:1000000000,PidsLimit:256,Tmpfs:{'/tmp':'rw,nosuid,nodev,noexec,size=134217728'},SecurityOpt:['no-new-privileges:true','seccomp={"defaultAction":"SCMP_ACT_ERRNO"}']}};
   assert.doesNotThrow(()=>assertPublicIsolation([c],'browser','owned-volume'));
   for (const mutate of [
     (v:any)=>{v.Mounts[0].Type='bind';}, (v:any)=>{v.Mounts[0].RW=true;},

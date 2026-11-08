@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { publicAddress, validateTarget, resolveTarget, pinnedDestination } from './policy.mjs';
+import { publicAddress, validateTarget, resolveTarget, pinnedDestination, snapshotResolver } from './policy.mjs';
 const allowed = ['example.com'];
 
 test('private, local, reserved, mapped, and transition addresses are denied', () => {
@@ -37,4 +37,19 @@ test('redirects and subresource destinations receive the same policy as the firs
   const publicResolver=async()=>[{address:'93.184.216.34'}];
   await resolveTarget('http://example.com/',allowed,false,publicResolver);
   for (const next of ['http://169.254.169.254/latest/meta-data/','http://10.0.0.1/script.js','https://unlisted.invalid/style.css']) await assert.rejects(resolveTarget(next,allowed,false,publicResolver));
+});
+
+test('frozen snapshots fail closed without DNS and cannot be changed by later input mutation', async () => {
+  const input = { 'example.com': ['93.184.216.34'] };
+  const lookup = snapshotResolver(input, allowed);
+  input['example.com'][0] = '127.0.0.1';
+  const first = await lookup('example.com'); first[0].address = '127.0.0.1';
+  assert.equal((await lookup('example.com'))[0].address, '93.184.216.34');
+  await assert.rejects(lookup('localhost'));
+  await assert.rejects(snapshotResolver({}, allowed)('example.com'));
+});
+test('frozen snapshots reject private, IPv6, malformed, or unapproved destinations', () => {
+  for (const value of [null, [], { localhost: ['93.184.216.34'] }, { 'example.com': ['127.0.0.1'] },
+    { 'example.com': ['::1'] }, { 'example.com': ['2606:4700:4700::1111'] }, { 'example.com': ['93.184.216.34', '10.0.0.1'] },
+    { 'example.com': [] }, JSON.parse('{"__proto__":["93.184.216.34"]}')]) assert.throws(() => snapshotResolver(value, allowed));
 });

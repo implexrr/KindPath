@@ -43,3 +43,21 @@ export function pinnedDestination(target) {
   if (!address || ![80, 443].includes(target.port)) throw new Error('Blocked connection');
   return { host: address.address, family: address.family, port: target.port };
 }
+
+// Runtime lookups use the controller's immutable snapshot, never DNS from the gateway namespace.
+export function snapshotResolver(value, allowedHosts) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid snapshot');
+  const entries = Object.entries(value);
+  if (entries.length > allowedHosts.length) throw new Error('Invalid snapshot');
+  const snapshot = new Map(entries.map(([host, answers]) => {
+    if (!allowedHosts.includes(host) || !Array.isArray(answers) || !answers.length || answers.length > 16) throw new Error('Invalid snapshot');
+    const parsed = answers.map(publicAddress);
+    if (parsed.some(item => !item || item.family !== 4)) throw new Error('Invalid snapshot');
+    return [host, parsed.map(item => ({ address: item.address, family: 4 }))];
+  }));
+  return async host => {
+    const answers = snapshot.get(host);
+    if (!answers) throw new Error('Destination not in frozen snapshot');
+    return answers.map(answer => ({ ...answer }));
+  };
+}
