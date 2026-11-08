@@ -61,3 +61,6 @@ jobs:
 
       - name: Verify independent firewall using controlled fixtures
         run: npm run test:firewall
+
+      - name: Verify fixture snapshot preview in an isolated browser
+        run: npm run test:preview

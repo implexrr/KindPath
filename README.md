@@ -8,7 +8,7 @@ KindPath explores website accessibility through automated checks, actionable exa
 - Real axe-core checks on two controlled fixtures, with violations separated from checks needing review.
 - Example accessibility findings with severity, impact, and suggested improvements.
 - Side-by-side previews with adjustable colour, contrast, blur, and peripheral field effects.
-- A fictional preview website with hover styles, disabled navigation, and a static advertisement placeholder.
+- Backend-generated snapshots of a built-in display fixture, with CSS hover styles, disabled navigation/forms, and a static advertisement placeholder.
 - Manual review prompts alongside automated-testing guidance.
 - Responsive layouts and standalone design mockups.
 
@@ -16,7 +16,7 @@ KindPath explores website accessibility through automated checks, actionable exa
 
 **Public URL scanning is disabled.** The URL form returns illustrative demo findings and never fetches the submitted website. The separate isolated-fixture action runs real axe-core checks on a built-in example. It does not scan the submitted URL.
 
-The visual preview always displays an included fictional website, independently of the report. Effects are illustrative approximations, not reproductions of an individual's vision or a medical condition.
+The visual preview generates a snapshot of the built-in Community garden display fixture, independently of the report. It does not capture the submitted URL. Effects are illustrative approximations, not reproductions of an individual's vision or a medical condition.
 
 Automated checks and visual simulations cannot establish accessibility conformance. Keyboard, screen reader, and usability evaluation remain essential.
 
@@ -74,6 +74,9 @@ The browser sends `POST /api/analyze` with a JSON URL payload. Vite proxies deve
 | `server/app.test.ts` | API contract and input-validation tests |
 | `server/scanner/` | Fixture and candidate URL policies, shared scanner admission, Docker lifecycle, and report validation |
 | `scanner/gateway/` | Unix-socket proxy, frozen destination policy, and controlled proxy tests |
+| `server/scanner/fixturePreview.ts` | Bounded fixture snapshot validation and inert HTML serialization |
+| `scanner/preview.mjs` | Rendered fixture DOM/style capture in the isolated worker |
+| `src/components/SnapshotFrame.tsx` | Opaque, script-free snapshot frames |
 | `scanner/firewall/` | Scoped nftables setup, verification, and controlled network fixtures |
 | `server/scanner/resources.ts` | Owned container, volume, and network cleanup with fail-closed admission |
 | `scanner/` | Narrow container build context, controlled fixtures, and worker-only dependencies |
@@ -87,6 +90,7 @@ The browser sends `POST /api/analyze` with a JSON URL payload. Vite proxies deve
 - `GET /api/scanning-capabilities`: reports public scanning disabled and the candidate allowlist.
 - `POST /api/scan-public`: currently returns 503 with `PUBLIC_SCANNING_DISABLED`; no submitted URL is fetched.
 - `POST /api/analyze`: accepts `{ "url": "https://example.com" }` and returns sample findings and manual review prompts; no URL fetching.
+- `POST /api/preview-fixture`: accepts exactly `{ "fixture": "garden" }` and returns a rendered, static snapshot of the built-in display fixture. URL, HTML, path, and extra fields are rejected.
 - `POST /api/scan-fixture`: accepts exactly `{ "fixture": "barriers" }` or `{ "fixture": "clear" }` and returns a real fixture report. Invalid input returns 400, a busy scanner returns 429, and an unavailable or failed worker, including unconfirmed cleanup, returns 503. A failed scan never produces a clean accessibility report.
 
 URLs must use HTTP or HTTPS, contain no embedded credentials, and be at most 2,048 characters. Invalid input returns a JSON error with an appropriate HTTP status.
@@ -131,3 +135,20 @@ npm run scanner:build -- --refresh
 Re-run tests and image vulnerability analysis after a refresh. On November 8, 2026, Scout found all 37 previously fixable findings absent from the patched arm64 worker image. Remaining findings were 1 high, 154 medium, and 18 low; the helper had 14 medium and 2 low. Scout listed no available fixes for those remaining findings at scan time. The high worker finding concerns GStreamer (`CVE-2025-3887`); runtime exploitability has not been established or accepted.
 
 Public target execution remains disabled pending review of those findings and a separately tested controller-generated public DNS snapshot plus outbound-network attachment. Kernel filtering constrains IP/port traffic, not HTTPS paths, methods, or shared-IP virtual hosts. Chromium certificate verification and the proxy/browser request policies remain necessary. Local API Host/Origin checks are development protections rather than production authentication. Container filtering and clean npm audits do not establish browser, kernel, Docker VM, or host safety.
+
+
+## Fixture snapshot preview
+
+After building the scanner image and starting the app, create a demo report or run an isolated fixture scan. Open **Visual preview**, then choose **Generate fixture snapshot**. The backend renders the fixed display fixture in its network-disabled Playwright worker and captures its supported page structure and inline CSS. The API validates that structure and serializes a bounded HTML document. It does not accept arbitrary HTML or URLs.
+
+The comparison frames preserve CSS hover effects, including the garden call-to-action, and the static advertisement. Anchors have no destinations, form containers become layout groups, and inputs/buttons are disabled. Scripts and unsupported elements/attributes are excluded. Each iframe has an empty sandbox, no same-origin or script permission, and a restrictive content policy that blocks external resources and form submissions. Both panels use the same snapshot; effects apply only to the modified panel. Snapshots stay in browser memory across tab switches; **Refresh fixture snapshot** explicitly requests another capture.
+
+Source labels and timestamps distinguish this fixture preview from the report. Failed capture attempts show a retryable error; an existing snapshot remains visible if a refresh fails. The capture and serializer support this fixed fixture only, not general public-site sanitization. Public URL capture and scanning remain disabled.
+
+```sh
+npm run build
+npm run scanner:build
+npm run test:preview
+```
+
+The browser check runs Chromium inside the existing isolated Docker image, with no host mounts or network access. Only public build assets and generated fixture responses are passed through standard input. It exercises loading/failure/retry, hover behavior, disabled navigation/forms, visual controls, refresh/tab persistence, and a 390px layout. Screenshots are written to the operating system's temporary directory. No browser is installed or launched on the host.
