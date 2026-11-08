@@ -5,6 +5,7 @@ import { access } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import AxeBuilder from '@axe-core/playwright';
 import { validateTarget } from './gateway/policy.mjs';
+import { summarizeRules } from './public-report.mjs';
 
 const socketPath = '/run/kindpath/egress.sock';
 const allowed = JSON.parse(process.env.KINDPATH_ALLOWED_HOSTS ?? '[]');
@@ -65,9 +66,13 @@ try {
     if (!response || !response.ok()) throw new Error('Navigation failed');
     validateTarget(page.url(), allowed);
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).options({ iframes: false }).analyze();
-    const summarize = rules => rules.slice(0, 100).map(rule => ({ id: rule.id, impact: rule.impact ?? 'unknown', help: rule.help, description: rule.description, helpUrl: rule.helpUrl,
-      nodes: rule.nodes.slice(0, 20).map(node => ({ target: node.target.map(s => typeof s === 'string' ? s : JSON.stringify(s)), summary: (node.failureSummary ?? '').slice(0, 2000) })) }));
-    process.stdout.write(JSON.stringify({ fixture: 'public', url: page.url(), coverage: { blockedRequests, failedRequests }, engine: result.testEngine.version, violations: summarize(result.violations), incomplete: summarize(result.incomplete), passes: result.passes.length, inapplicable: result.inapplicable.length }));
+    const violations = summarizeRules(result.violations);
+    const incomplete = summarizeRules(result.incomplete);
+    process.stdout.write(JSON.stringify({ fixture: 'public', url: page.url(),
+      coverage: { blockedRequests, failedRequests, omittedRules: violations.omittedRules + incomplete.omittedRules,
+        omittedNodes: violations.omittedNodes + incomplete.omittedNodes },
+      engine: result.testEngine.version, violations: violations.rules, incomplete: incomplete.rules,
+      passes: result.passes.length, inapplicable: result.inapplicable.length }));
   }
 } catch { process.stderr.write('Isolated gateway scan failed.\n'); process.exitCode = 1; }
 finally { if (browser) await browser.close(); if (relay) relay.close(); clearTimeout(deadline); }

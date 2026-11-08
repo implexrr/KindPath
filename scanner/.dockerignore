@@ -8,3 +8,5 @@
 !public-worker.mjs
 !gateway/
 !gateway/*.mjs
+!public-report.mjs
+!public-report.test.mjs
