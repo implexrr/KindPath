@@ -1,5 +1,6 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { request } from 'node:http';
 import type { Server } from 'node:http';
 import { app } from './app.js';
 let server: Server;
@@ -66,4 +67,28 @@ test('fixture endpoint rejects URLs, paths, and extra fields before starting a w
     const response = await fetch(`${origin}/api/scan-fixture`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     assert.equal(response.status, 400);
   }
+});
+
+test('public scanning endpoint stays disabled and reports its candidate allowlist', async () => {
+  const response = await fetch(`${origin}/api/scan-public`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'https://example.com/'})});
+  assert.equal(response.status,503);
+  assert.equal((await response.json()).code,'PUBLIC_SCANNING_DISABLED');
+  const capabilities=await (await fetch(`${origin}/api/scanning-capabilities`)).json();
+  assert.equal(capabilities.publicScanningEnabled,false);
+  assert.deepEqual(capabilities.allowedHosts,['example.com']);
+});
+
+test('local API rejects untrusted hostnames and browser origins before scanner work', async () => {
+  const cases: Record<string, string>[] = [{Host:'attacker.invalid'}, {Origin:'https://attacker.invalid'}, {Origin:'null'}];
+  for (const headers of cases) {
+    const status=await new Promise<number>((resolve,reject)=>{
+      const req=request(`${origin}/api/scan-fixture`, {method:'POST',headers:{'Content-Type':'application/json',...headers}}, res=>{
+        res.resume(); res.once('end',()=>resolve(res.statusCode ?? 0));
+      });
+      req.once('error',reject); req.end(JSON.stringify({fixture:'barriers'}));
+    });
+    assert.equal(status,403);
+  }
+  const local=await fetch(`${origin}/api/scanning-capabilities`, {headers:{Origin:'http://127.0.0.1:5173'}});
+  assert.equal(local.status,200);
 });

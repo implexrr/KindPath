@@ -14,7 +14,9 @@
     "build": "npm run check && vite build",
     "test": "tsx --test server/app.test.ts server/scanner/*.test.ts",
     "scanner:build": "node scripts/build-scanner.mjs",
-    "test:scanner": "tsx --test server/scanner.integration.ts"
+    "test:scanner": "tsx --test server/scanner.integration.ts",
+    "test:gateway:unit": "node scripts/test-gateway-unit.mjs",
+    "test:gateway": "tsx --test server/publicScanner.integration.ts"
   },
   "dependencies": {
     "express": "^5.3.0",

@@ -52,3 +52,9 @@ jobs:
 
       - name: Verify isolation and real fixture scans
         run: npm run test:scanner
+
+      - name: Verify gateway destination policy without network
+        run: npm run test:gateway:unit
+
+      - name: Verify private socket gateway isolation
+        run: npm run test:gateway

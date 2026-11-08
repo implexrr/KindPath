@@ -6,13 +6,14 @@ import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertContainerIsolation, containerArguments, isFixture } from './containerPolicy.js';
+import { reserveScanner } from './admission.js';
 import type { FixtureId } from './containerPolicy.js';
 
 const exec = promisify(execFile);
 const profile = fileURLToPath(new URL('../../scanner/seccomp.json', import.meta.url));
 type WorkerTask = FixtureId | 'verify-isolation';
-type Command = (args: string[], signal?: AbortSignal, timeout?: number) => Promise<string>;
-interface DockerSession { command: Command; dispose: () => Promise<void> }
+export type Command = (args: string[], signal?: AbortSignal, timeout?: number) => Promise<string>;
+export interface DockerSession { command: Command; dispose: () => Promise<void> }
 
 export class ScannerError extends Error {
   constructor(public code: 'SCANNER_BUSY' | 'SCANNER_UNAVAILABLE' | 'SCAN_FAILED' | 'SCANNER_CLEANUP_FAILED', message: string) { super(message); }
@@ -21,7 +22,7 @@ function cleanupError(): ScannerError {
   return new ScannerError('SCANNER_CLEANUP_FAILED', 'Scanner cleanup could not be confirmed. No report was produced. Restore Docker Desktop and retry; new workers remain blocked until cleanup is verified.');
 }
 
-async function removeAndConfirm(command: Command, name: string): Promise<void> {
+export async function removeAndConfirm(command: Command, name: string): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt++) {
     // A removal error may mean --rm already removed it, but must never be assumed harmless.
     try { await command(['rm', '--force', name], undefined, 3000); } catch { /* Verify with the daemon below. */ }
@@ -40,6 +41,8 @@ export function createWorkerRunner(openSession: () => Promise<DockerSession>) {
   return async (task: WorkerTask, signal?: AbortSignal): Promise<unknown> => {
     if (!isFixture(task) && task !== 'verify-isolation') throw new Error('Unknown fixture.');
     if (active) throw new ScannerError('SCANNER_BUSY', 'A fixture scan is already running. Try again shortly.');
+    const release = reserveScanner();
+    if (!release) throw new ScannerError('SCANNER_BUSY', 'A scan is already running.');
     active = true;
     signal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(45_000)]);
     let session: DockerSession | undefined;
@@ -56,6 +59,7 @@ export function createWorkerRunner(openSession: () => Promise<DockerSession>) {
       // Also fail closed after an API restart, when an old worker name is no longer in memory.
       const leftovers = await session.command(['ps', '--all', '--quiet', '--filter', 'label=kindpath.scanner=fixture'], signal);
       if (leftovers.trim()) throw cleanupError();
+      if ((await session.command(['ps', '--all', '--quiet', '--filter', 'label=kindpath.scanner=public'], signal)).trim()) throw cleanupError();
       name = `kindpath-fixture-${randomUUID()}`;
       pendingContainer = name;
       await session.command(containerArguments(name, profile, task), signal);
@@ -77,13 +81,13 @@ export function createWorkerRunner(openSession: () => Promise<DockerSession>) {
           pendingContainer = undefined;
         }
       } finally {
-        try { await session?.dispose(); } finally { active = false; }
+        try { await session?.dispose(); } finally { active = false; release(); }
       }
     }
   };
 }
 
-async function openLocalDockerSession(): Promise<DockerSession> {
+export async function openLocalDockerSession(): Promise<DockerSession> {
   const docker = process.platform === 'darwin'
     ? '/Applications/Docker.app/Contents/Resources/bin/docker' : '/usr/bin/docker';
   // Explicit local socket: ignore DOCKER_HOST/contexts and never forward host credentials.

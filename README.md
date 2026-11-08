@@ -89,4 +89,20 @@ URLs must use HTTP or HTTPS, contain no embedded credentials, and be at most 2,0
 
 React, TypeScript, Vite, and Express. Tests use Node's built-in test runner through tsx. The lockfile records resolved dependency versions.
 
-The isolated worker uses Playwright and @axe-core/playwright (including axe-core). No database, authentication, external scanning service, or production deployment is configured. Scanning public URLs and arbitrary website capture remain disabled.
+The isolated worker uses Playwright and @axe-core/playwright (including axe-core). No database, authentication, external scanning service, or production deployment is configured. The gateway additionally uses ipaddr.js for IP classification. Public URL scanning and arbitrary website capture remain disabled pending separate review.
+
+
+## Gateway groundwork (public scanning disabled)
+
+The application rejects POST /api/scan-public with PUBLIC_SCANNING_DISABLED. The candidate allowlist contains only example.com; this does not activate it. Enabling the route is a separate reviewed code change in server/scanner/publicPolicy.ts. The URL form continues to return demo data while the switch is off.
+
+A prepared browser worker still uses network none. Its only gateway connection is a Unix socket in a fresh tmpfs-backed Docker volume, mounted read-only in the browser and read-write in the gateway. This is not a host directory or credential mount. The gateway exposes no TCP port. It validates exact hostnames, standard ports, all DNS answers, and public address ranges, then connects to a pinned numeric IP. Redirect/subresource connections use the same gateway. Chromium retains certificate verification.
+
+The gateway itself has Docker bridge networking and enforces destination rules in Node. It does not have an independent kernel egress firewall. That trust boundary, HTTPS CONNECT handling, browser/VM risks, and runtime/image patch status need security review before activation. CONNECT validates destinations, while the browser layer restricts encrypted HTTP methods and WebSockets; the gateway does not decrypt TLS.
+
+```sh
+npm run test:gateway:unit # Policy tests in a network-disabled container
+npm run test:gateway      # Socket isolation, forbidden destinations, cancellation, cleanup
+```
+
+The integration suite skips external browsing by default. A separately authorized example.com smoke test can be run with KINDPATH_PUBLIC_SMOKE=1; this never enables the application endpoint. Reports record blocked/failed resources and top-level-only coverage, which can affect the findings. Local API Host/Origin checks are development protections, not a production authentication system.

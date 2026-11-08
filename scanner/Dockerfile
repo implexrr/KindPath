@@ -2,7 +2,8 @@ FROM mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a9126
 WORKDIR /opt/kindpath-worker
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
-COPY worker.mjs ./
+COPY worker.mjs public-worker.mjs ./
+COPY gateway/ ./gateway/
 COPY fixtures/ ./fixtures/
 USER pwuser
 ENV HOME=/tmp/kindpath-home

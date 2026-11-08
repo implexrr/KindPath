@@ -5,3 +5,6 @@
 !worker.mjs
 !fixtures/
 !fixtures/*.html
+!public-worker.mjs
+!gateway/
+!gateway/*.mjs

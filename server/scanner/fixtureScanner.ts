@@ -17,7 +17,7 @@ function isRules(value: unknown): value is WorkerRule[] {
     Array.isArray(rule.nodes) && rule.nodes.length <= 20 && rule.nodes.every((node: WorkerRule['nodes'][number]) =>
       node && Array.isArray(node.target) && node.target.length <= 100 && node.target.every(isText) && isText(node.summary)));
 }
-export function mapFixtureReport(raw: unknown, fixture: FixtureId): Report {
+export function mapWorkerReport(raw: unknown, fixture: string): Report {
   const r = raw as Record<string, unknown> | null;
   if (!r || r.fixture !== fixture || !isText(r.engine) || !isRules(r.violations) || !isRules(r.incomplete)
     || !Number.isSafeInteger(r.passes) || Number(r.passes) < 0 || !Number.isSafeInteger(r.inapplicable) || Number(r.inapplicable) < 0) {
@@ -37,6 +37,9 @@ export function mapFixtureReport(raw: unknown, fixture: FixtureId): Report {
     manualChecks: ['Review reading order and names with a screen reader.', 'Navigate using only a keyboard.', 'Check zoom, reflow, and content clarity.'],
     scanner: { engineVersion: r.engine, fixture, incomplete: r.incomplete.map(finding), passedChecks: Number(r.passes), inapplicableChecks: Number(r.inapplicable) },
   };
+}
+export function mapFixtureReport(raw: unknown, fixture: FixtureId): Report {
+  return mapWorkerReport(raw, fixture);
 }
 export async function scanFixture(fixture: FixtureId, signal?: AbortSignal): Promise<Report> {
   return mapFixtureReport(await runIsolatedWorker(fixture, signal), fixture);
