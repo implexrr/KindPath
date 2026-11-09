@@ -1,3 +1,4 @@
+import { captureSiteSnapshot } from './site-preview.mjs';
 import net from 'node:net';
 import http from 'node:http';
 import { networkInterfaces } from 'node:os';
@@ -10,12 +11,14 @@ import { summarizeRules } from './public-report.mjs';
 const socketPath = '/run/kindpath/egress.sock';
 const allowed = JSON.parse(process.env.KINDPATH_ALLOWED_HOSTS ?? '[]');
 const target = process.argv[2];
+const capture = process.argv[3] === '--capture';
 const deadline = setTimeout(() => process.exit(2), 40_000);
 let browser;
 let relay;
 let rejectedNavigation = false;
 let pageChanged = false;
 try {
+  if (process.argv.length > 4 || (process.argv[3] && !capture) || (capture && target === 'verify-public-isolation')) throw new Error('Invalid worker task');
   if (process.getuid() === 0 || Object.values(networkInterfaces()).flat().some(a => a && !a.internal)) throw new Error('Isolation missing');
   // Wait briefly for the separate gateway to create its private socket.
   for (let i = 0; ; i++) {
@@ -80,9 +83,13 @@ try {
     if (pageChanged || page.url() !== scannedUrl || result.url !== scannedUrl) {
       pageChanged = true; throw new Error('Page changed during scan');
     }
+    const preview = capture ? await captureSiteSnapshot(page) : undefined;
+    if (pageChanged || page.url() !== scannedUrl || (preview && preview.url !== scannedUrl)) {
+      pageChanged = true; throw new Error('Page changed during capture');
+    }
     const violations = summarizeRules(result.violations);
     const incomplete = summarizeRules(result.incomplete);
-    process.stdout.write(JSON.stringify({ fixture: 'public', url: scannedUrl,
+    process.stdout.write(JSON.stringify({ fixture: 'public', url: scannedUrl, ...(preview ? {preview} : {}),
       coverage: { blockedRequests, failedRequests, omittedRules: violations.omittedRules + incomplete.omittedRules,
         omittedNodes: violations.omittedNodes + incomplete.omittedNodes },
       engine: result.testEngine.version, violations: violations.rules, incomplete: incomplete.rules,

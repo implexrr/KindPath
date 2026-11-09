@@ -79,6 +79,7 @@ test('public scanning endpoint stays disabled and reports its candidate allowlis
   assert.equal((await response.json()).code,'PUBLIC_SCANNING_DISABLED');
   const capabilities=await (await fetch(`${origin}/api/scanning-capabilities`)).json();
   assert.equal(capabilities.publicScanningEnabled,false);
+  assert.equal(capabilities.publicCaptureEnabled,false);
   assert.deepEqual(capabilities.allowedHosts,['example.com']);
 });
 

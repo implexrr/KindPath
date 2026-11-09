@@ -24,7 +24,7 @@ function record(value: unknown): Record<string,unknown> {
 export function mapSitePreview(raw: unknown, identity: {scanId:string;requestedUrl:string;url:string}): SitePreview {
   const snapshot = record(raw);
   const requestedUrl = validatePublicUrl(identity.requestedUrl), url = validatePublicUrl(identity.url);
-  if (!/^[a-f0-9-]{36}$/.test(identity.scanId) || snapshot.url !== url || typeof snapshot.capturedAt !== 'string'
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(identity.scanId) || snapshot.url !== url || typeof snapshot.capturedAt !== 'string'
     || snapshot.capturedAt.length > 30 || !Number.isFinite(Date.parse(snapshot.capturedAt)) || !Array.isArray(snapshot.nodes)) return invalid();
   for (const key of ['omittedSubtrees','omittedText','omittedStyles']) if (!Number.isSafeInteger(snapshot[key]) || Number(snapshot[key]) < 0 || Number(snapshot[key]) > 1000000) return invalid();
   let count = 0, css = '', textLength = 0;
@@ -65,6 +65,6 @@ export function mapSitePreview(raw: unknown, identity: {scanId:string;requestedU
   return {mode:'public',...identity,requestedUrl,url,title,capturedAt:snapshot.capturedAt,html,limitations:[
     'A limited visual approximation captured after automated analysis in the same browser visit; dynamic content may differ.',
     'Scripts, embedded frames, images, media, custom fonts, form values and unsupported structure/styles are omitted. Only simple readable link/button hover rules are retained.',
-    `${snapshot.omittedSubtrees} subtrees, ${snapshot.omittedText} text characters and ${snapshot.omittedStyles} style declarations were omitted.`,
+    `At least ${snapshot.omittedSubtrees} subtrees, ${snapshot.omittedText} text characters and ${snapshot.omittedStyles} style declarations were omitted.`,
   ]};
 }

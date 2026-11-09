@@ -1,13 +1,13 @@
 import { Router } from 'express';
-import { PUBLIC_SCANNING_ENABLED, ALLOWED_PUBLIC_HOSTS, validatePublicUrl } from '../scanner/publicPolicy.js';
+import { PUBLIC_SCANNING_ENABLED, PUBLIC_CAPTURE_ENABLED, ALLOWED_PUBLIC_HOSTS, validatePublicUrl } from '../scanner/publicPolicy.js';
 import { scanPublicSite } from '../scanner/publicScanner.js';
 import { ScannerError } from '../scanner/dockerWorker.js';
 
 // Only tests inject these dependencies; the app mounts the default, disabled router.
-export function createPublicRouter({ enabled = (): boolean => PUBLIC_SCANNING_ENABLED, scan = scanPublicSite } = {}) {
+export function createPublicRouter({ enabled = (): boolean => PUBLIC_SCANNING_ENABLED, captureEnabled = (): boolean => PUBLIC_CAPTURE_ENABLED, scan = scanPublicSite } = {}) {
   const publicRouter = Router();
   publicRouter.get('/scanning-capabilities', (_req, res) => {
-    res.json({ publicScanningEnabled: enabled(), allowedHosts: ALLOWED_PUBLIC_HOSTS });
+    res.json({ publicScanningEnabled: enabled(), publicCaptureEnabled: enabled() && captureEnabled(), allowedHosts: ALLOWED_PUBLIC_HOSTS });
   });
   publicRouter.post('/scan-public', async (req, res, next) => {
     if (!enabled()) {

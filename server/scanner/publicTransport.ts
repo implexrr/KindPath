@@ -10,7 +10,7 @@ import { attachEgressNetwork, firewallControl } from './firewallDocker.js';
 import type { Namespace } from './firewallDocker.js';
 
 const profile = fileURLToPath(new URL('../../scanner/seccomp.json', import.meta.url));
-function args(name: string, volume: string, role: 'browser' | 'gateway', namespace: string, plan?: DestinationPlan) {
+function args(name: string, volume: string, role: 'browser' | 'gateway', namespace: string, plan?: DestinationPlan, capture = false) {
   const browser = role === 'browser';
   return ['create', '--pull=never', '--rm', '--name', name, '--label', PUBLIC_LABEL,
     `--network=${browser ? 'none' : `container:${namespace}`}`, '--read-only', '--user=1000:1000', '--cap-drop=ALL',
@@ -20,7 +20,7 @@ function args(name: string, volume: string, role: 'browser' | 'gateway', namespa
     `--mount=type=volume,src=${volume},dst=/run/kindpath,volume-nocopy${browser ? ',readonly' : ''}`,
     '--env=HOME=/tmp/kindpath-home', `--env=KINDPATH_ALLOWED_HOSTS=${JSON.stringify(ALLOWED_PUBLIC_HOSTS)}`,
     `--env=KINDPATH_PINNED_DESTINATIONS=${JSON.stringify(plan?.destinations ?? {})}`,
-    '--entrypoint=node', IMAGE, ...(browser ? ['public-worker.mjs', plan?.target ?? 'verify-public-isolation'] : ['gateway/server.mjs'])];
+    '--entrypoint=node', IMAGE, ...(browser ? ['public-worker.mjs', plan?.target ?? 'verify-public-isolation', ...(capture ? ['--capture'] : [])] : ['gateway/server.mjs'])];
 }
 // One validated plan supplies both kernel destinations and gateway connection addresses.
 export async function preparePublicEgress(command: Command, resources: Resources, ns: Namespace, value: DestinationPlan, signal: AbortSignal) {
@@ -32,8 +32,9 @@ export async function preparePublicEgress(command: Command, resources: Resources
 }
 
 // Callers own all resources and must verify cleanup before returning this untrusted output.
-export async function scanInNamespace(command: Command, resources: Resources, ns: Namespace, value: DestinationPlan | undefined, signal: AbortSignal): Promise<unknown> {
+export async function scanInNamespace(command: Command, resources: Resources, ns: Namespace, value: DestinationPlan | undefined, signal: AbortSignal, capture = false): Promise<unknown> {
   const plan = value ? validateDestinationPlan(value) : undefined;
+  if (capture && !plan) throw new Error('Capture requires a validated scan plan');
   if (plan && (!ns.egress || !resources.networks.includes(ns.egress)
     || JSON.stringify(ns.addresses) !== JSON.stringify(plan.addresses) || !/^[a-f0-9]{64}$/.test(ns.hash ?? ''))) {
     throw new Error('Public scan requires verified pinned egress');
@@ -49,7 +50,7 @@ export async function scanInNamespace(command: Command, resources: Resources, ns
   const names = { gateway: `kindpath-public-gateway-${id}`, browser: `kindpath-public-browser-${id}` };
   for (const role of ['gateway', 'browser'] as const) {
     resources.containers.push(names[role]);
-    await command(args(names[role], volume, role, ns.id, plan), signal);
+    await command(args(names[role], volume, role, ns.id, plan, capture), signal);
     assertPublicIsolation(JSON.parse(await command(['inspect', names[role]], signal)), role, volume, ns.id);
   }
   await command(['start', names.gateway], signal);

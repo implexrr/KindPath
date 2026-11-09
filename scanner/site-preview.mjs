@@ -14,7 +14,7 @@ export async function captureSiteSnapshot(page) {
       ['flex-wrap', /^(?:nowrap|wrap|wrap-reverse)$/], ['align-items', /^(?:normal|start|end|center|stretch|flex-start|flex-end|baseline)$/],
       ['justify-content', /^(?:normal|start|end|center|flex-start|flex-end|space-between|space-around|space-evenly)$/],
     ]);
-    let nodes = 0, textLeft = 8000, styleLeft = 20000, omittedSubtrees = 0, omittedText = 0, omittedStyles = 0;
+    let nodes = 0, visited = 0, textLeft = 8000, styleLeft = 20000, omittedSubtrees = 0, omittedText = 0, omittedStyles = 0;
     function styles(declaration) {
       const result = {};
       for (const [key, valid] of rules) {
@@ -28,7 +28,8 @@ export async function captureSiteSnapshot(page) {
     }
     // Only simple terminal :hover selectors from readable, top-level rules are supported.
     const hover = []; let checkedRules = 0;
-    for (const sheet of [...document.styleSheets].slice(0,20)) {
+    for (let sheetIndex=0; sheetIndex<Math.min(document.styleSheets.length,20); sheetIndex++) {
+      const sheet=document.styleSheets[sheetIndex];
       try {
         for (const rule of sheet.cssRules) {
           if (++checkedRules > 500) break;
@@ -44,13 +45,14 @@ export async function captureSiteSnapshot(page) {
     function children(parent, depth) {
       const result = [];
       for (let i = 0; i < parent.childNodes.length; i++) {
-        if (nodes >= 250) { omittedSubtrees += parent.childNodes.length-i; break; }
+        if (nodes >= 250 || visited >= 1000) { omittedSubtrees += parent.childNodes.length-i; break; }
         const child = capture(parent.childNodes[i],depth);
         if (child) result.push(child);
       }
       return result;
     }
     function capture(node, depth) {
+      visited++;
       if (depth > 15) { omittedSubtrees++; return null; }
       if (node.nodeType === Node.TEXT_NODE) {
         const text = node.textContent ?? '';

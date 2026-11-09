@@ -67,7 +67,7 @@ test('forbidden redirects, untrusted TLS and a page changing during analysis nev
   } finally {await session.dispose();}
 });
 
-test('URL HTTP endpoint produces a bound report through the real controller using only internal origins', {timeout:90000}, async () => {
+test('URL HTTP endpoint binds a same-visit inert snapshot to its report using only internal origins', {timeout:90000}, async () => {
   const { default: express } = await import('express');
   const { createPublicRouter } = await import('./routes/scanPublic.js');
   const { createPublicSiteScanner } = await import('./scanner/publicScanner.js');
@@ -78,6 +78,7 @@ test('URL HTTP endpoint produces a bound report through the real controller usin
   const target = 'http://example.com/redirect';
   let lookups = 0;
   const worker = createPublicUrlWorkerRunner({
+    captureEnabled: () => true,
     enabled: () => true, // Local test instance only; the application's router/runner gates stay false.
     planTarget: async (url, signal) => {
       assert.equal(url, target);
@@ -98,9 +99,9 @@ test('URL HTTP endpoint produces a bound report through the real controller usin
       return ns;
     },
   });
-  const scan = createPublicSiteScanner({ enabled: () => true, worker });
+  const scan = createPublicSiteScanner({ enabled: () => true, captureEnabled: () => true, worker });
   const app = express(); app.use('/api', localRequests); app.use(express.json({limit:'4kb'}));
-  app.use('/api', createPublicRouter({enabled: () => true, scan}));
+  app.use('/api', createPublicRouter({enabled: () => true, captureEnabled: () => true, scan}));
   const server = app.listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));
   const address = server.address(); assert.ok(address && typeof address !== 'string');
   try {
@@ -113,6 +114,15 @@ test('URL HTTP endpoint produces a bound report through the real controller usin
     for (const id of ['image-alt','label','button-name']) assert.ok(report.findings.some((finding: {id:string}) => finding.id === id));
     assert.ok(report.limitations.some((text: string) => /requests were blocked by policy/.test(text)));
     assert.equal(lookups, 1); assert.equal(PUBLIC_SCANNING_ENABLED, false);
+    const { PUBLIC_CAPTURE_ENABLED } = await import('./scanner/publicPolicy.js'); assert.equal(PUBLIC_CAPTURE_ENABLED,false);
+    assert.equal(report.sitePreview.scanId,report.scanId); assert.equal(report.sitePreview.requestedUrl,target);
+    assert.equal(report.sitePreview.url,report.url); assert.match(report.sitePreview.html,/Community garden/);
+    assert.match(report.sitePreview.html,/Rendered capture marker/); assert.match(report.sitePreview.html,/Controlled advertisement/);
+    assert.match(report.sitePreview.html,/:hover\{color:rgb\(255, 0, 0\)/);
+    assert.ok(!report.sitePreview.html.includes('controlled-form-value-marker'));
+    assert.match(report.sitePreview.html,/input[^>]* disabled/);
+    assert.doesNotMatch(report.sitePreview.html,/<(?:script|iframe|form|img|svg)\b|\b(?:href|src|onclick)=/i);
+    assert.ok(report.sitePreview.limitations.length>0);
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
   const session = await openLocalDockerSession();
   try {

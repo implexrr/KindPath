@@ -101,3 +101,19 @@ test('URL HTTP contract validates bodies and preserves busy, failure and cleanup
     }
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
+
+test('capture defaults stay disabled and captured data is accepted only by an explicitly enabled test instance', async () => {
+  const { PUBLIC_CAPTURE_ENABLED } = await import('./publicPolicy.js');
+  assert.equal(PUBLIC_CAPTURE_ENABLED,false);
+  const preview = {url:raw.url,capturedAt:'2026-11-09T00:00:00.000Z',nodes:[{text:'Controlled page'}],omittedSubtrees:0,omittedText:0,omittedStyles:0};
+  await assert.rejects(createPublicSiteScanner({enabled:()=>true,worker:async()=>({...raw,preview})})('https://example.com/start'),
+    error=>error instanceof ScannerError && error.code==='SCAN_FAILED');
+  for(const bad of [undefined,{...preview,url:'https://example.com/old'},{...preview,nodes:[{tag:'script'}]}]) {
+    await assert.rejects(createPublicSiteScanner({enabled:()=>true,captureEnabled:()=>true,worker:async()=>({...raw,preview:bad})})('https://example.com/start'),
+      error=>error instanceof ScannerError && error.code==='SCAN_FAILED');
+  }
+  const scan=createPublicSiteScanner({enabled:()=>true,captureEnabled:()=>true,worker:async()=>({...raw,preview})});
+  const first=await scan('https://example.com/start'),second=await scan('https://example.com/start');
+  assert.equal(first.sitePreview?.scanId,first.scanId); assert.equal(first.sitePreview?.requestedUrl,first.requestedUrl);
+  assert.equal(first.sitePreview?.url,first.url); assert.notEqual(first.scanId,second.scanId);
+});

@@ -1,4 +1,6 @@
-import { PUBLIC_SCANNING_ENABLED, validatePublicUrl } from './publicPolicy.js';
+import { randomUUID } from 'node:crypto';
+import { mapSitePreview } from './sitePreview.js';
+import { PUBLIC_SCANNING_ENABLED, PUBLIC_CAPTURE_ENABLED, validatePublicUrl } from './publicPolicy.js';
 import { runPublicUrlWorker } from './publicUrlWorker.js';
 import { ScannerError } from './dockerWorker.js';
 import { mapWorkerReport } from './fixtureScanner.js';
@@ -23,17 +25,23 @@ export function mapPublicReport(raw: unknown, requestedUrl?: string) {
 }
 interface Dependencies {
   enabled?: () => boolean;
+  captureEnabled?: () => boolean;
   worker?: (target: string, signal?: AbortSignal) => Promise<unknown>;
 }
-export function createPublicSiteScanner({ enabled = () => PUBLIC_SCANNING_ENABLED, worker = runPublicUrlWorker }: Dependencies = {}) {
+export function createPublicSiteScanner({ enabled = () => PUBLIC_SCANNING_ENABLED, captureEnabled = () => PUBLIC_CAPTURE_ENABLED, worker = runPublicUrlWorker }: Dependencies = {}) {
   return async (value: unknown, signal?: AbortSignal) => {
     if (!enabled()) throw new ScannerError('SCANNER_UNAVAILABLE', 'Public URL scanning is disabled pending security review.');
     const target = validatePublicUrl(value);
     signal?.throwIfAborted();
+    const capture = captureEnabled();
     try {
       const raw = await worker(target, signal);
       signal?.throwIfAborted();
-      return mapPublicReport(raw, target);
+      const report = mapPublicReport(raw, target);
+      const preview = (raw as {preview?: unknown}).preview;
+      if (!capture && preview !== undefined) throw new Error('Capture is disabled');
+      const scanId = randomUUID();
+      return {...report,scanId,...(capture ? {sitePreview:mapSitePreview(preview,{scanId,requestedUrl:target,url:report.url})} : {})};
     } catch (error) {
       if (error instanceof ScannerError && error.code !== 'SCAN_FAILED') throw error;
       // Never expose DNS, browser, Docker or untrusted worker diagnostics to the caller.
