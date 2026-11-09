@@ -1,4 +1,5 @@
 import type { Finding, Report } from '../../shared/types';
+import { ScanCoverageNotice } from './ScanCoverageNotice';
 import { createReportExport, severityOrder } from './reportExport';
 
 function PrintedFinding({ finding }: { finding: Finding }) {
@@ -25,6 +26,7 @@ export function PrintableReport({ report }: { report: Report }) {
       <p>{exported.source.description}</p>
       <p>Complete report · All returned findings and element guidance are included, regardless of the on-screen filter. Preview snapshots and visual effects are excluded.</p>
     </header>
+    <ScanCoverageNotice report={complete}/>
     <section><h2>{report.mode === 'demo' ? 'Example findings' : 'Confirmed automated violations'} ({sorted.length})</h2>
       <p>Counts refer to rules, not individual elements.</p>
       {sorted.length ? sorted.map(finding => <PrintedFinding key={finding.id} finding={finding}/>)

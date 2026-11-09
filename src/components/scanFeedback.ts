@@ -1,3 +1,6 @@
+import type { Report } from '../../shared/types';
+import { readScanCoverage } from '../../shared/scanCoverage';
+
 const messages = new Map([
   ['SCANNER_BUSY','Another scan is still finishing. Try again shortly.'],
   ['SCANNER_CLEANUP_FAILED','The previous scan could not finish safely. Scanning is unavailable until cleanup is verified.'],
@@ -10,4 +13,22 @@ export function scanErrorMessage(value: unknown, status: number): string {
   if (typeof data.code === 'string' && messages.has(data.code)) return messages.get(data.code)!;
   if (status === 400 && typeof data.error === 'string' && data.error.length <= 500) return data.error;
   return 'The request could not finish. No report was created. Try again.';
+}
+
+export function scanCoverageFeedback(report: Pick<Report, 'mode' | 'coverage'>) {
+  if (report.mode !== 'public') return undefined;
+  const coverage = readScanCoverage(report.coverage);
+  if (!coverage) return { title: 'Scan coverage details unavailable', details: [
+    'Coverage counts were not returned in a valid format. Do not assume all resources loaded or all findings were returned.',
+    'Single-page automated checks only. Zero violations does not establish accessibility conformance.',
+  ] };
+  const missingResources = coverage.blockedRequests > 0 || coverage.failedRequests > 0;
+  const omittedResults = coverage.omittedRules > 0 || coverage.omittedNodes > 0;
+  return { title: missingResources || omittedResults ? 'Scan coverage is limited' : 'Scan coverage', details: [
+    missingResources
+      ? `${coverage.blockedRequests} requests blocked by policy; ${coverage.failedRequests} requests failed. These counts may overlap. Missing resources can change findings.`
+      : 'No blocked or failed requests were reported. Other scan limitations still apply.',
+    ...(omittedResults ? [`Result limits omitted ${coverage.omittedRules} rules and ${coverage.omittedNodes} affected elements. The returned results are partial.`] : []),
+    'Single-page automated checks only. Zero violations does not establish accessibility conformance.',
+  ] };
 }

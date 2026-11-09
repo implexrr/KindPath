@@ -1,3 +1,4 @@
+import { readScanCoverage } from '../../shared/scanCoverage';
 import { fixtureTitle, isFixture } from '../../shared/fixtures';
 import type { Finding, Report } from '../../shared/types';
 
@@ -23,6 +24,7 @@ function copyFinding(finding: Finding): Finding {
 }
 export function createReportExport(report: Report) {
   const source = reportSource(report);
+  const coverage = report.mode === 'public' ? readScanCoverage(report.coverage) : undefined;
   const limitations = [...new Set([
     source.description,
     'Automated checks do not establish accessibility conformance. Keyboard, screen reader, and usability review remain essential.',
@@ -31,6 +33,7 @@ export function createReportExport(report: Report) {
   ])];
   const exported: Report = {
     mode: report.mode, url: report.url, generatedAt: report.generatedAt,
+    ...(coverage ? { coverage } : {}),
     ...(report.mode === 'public' && report.requestedUrl ? { requestedUrl: report.requestedUrl } : {}),
     manualChecks: [...report.manualChecks], findings: report.findings.map(copyFinding), limitations,
     ...(report.scanner ? { scanner: {
