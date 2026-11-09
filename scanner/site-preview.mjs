@@ -55,11 +55,26 @@ export async function captureSiteSnapshot(page) {
       }
       return result;
     }
+    function blockInFlow(node) {
+      if (!(node instanceof HTMLElement)) return false;
+      const computed = getComputedStyle(node);
+      return ['block','flow-root','list-item','flex','grid','table'].includes(computed.display)
+        && !['absolute','fixed'].includes(computed.position) && computed.getPropertyValue('float') === 'none';
+    }
+    function formattingSpace(node, text) {
+      // Discard only short, collapsible ASCII spacing beside normal-flow blocks.
+      // Inline word separators and preformatted/out-of-flow spacing must survive.
+      if (text.length > 4000 || !/^[ \t\r\n]+$/.test(text) || !node.parentElement
+        || !['normal','nowrap'].includes(getComputedStyle(node.parentElement).whiteSpace)) return false;
+      const before = node.previousSibling, after = node.nextSibling;
+      return !!(before || after) && (!before || blockInFlow(before)) && (!after || blockInFlow(after));
+    }
     function capture(node, depth) {
       visited++;
       if (depth > 15) { omittedSubtrees++; return null; }
       if (node.nodeType === Node.TEXT_NODE) {
         const text = node.textContent ?? '';
+        if (formattingSpace(node, text)) return null;
         const value = text.slice(0,Math.min(textLeft,4000));
         omittedText += text.length-value.length; textLeft -= value.length;
         if (!value) return null;

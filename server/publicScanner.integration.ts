@@ -69,6 +69,7 @@ test('forbidden redirects, untrusted TLS and a page changing during analysis nev
 
 for (const scenario of [
   {path:'/redirect',final:'/barriers'}, {path:'/content',final:'/content'},
+  {path:'/indented-content',final:'/indented-content'}, {path:'/indented-budget',final:'/indented-budget'},
   {path:'/forms',final:'/forms'}, {path:'/missing',final:'/missing'},
   {path:'/same-url-history',final:'/same-url-history'}, {path:'/same-url-reload',final:'/same-url-reload'},
 ]) {
@@ -146,6 +147,21 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
       assert.match(report.sitePreview.html,/Static garden supplies advertisement/);
       assert.ok(!report.sitePreview.html.includes('controlled-name-value'));
       assert.ok(!report.sitePreview.html.includes('hidden-style-marker'));
+    }
+    if(scenario.path==='/indented-content'||scenario.path==='/indented-budget') {
+      const html=report.sitePreview.html;
+      assert.match(html,/Inline-left<\/span> <span\b[^>]*>Inline-right/);
+      assert.match(html,/Box-left<\/span> <span\b[^>]*>Box-right/);
+      assert.match(html,/Pre-left<\/p>\n<p\b[^>]*>Pre-right/);
+      assert.match(html,/Nonbreaking-left<\/p>\u00a0<p\b[^>]*>Nonbreaking-right/);
+      assert.match(html,/Floating-left<\/span> <span\b[^>]*>Floating-right/);
+      assert.doesNotMatch(html,/controlled-retention-value|controlled-hidden-retention-marker/);
+      assert.match(html,/input[^>]* disabled/);
+      if(scenario.path==='/indented-content')assert.match(html,/Retained end-of-page marker/);
+      else {
+        assert.doesNotMatch(html,/Retained end-of-page marker/);
+        assert.ok(report.sitePreview.limitations.some((text:string)=>/At least [1-9]\d* subtrees/.test(text)));
+      }
     }
     assert.ok(report.sitePreview.limitations.length>0);
     }
