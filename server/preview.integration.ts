@@ -64,7 +64,7 @@ test('reports, exports and isolated previews work in Chromium, Firefox and WebKi
       for (const kind of browser === 'chromium' ? ['fixture', 'demo'] : []) {
         await writeFile(join(tmpdir(), `kindpath-report-export-${kind}.pdf`), Buffer.from(result[`${kind}Pdf`], 'base64'));
       }
-      for (const size of ['desktop', 'mobile', 'findingsDesktop', 'findingsMobile', 'matchingDesktop', 'matchingMobile']) {
+      for (const size of ['desktop', 'mobile', 'findingsDesktop', 'findingsMobile', 'matchingDesktop', 'matchingMobile', 'coverageDesktop', 'coverageMobile']) {
         await writeFile(join(tmpdir(), `kindpath-${browser}-static-preview-${size}.png`), Buffer.from(result[size], 'base64'));
       }
     } finally {

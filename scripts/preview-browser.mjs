@@ -16,10 +16,11 @@ try {
   let apiRequests = 0;
   let publicCapabilities = false, publicCalls = 0, captureCapabilities = false;
   const publicReport = { ...data.report, mode: 'public', requestedUrl: 'https://example.com/start', url: 'https://example.org/final',
+    coverage: {blockedRequests:2,failedRequests:3,omittedRules:1,omittedNodes:4},
     scanner: { ...data.report.scanner, fixture: 'public' }, limitations: ['Controlled URL-report UI response; no public site fetched.'] };
   let publicResponse = publicReport, publicStatus = 200;
   let delayPublic = false, releasePublic, publicHeld = false, notifyPublic;
-  async function assertDownload(expected) {
+  async function assertDownload(expected, coverage = expected.mode === 'public' ? expected.coverage : undefined) {
     const requestsBefore = apiRequests;
     const pending = page.waitForEvent('download');
     const link = page.getByRole('link', { name: 'Download report JSON', exact: true });
@@ -34,6 +35,7 @@ try {
     assert.equal(exported.report.url, expected.url);
     assert.equal(exported.report.requestedUrl, expected.requestedUrl);
     assert.equal(exported.report.generatedAt, expected.generatedAt);
+    assert.deepEqual(exported.report.coverage,coverage ?? undefined);
     assert.deepEqual(exported.report.findings, expected.findings);
     assert.deepEqual(exported.report.scanner, expected.scanner);
     assert.deepEqual(exported.report.manualChecks, expected.manualChecks);
@@ -47,9 +49,16 @@ try {
     return await link.getAttribute('href');
   }
   async function printablePdf(expected) {
+    const screenCoverage=expected.mode==='public'?await page.locator('.results .scan-coverage').textContent():undefined;
     await page.emulateMedia({ media: 'print' });
     const printed = page.locator('.print-report');
     assert.equal(await printed.isVisible(), true);
+    assert.equal(await printed.getByRole('region',{name:'Scan coverage',exact:true}).count(),expected.mode==='public'?1:0);
+    if(expected.mode==='public'){
+      assert.equal(await printed.locator('.scan-coverage').isVisible(),true);
+      assert.equal(await printed.locator('.scan-coverage').textContent(),screenCoverage);
+      assert.ok((await printed.textContent()).includes('Zero violations does not establish accessibility conformance.'));
+    }
     assert.equal(await page.locator('main').isVisible(), false);
     assert.equal(await printed.locator('.printed-finding').count(), expected.findings.length + (expected.scanner?.incomplete.length ?? 0));
     assert.equal(await printed.locator('iframe, img, script, details').count(), 0);
@@ -405,8 +414,39 @@ try {
   await page.locator('.results').getByText('Requested URL: ' + publicReport.requestedUrl, { exact: true }).waitFor();
   await page.waitForFunction(() => document.activeElement?.matches('.results'));
   assert.equal(await page.getByText('Automated page scan', { exact: true }).count(), 1);
+  const coverageNotice=page.locator('.results').getByRole('region',{name:'Scan coverage',exact:true});
+  await coverageNotice.getByText('Scan coverage is limited',{exact:true}).waitFor();
+  assert.match(await coverageNotice.textContent(),/2 requests blocked.*3 requests failed.*overlap/);
+  assert.match(await coverageNotice.textContent(),/1 rules and 4 affected elements.*partial/);
+  await page.setViewportSize({width:1280,height:900});
+  const coverageDesktop=(await page.screenshot({fullPage:true})).toString('base64');
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await coverageNotice.isVisible(),true);
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Coverage notice must fit the mobile viewport');
+  const coverageMobile=(await page.screenshot({fullPage:true})).toString('base64');
+  await page.setViewportSize({width:1280,height:900});
   await assertDownload(publicReport);
   await printablePdf(publicReport);
+  // Controlled responses exercise zero findings, unavailable data and stale coverage without external requests.
+  for(const coverage of [{blockedRequests:0,failedRequests:0,omittedRules:0,omittedNodes:0},undefined,
+    {...publicReport.coverage,failedRequests:-1},{blockedRequests:0,failedRequests:0,omittedRules:0,omittedNodes:2}]) {
+    publicResponse={...publicReport,findings:[],coverage};
+    await publicButton.click();
+    await page.waitForFunction(()=>document.querySelector('form').getAttribute('aria-busy')==='false');
+    await coverageNotice.waitFor();
+    const text=await coverageNotice.textContent();
+    assert.ok(text.includes('Zero violations does not establish accessibility conformance.'));
+    if(!coverage||coverage.failedRequests<0)assert.ok(text.includes('Scan coverage details unavailable'));
+    else if(coverage.omittedNodes)assert.ok(text.includes('returned results are partial'));
+    else {
+      assert.ok(text.includes('Other scan limitations still apply'));
+      assert.ok(!text.includes('Scan coverage is limited'));
+    }
+    assert.ok(!text.includes('2 requests blocked'),'Earlier request counts must not remain');
+    await assertDownload(publicResponse,(!coverage||coverage.failedRequests<0)?null:coverage);
+    await printablePdf(publicResponse);
+  }
+  publicResponse=publicReport;
   await page.getByRole('button', { name: /Visual preview/ }).click();
   assert.equal(await page.locator('iframe').count(), 0);
   await page.getByText('This built-in illustration is separate from the website report. Public websites are not captured.', { exact: true }).waitFor();
@@ -415,6 +455,7 @@ try {
   await page.getByRole('button', { name: 'Just exploring? Try an example', exact: true }).click();
   await page.getByRole('region', { name: 'Example issues to explore', exact: true }).waitFor();
   assert.equal(publicCalls, scansBeforeExample);
+  assert.equal(await page.locator('.results .scan-coverage').count(),0,'Demo reports do not inherit public coverage');
   await page.getByLabel('Your website URL').fill(publicReport.requestedUrl);
   for (const wrong of [{ ...publicReport, requestedUrl: 'https://example.com/old' },
     { ...publicReport, url: 'http://127.0.0.1/' },
@@ -523,5 +564,5 @@ try {
   await page.getByLabel('Your website URL').fill('https://example.com/new-request');
   assert.equal(await page.locator('.results').count(),0);
   assert.deepEqual(unexpected, []);
-  process.stdout.write(JSON.stringify({ passed: true, engine, version: browser.version(), desktop, mobile, findingsDesktop, findingsMobile, matchingDesktop, matchingMobile, fixturePdf, demoPdf }));
+  process.stdout.write(JSON.stringify({ passed: true, engine, version: browser.version(), desktop, mobile, findingsDesktop, findingsMobile, matchingDesktop, matchingMobile, coverageDesktop, coverageMobile, fixturePdf, demoPdf }));
 } finally { await browser.close(); }
