@@ -19,6 +19,7 @@ try {
     coverage: {blockedRequests:2,failedRequests:3,omittedRules:1,omittedNodes:4},
     scanner: { ...data.report.scanner, fixture: 'public' }, limitations: ['Controlled URL-report UI response; no public site fetched.'] };
   let publicResponse = publicReport, publicStatus = 200;
+  let demoFailure = false; const demoRequests = [];
   let delayPublic = false, releasePublic, publicHeld = false, notifyPublic;
   async function assertDownload(expected, coverage = expected.mode === 'public' ? expected.coverage : undefined) {
     const requestsBefore = apiRequests;
@@ -96,7 +97,10 @@ try {
     if (url.pathname.startsWith('/api/')) apiRequests++;
     if (url.hostname !== 'kindpath-ui.invalid') { unexpected.push(url.hostname); await route.abort(); return; }
     if (url.pathname === '/api/scanning-capabilities') { await route.fulfill({ json: { publicScanningEnabled: publicCapabilities, publicCaptureEnabled: captureCapabilities, urlPolicy: 'public-http-https' } }); return; }
-    if (url.pathname === '/api/analyze') { await route.fulfill({ json: data.demoReport }); return; }
+    if (url.pathname === '/api/analyze') {
+      demoRequests.push(route.request().postDataJSON());
+      await route.fulfill(demoFailure?{status:503,json:{error:'Controlled failure'}}:{json:data.demoReport});return;
+    }
     if (url.pathname === '/api/scan-public') {
       publicCalls++;
       assert.deepEqual(route.request().postDataJSON(), { url: publicReport.requestedUrl });
@@ -130,6 +134,31 @@ try {
     await route.fulfill(asset ? { body: asset.body, contentType: asset.type } : { status: 404, body: '' });
   });
   await page.goto('http://kindpath-ui.invalid/');
+  const websiteEntry=page.getByLabel('Your website URL');
+  assert.equal(await websiteEntry.getAttribute('type'),'text');
+  assert.equal(await websiteEntry.getAttribute('inputmode'),'url');
+  assert.match(await websiteEntry.getAttribute('aria-describedby'),/website-entry-note/);
+  await page.getByText('Enter a website address. HTTPS is added if you leave it out.',{exact:true}).waitFor();
+  demoFailure=true;
+  await websiteEntry.fill('  Example.com  ');await websiteEntry.press('Enter');
+  await page.getByRole('alert').waitFor();
+  assert.equal(await websiteEntry.inputValue(),'https://example.com/');
+  assert.deepEqual(demoRequests.at(-1),{url:'https://example.com/'});
+  demoFailure=false;
+  const demoRetry=page.getByRole('button',{name:'Try again',exact:true});
+  assert.equal(await demoRetry.evaluate(node=>node===document.activeElement),true);
+  await demoRetry.click();
+  await page.getByRole('region',{name:'Example issues to explore',exact:true}).waitFor();
+  assert.deepEqual(demoRequests.slice(-2),[{url:'https://example.com/'},{url:'https://example.com/'}]);
+  assert.equal(publicCalls,0,'Disabled mode must not submit a public scan');
+  for(const entry of ['javascript:alert(1)','https:/example.com','user@example.com','https://user:pass@example.com']) {
+    const before=apiRequests;await websiteEntry.fill(entry);await websiteEntry.press('Enter');
+    await page.getByRole('alert').waitFor();assert.equal(apiRequests,before);
+    assert.equal(await page.locator('.results').count(),0);
+  }
+  await websiteEntry.fill('');
+  await page.getByRole('button',{name:'Explore accessibility',exact:true}).click();
+  assert.equal(await websiteEntry.evaluate(node=>node.validity.valueMissing),true);
   await page.getByRole('button', { name: 'Scan built-in page' }).click();
   // First exercise the actual bounded report returned by the fixture scanner.
   const violations = page.getByRole('region', { name: 'Confirmed automated violations', exact: true });
@@ -408,9 +437,15 @@ try {
   await page.reload();
   const publicButton = page.getByRole('button', { name: 'Scan website', exact: true });
   await publicButton.waitFor();
-  await page.getByLabel('Your website URL').fill(publicReport.requestedUrl);
+  for(const entry of ['127.0.0.1','printer.local','example.com:8443','https://example.com/#section']) {
+    const before=apiRequests;await websiteEntry.fill(entry);await publicButton.click();
+    await page.getByRole('alert').waitFor();assert.equal(apiRequests,before);
+    assert.equal(await page.locator('.results').count(),0);
+  }
+  await websiteEntry.fill('  example.com/start  ');
   await publicButton.click();
   await page.locator('.results').getByText('Scanned page: ' + publicReport.url, { exact: true }).waitFor();
+  assert.equal(await websiteEntry.inputValue(),publicReport.requestedUrl);
   await page.locator('.results').getByText('Requested URL: ' + publicReport.requestedUrl, { exact: true }).waitFor();
   await page.waitForFunction(() => document.activeElement?.matches('.results'));
   assert.equal(await page.getByText('Automated page scan', { exact: true }).count(), 1);
