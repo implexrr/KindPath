@@ -1,6 +1,6 @@
 # Scan failure diagnostics
 
-Public scanning and capture remain disabled. Failure responses can now include a small optional `diagnostic` object alongside the existing error and code. The normal interface keeps its existing error message; no diagnostic dashboard or external logging service is added.
+Public scanning and capture remain disabled. Public URL scan failure responses can now include a small optional `diagnostic` object alongside the existing error and code. The normal interface keeps its existing error message; no diagnostic dashboard or external logging service is added.
 
 ```json
 {"code":"SCAN_FAILED","diagnostic":{"stage":"page-loading","code":"HTTP_STATUS","httpStatus":404}}
@@ -8,7 +8,7 @@ Public scanning and capture remain disabled. Failure responses can now include a
 
 Stages identify DNS, network setup, worker setup/execution, page loading, accessibility analysis, capture, result validation or cleanup. Codes come from an explicit allowlist. `FAILED` means no more specific allowed classification is established; it must not be interpreted as a root-cause diagnosis. HTTP status is an integer from 100 through 599, accepted only for a page-loading `HTTP_STATUS` diagnostic. A fallback `worker-execution / FAILED` identifies an unclassified runner failure; it does not prove that a browser reached page loading.
 
-The worker emits one bounded structured marker on stderr. The controller accepts exactly one valid marker, reconstructs only known fields, and otherwise falls back to a known stage/code. Raw error messages, stack traces, page content, headers, URLs, credentials, paths and arbitrary codes are not included in diagnostics. The HTTP layer validates the object again. No raw diagnostic log is persisted by the app. Worker-reported metadata is not an authorization decision or proof of resource absence.
+The worker emits one bounded structured marker on stderr. The controller accepts exactly one valid marker, reconstructs only known fields, and otherwise falls back to a known stage/code. Raw error messages, stack traces, page content, headers, URLs, credentials, paths and arbitrary codes are not included in diagnostics. The HTTP layer validates the object again. Network codes are recognized only at the expected leading browser-error prefix; strings embedded in URLs, command errors or appended logs are not used to infer network failures. No raw diagnostic log is persisted by the app. Worker-reported metadata is not an authorization decision or proof of resource absence.
 
 Cleanup remains authoritative: unconfirmed owned-resource cleanup overrides results and worker diagnostics with `SCANNER_CLEANUP_FAILED` and `cleanup / UNCONFIRMED`. The default disabled route still rejects requests before DNS or Docker. No limit, certificate, private-address, sandbox or network-isolation rule was relaxed.
 
@@ -33,4 +33,4 @@ This is a verified compatibility fix, not proof that either live site used that 
 
 Controlled checks cover redaction, malformed/inherited/extra values, cancellation versus timeout, propagation across cleanup/API mapping, cleanup-failure precedence, a real synthetic HTTP 404, same-document history and real reload rejection. Raw reports, temporary activation/harness code and private paths remain outside committed files. No dependencies, paid features, service, storage system, crawl, ongoing activation or publication were added.
 
-Final local checks passed: 148 controlled tests (97 unit/API, 7 scanner, 25 gateway unit, 15 gateway integration, 3 firewall and 1 three-engine UI suite), TypeScript/Vite build, all three image builds and both npm audits. Final image scans used the existing cached database; scanner/firewall had zero critical/high matches, while QA retained its documented seven high matches. One controlled 404 case initially failed at network setup rather than reaching the page; its isolated check and complete gateway rerun passed, without a cause being assigned or limits changed.
+Final local checks passed: 149 controlled tests (98 unit/API, 7 scanner, 25 gateway unit, 15 gateway integration, 3 firewall and 1 three-engine UI suite), TypeScript/Vite build, all three image builds and both npm audits. Final image scans used the existing cached database; scanner/firewall had zero critical/high matches, while QA retained its documented seven high matches. One controlled 404 case initially failed at network setup rather than reaching the page; its isolated check and complete gateway rerun passed, without a cause being assigned or limits changed.
