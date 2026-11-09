@@ -13,6 +13,7 @@ const target = process.argv[2];
 const deadline = setTimeout(() => process.exit(2), 40_000);
 let browser;
 let relay;
+let rejectedNavigation = false;
 try {
   if (process.getuid() === 0 || Object.values(networkInterfaces()).flat().some(a => a && !a.internal)) throw new Error('Isolation missing');
   // Wait briefly for the separate gateway to create its private socket.
@@ -56,12 +57,18 @@ try {
         validateTarget(route.request().url(), allowed);
         if (++requests > 100 || !['GET', 'HEAD'].includes(route.request().method())) throw new Error('Blocked request');
         return route.continue();
-      } catch { blockedRequests++; return route.abort(); }
+      } catch { blockedRequests++; if (route.request().isNavigationRequest()) rejectedNavigation = true; return route.abort(); }
     });
     await context.routeWebSocket('**/*', socket => socket.close());
     const page = await context.newPage();
     page.on('popup', popup => popup.close());
+    page.on('request', request => {
+      if (request.isNavigationRequest()) {
+        try { validateTarget(request.url(), allowed); } catch { rejectedNavigation = true; }
+      }
+    });
     page.on('requestfailed', () => { failedRequests++; });
+    page.on('response', response => { if (response.status() >= 400) failedRequests++; });
     const response = await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 15_000 });
     if (!response || !response.ok()) throw new Error('Navigation failed');
     validateTarget(page.url(), allowed);
@@ -74,5 +81,9 @@ try {
       engine: result.testEngine.version, violations: violations.rules, incomplete: incomplete.rules,
       passes: result.passes.length, inapplicable: result.inapplicable.length }));
   }
-} catch { process.stderr.write('Isolated gateway scan failed.\n'); process.exitCode = 1; }
+} catch (error) {
+  const code = error instanceof Error && error.message.includes('ERR_CERT_AUTHORITY_INVALID') ? 'TLS_CERTIFICATE_REJECTED'
+    : rejectedNavigation ? 'DESTINATION_REJECTED' : 'SCAN_FAILED';
+  process.stderr.write(`Isolated gateway scan failed: ${code}.\n`); process.exitCode = 1;
+}
 finally { if (browser) await browser.close(); if (relay) relay.close(); clearTimeout(deadline); }

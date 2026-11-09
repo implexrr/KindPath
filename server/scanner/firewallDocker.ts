@@ -2,11 +2,15 @@ import { randomUUID } from 'node:crypto';
 import type { Command } from './dockerWorker.js';
 import type { Resources } from './resources.js';
 import { IMAGE } from './containerPolicy.js';
+import { validateDestinationPlan } from './destinationSnapshot.js';
+import type { DestinationPlan } from './destinationSnapshot.js';
 import { PUBLIC_LABEL } from './publicPolicy.js';
 
 export const FIREWALL_IMAGE = 'kindpath-firewall:local';
 export const FIXTURE_IP = '198.18.0.2';
-export type Namespace = { id: string; network: string; addresses: string[]; hash?: string };
+export const PINNED_FIXTURE_IP = '93.184.216.34';
+const PINNED_FIXTURE_SUBNET = '93.184.216.32/29';
+export type Namespace = { id: string; network: string; addresses: string[]; hash?: string; egress?: string };
 export const memoryTmpfs = '/tmp:rw,nosuid,nodev,noexec,size=16777216';
 
 export function firewallArguments(name: string, network: string, role: 'holder' | 'admin' | 'probe' | 'origin', args: string[]) {
@@ -17,11 +21,11 @@ export function firewallArguments(name: string, network: string, role: 'holder' 
     '--security-opt=no-new-privileges:true', '--ipc=private', '--memory=128m', '--cpus=0.5', '--pids-limit=64',
     `--tmpfs=${memoryTmpfs}`, '--init', '--entrypoint=node', role === 'origin' ? IMAGE : FIREWALL_IMAGE, ...args];
 }
-export function assertFirewallContainer(value: unknown, network: string, admin: boolean) {
+export function assertFirewallContainer(value: unknown, network: string, admin: boolean, running = false) {
   const fail = () => { throw new Error('Firewall container isolation mismatch'); };
   if (!Array.isArray(value) || value.length !== 1 || (admin && !/^container:[a-f0-9]{64}$/.test(network))) return fail();
   const c = value[0]; const h = c?.HostConfig;
-  if (!h || c.State?.Running !== false || c.Config?.User !== (admin ? '0:0' : '1000:1000')
+  if (!h || c.State?.Running !== running || c.Config?.User !== (admin ? '0:0' : '1000:1000')
     || h.NetworkMode !== network || h.Privileged !== false || h.ReadonlyRootfs !== true || h.AutoRemove !== true
     || !h.CapDrop?.includes('ALL') || JSON.stringify((h.CapAdd ?? []).map((cap: string) => cap.replace(/^CAP_/, ''))) !== JSON.stringify(admin ? ['NET_ADMIN'] : [])
     || !h.SecurityOpt?.some((s: string) => ['no-new-privileges', 'no-new-privileges:true'].includes(s))
@@ -43,20 +47,21 @@ export async function createFirewallContainer(command: Command, resources: Resou
   if (typeof inspect[0].Id !== 'string' || !/^[a-f0-9]{64}$/.test(inspect[0].Id)) throw new Error('Missing namespace identity');
   return { name, id: inspect[0].Id as string };
 }
-export async function prepareNamespace(command: Command, resources: Resources, signal: AbortSignal, fixture = false): Promise<Namespace> {
+export async function prepareNamespace(command: Command, resources: Resources, signal: AbortSignal, fixture: boolean | 'pinned' = false): Promise<Namespace> {
+  const subnet = fixture === 'pinned' ? PINNED_FIXTURE_SUBNET : fixture ? '198.18.0.0/24' : undefined;
   const network = `kindpath-firewall-${randomUUID()}`;
   resources.networks.push(network);
   await command(['network', 'create', '--driver=bridge', '--internal', '--ipv6=false',
     '--opt=com.docker.network.bridge.gateway_mode_ipv4=isolated', '--label', PUBLIC_LABEL,
-    ...(fixture ? ['--subnet=198.18.0.0/24'] : []), network], signal);
+    ...(subnet ? [`--subnet=${subnet}`] : []), network], signal);
   const info = JSON.parse(await command(['network', 'inspect', network], signal));
   const n = info?.[0];
   if (info.length !== 1 || n.Name !== network || n.Driver !== 'bridge' || n.Internal !== true || n.EnableIPv6 !== false
     || n.Options?.['com.docker.network.bridge.gateway_mode_ipv4'] !== 'isolated'
-    || (fixture && n.IPAM?.Config?.[0]?.Subnet !== '198.18.0.0/24')) throw new Error('Unsafe firewall network');
-  const holder = await createFirewallContainer(command, resources, network, 'holder', ['firewall/control.mjs', fixture ? 'hold-fixture' : 'hold'], signal, fixture ? '198.18.0.3' : undefined);
+    || (subnet && n.IPAM?.Config?.[0]?.Subnet !== subnet)) throw new Error('Unsafe firewall network');
+  const holder = await createFirewallContainer(command, resources, network, 'holder', ['firewall/control.mjs', fixture ? 'hold-fixture' : 'hold'], signal, fixture === 'pinned' ? '93.184.216.35' : fixture ? '198.18.0.3' : undefined);
   await command(['start', holder.name], signal);
-  return { id: holder.id, network, addresses: fixture ? [FIXTURE_IP] : [] };
+  return { id: holder.id, network, addresses: fixture === true ? [FIXTURE_IP] : [] };
 }
 export async function firewallControl(command: Command, resources: Resources, ns: Namespace, task: 'setup' | 'verify', signal: AbortSignal) {
   const helper = await createFirewallContainer(command, resources, `container:${ns.id}`, 'admin',
@@ -66,4 +71,40 @@ export async function firewallControl(command: Command, resources: Resources, ns
     || (task === 'verify' && proof.policyHash !== ns.hash)) throw new Error('Invalid firewall verification');
   ns.hash = proof.policyHash;
   return proof as { policyHash: string; droppedPackets: number };
+}
+
+
+async function assertNamespaceNetworks(command: Command, ns: Namespace, networks: string[], signal: AbortSignal) {
+  const info = JSON.parse(await command(['inspect', ns.id], signal));
+  assertFirewallContainer(info, ns.network, false, true);
+  const c = info[0];
+  if (c.Id !== ns.id || c.Config.Labels?.['kindpath.scanner'] !== 'public'
+    || JSON.stringify(Object.keys(c.NetworkSettings?.Networks ?? {}).sort()) !== JSON.stringify([...networks].sort())) throw new Error('Unexpected namespace attachments');
+  if (networks.length === 2 && c.NetworkSettings.Networks[networks[1]]?.GwPriority !== 1) throw new Error('Unexpected egress gateway priority');
+}
+
+// Networking is attached only to an owned namespace with an already verified, nonempty public-IP policy.
+export async function attachEgressNetwork(command: Command, resources: Resources, ns: Namespace, value: DestinationPlan, signal: AbortSignal) {
+  const plan = validateDestinationPlan(value);
+  if (!/^[a-f0-9]{64}$/.test(ns.id) || !/^[a-f0-9]{64}$/.test(ns.hash ?? '') || ns.egress
+    || !resources.networks.includes(ns.network) || JSON.stringify(ns.addresses) !== JSON.stringify(plan.addresses)) throw new Error('Unprepared egress namespace');
+  signal.throwIfAborted();
+  await assertNamespaceNetworks(command, ns, [ns.network], signal);
+  await firewallControl(command, resources, ns, 'verify', signal);
+  const network = `kindpath-egress-${randomUUID()}`;
+  resources.networks.push(network); // Partial network creation/attachment must still be cleaned up.
+  await command(['network', 'create', '--driver=bridge', '--ipv6=false', '--label', PUBLIC_LABEL,
+    '--opt=com.docker.network.bridge.gateway_mode_ipv4=nat',
+    '--opt=com.docker.network.bridge.enable_ip_masquerade=true', network], signal);
+  const info = JSON.parse(await command(['network', 'inspect', network], signal));
+  const n = info?.[0];
+  if (!Array.isArray(info) || info.length !== 1 || n.Name !== network || n.Driver !== 'bridge' || n.Internal !== false
+    || n.EnableIPv6 !== false || n.Ingress === true || n.Labels?.['kindpath.scanner'] !== 'public'
+    || n.Options?.['com.docker.network.bridge.gateway_mode_ipv4'] !== 'nat'
+    || n.Options?.['com.docker.network.bridge.enable_ip_masquerade'] !== 'true') throw new Error('Unsafe egress network');
+  await command(['network', 'connect', '--gw-priority=1', network, ns.id], signal);
+  await assertNamespaceNetworks(command, ns, [ns.network, network], signal);
+  await firewallControl(command, resources, ns, 'verify', signal);
+  ns.egress = network;
+  return network;
 }

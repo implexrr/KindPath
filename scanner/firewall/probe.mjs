@@ -7,8 +7,9 @@ import { isPermissionDenied } from './policy.mjs';
 
 const after = process.argv[2] === 'after';
 const deadline = setTimeout(() => process.exit(2), 15_000);
-const allowed = '198.18.0.2';
-const blocked = '198.18.0.4';
+const pinned = process.argv[3] === 'pinned';
+const allowed = pinned ? '93.184.216.34' : '198.18.0.2';
+const blocked = pinned ? '93.184.216.36' : '198.18.0.4';
 async function tcp(host, port) {
   return new Promise(done => {
     const socket = net.connect({ host, port }); let settled = false;
@@ -29,8 +30,14 @@ async function udp() {
 try {
   assert.equal(process.getuid(), 1000);
   for (let i = 0; !(await tcp(allowed, 80)); i++) {
-    if (i >= 20) throw new Error('Fixture did not start');
+    if (i >= 40) throw new Error('Fixture did not start');
     await new Promise(done => setTimeout(done, 100));
+  }
+  if (!after) {
+    for (let i = 0; !(await tcp(blocked, 80)); i++) {
+      if (i >= 40) throw new Error('Second fixture did not start');
+      await new Promise(done => setTimeout(done, 100));
+    }
   }
   assert.equal(await tcp(allowed, 443), true);
   const denied = await Promise.all([tcp(allowed, 81), tcp(blocked, 80), tcp('127.0.0.1', 8888), tcp('::1', 8888), udp()]);
