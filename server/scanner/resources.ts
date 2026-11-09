@@ -1,10 +1,11 @@
+import { classifyFailure } from '../../scanner/gateway/diagnostics.mjs';
 import { reserveScanner } from './admission.js';
 import { openLocalDockerSession, removeAndConfirm, ScannerError } from './dockerWorker.js';
 import type { Command, DockerSession } from './dockerWorker.js';
 import { PUBLIC_LABEL } from './publicPolicy.js';
 
 export type Resources = { containers: string[]; volumes: string[]; networks: string[] };
-const failure = () => new ScannerError('SCANNER_CLEANUP_FAILED', 'Scanner resource cleanup could not be verified. No new worker will start until Docker confirms cleanup.');
+const failure = () => new ScannerError('SCANNER_CLEANUP_FAILED', 'Scanner resource cleanup could not be verified. No new worker will start until Docker confirms cleanup.', {stage:'cleanup',code:'UNCONFIRMED'});
 export async function cleanResources(command: Command, resources: Resources) {
   let failed = false;
   for (const name of [...resources.containers].reverse()) {
@@ -27,7 +28,7 @@ export async function cleanResources(command: Command, resources: Resources) {
   if (failed) throw failure();
 }
 export function createResourceRunner(
-  operation: (command: Command, resources: Resources, task: string, signal: AbortSignal) => Promise<unknown>,
+  operation: (command: Command, resources: Resources, task: string, signal: AbortSignal, session: DockerSession) => Promise<unknown>,
   openSession: () => Promise<DockerSession> = openLocalDockerSession,
 ) {
   let pending: Resources | undefined;
@@ -37,6 +38,7 @@ export function createResourceRunner(
     const deadline = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(60_000)]);
     let session: DockerSession | undefined;
     let owned: Resources | undefined;
+    let stage: 'network-setup'|'worker-execution' = 'network-setup';
     try {
       session = await openSession();
       if (pending) { await cleanResources(session.command, pending); pending = undefined; }
@@ -48,10 +50,11 @@ export function createResourceRunner(
       ]) if ((await session.command(args, deadline)).trim()) throw failure();
       owned = { containers: [], volumes: [], networks: [] };
       pending = owned;
-      return await operation(session.command, owned, task, deadline);
+      stage='worker-execution';
+      return await operation(session.command, owned, task, deadline, session);
     } catch (error) {
       if (error instanceof ScannerError) throw error;
-      throw new ScannerError('SCAN_FAILED', 'The isolated firewall operation failed. No report was produced.');
+      throw new ScannerError('SCAN_FAILED', 'The isolated firewall operation failed. No report was produced.', classifyFailure(error,stage,deadline));
     } finally {
       try { if (owned && session) { await cleanResources(session.command, owned); pending = undefined; } }
       finally { try { await session?.dispose(); } finally { release(); } }

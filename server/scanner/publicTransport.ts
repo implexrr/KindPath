@@ -1,16 +1,21 @@
+import { atScanStage } from './diagnostics.js';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { IMAGE } from './containerPolicy.js';
 import type { Command } from './dockerWorker.js';
 import type { Resources } from './resources.js';
-import { ALLOWED_PUBLIC_HOSTS, PUBLIC_LABEL, assertPublicIsolation } from './publicPolicy.js';
+import { createDestinationApprover } from './destinationApproval.js';
+import type { PlanTarget } from './destinationApproval.js';
+import type { Exchange } from './dockerExchange.js';
+import { createGatewayApprovalHandler } from './gatewayApproval.js';
+import { PUBLIC_LABEL, assertPublicIsolation } from './publicPolicy.js';
 import { validateDestinationPlan } from './destinationSnapshot.js';
 import type { DestinationPlan } from './destinationSnapshot.js';
 import { attachEgressNetwork, firewallControl } from './firewallDocker.js';
 import type { Namespace } from './firewallDocker.js';
 
 const profile = fileURLToPath(new URL('../../scanner/seccomp.json', import.meta.url));
-function args(name: string, volume: string, role: 'browser' | 'gateway', namespace: string, plan?: DestinationPlan, capture = false) {
+function args(name: string, volume: string, role: 'browser' | 'gateway', namespace: string, plan?: DestinationPlan, capture = false, dynamic = false) {
   const browser = role === 'browser';
   return ['create', '--pull=never', '--rm', '--name', name, '--label', PUBLIC_LABEL,
     `--network=${browser ? 'none' : `container:${namespace}`}`, '--read-only', '--user=1000:1000', '--cap-drop=ALL',
@@ -18,7 +23,7 @@ function args(name: string, volume: string, role: 'browser' | 'gateway', namespa
     `--memory=${browser ? '512m' : '128m'}`, `--cpus=${browser ? '1' : '0.5'}`, `--pids-limit=${browser ? '256' : '64'}`,
     '--ipc=private', '--shm-size=128m', '--tmpfs=/tmp:rw,nosuid,nodev,noexec,size=134217728', '--init',
     `--mount=type=volume,src=${volume},dst=/run/kindpath,volume-nocopy${browser ? ',readonly' : ''}`,
-    '--env=HOME=/tmp/kindpath-home', `--env=KINDPATH_ALLOWED_HOSTS=${JSON.stringify(ALLOWED_PUBLIC_HOSTS)}`,
+    '--env=HOME=/tmp/kindpath-home', `--env=KINDPATH_ALLOWED_HOSTS=${JSON.stringify(dynamic ? null : plan ? Object.keys(plan.destinations) : ['example.com'])}`,
     `--env=KINDPATH_PINNED_DESTINATIONS=${JSON.stringify(plan?.destinations ?? {})}`,
     '--entrypoint=node', IMAGE, ...(browser ? ['public-worker.mjs', plan?.target ?? 'verify-public-isolation', ...(capture ? ['--capture'] : [])] : ['gateway/server.mjs'])];
 }
@@ -32,7 +37,7 @@ export async function preparePublicEgress(command: Command, resources: Resources
 }
 
 // Callers own all resources and must verify cleanup before returning this untrusted output.
-export async function scanInNamespace(command: Command, resources: Resources, ns: Namespace, value: DestinationPlan | undefined, signal: AbortSignal, capture = false): Promise<unknown> {
+export async function scanInNamespace(command: Command, resources: Resources, ns: Namespace, value: DestinationPlan | undefined, signal: AbortSignal, capture = false, approvals?: {exchange: Exchange; planTarget: PlanTarget}): Promise<unknown> {
   const plan = value ? validateDestinationPlan(value) : undefined;
   if (capture && !plan) throw new Error('Capture requires a validated scan plan');
   if (plan && (!ns.egress || !resources.networks.includes(ns.egress)
@@ -50,11 +55,50 @@ export async function scanInNamespace(command: Command, resources: Resources, ns
   const names = { gateway: `kindpath-public-gateway-${id}`, browser: `kindpath-public-browser-${id}` };
   for (const role of ['gateway', 'browser'] as const) {
     resources.containers.push(names[role]);
-    await command(args(names[role], volume, role, ns.id, plan, capture), signal);
+    const flags = args(names[role], volume, role, ns.id, plan, capture, !!approvals);
+    if (approvals && role === 'gateway') flags.splice(1,0,'--interactive');
+    await command(flags, signal);
     assertPublicIsolation(JSON.parse(await command(['inspect', names[role]], signal)), role, volume, ns.id);
   }
+  if (approvals) {
+    if (!plan) throw new Error('Dynamic destinations require an initial pinned plan');
+    const stop = new AbortController(), failed = new AbortController();
+    const operation = AbortSignal.any([signal, failed.signal]);
+    const channelSignal = AbortSignal.any([operation, stop.signal]);
+    let stopping = false, failure: unknown;
+    let ready!: () => void, unavailable!: (error: unknown) => void;
+    const started = new Promise<void>((resolve,reject) => {ready=resolve;unavailable=reject;});
+    const approve = createDestinationApprover(plan, approvals.planTarget, async addresses => {
+      await atScanStage('network-setup',async () => {
+        await firewallControl(command,resources,ns,'verify',operation);
+        ns.addresses = addresses;
+        await firewallControl(command,resources,ns,'replace',operation);
+        await firewallControl(command,resources,ns,'verify',operation);
+      },operation);
+    }, operation);
+    const handler = createGatewayApprovalHandler(approve,ready);
+    const channel = approvals.exchange(['start','--attach','--interactive',names.gateway],async message => {
+      try { return await handler(message); }
+      // Intentional channel shutdown must not hide a real late policy failure.
+      catch (error) { failure=error; failed.abort(); throw error; }
+    },channelSignal)
+      .then(() => {throw new Error('Gateway channel ended before cleanup');})
+      .catch(error => {if (!stopping) {failure=error;unavailable(error);failed.abort();}});
+    let raw: string;
+    try {
+      await started;
+      raw = await atScanStage('worker-execution',() => command(['start','--attach',names.browser],operation,45000),operation);
+    } finally {
+      stopping = true; stop.abort(); await channel;
+      if (failure) throw failure;
+    }
+    // A page can finish while a late resource approval is still settling. Drain
+    // that work before verifying the final hash, then begin owned cleanup.
+    await atScanStage('network-setup',() => firewallControl(command,resources,ns,'verify',signal),signal);
+    return atScanStage('worker-result',async () => JSON.parse(raw),signal);
+  }
   await command(['start', names.gateway], signal);
-  const raw = await command(['start', '--attach', names.browser], signal, 45_000);
+  const raw = await atScanStage('worker-execution',() => command(['start', '--attach', names.browser], signal, 45_000),signal);
   await firewallControl(command, resources, ns, 'verify', signal);
   return JSON.parse(raw);
 }

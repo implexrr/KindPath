@@ -15,11 +15,13 @@ try {
   let activeReport = data.report;
   let apiRequests = 0;
   let publicCapabilities = false, publicCalls = 0, captureCapabilities = false;
-  const publicReport = { ...data.report, mode: 'public', requestedUrl: 'https://example.com/start', url: 'https://example.com/final',
+  const publicReport = { ...data.report, mode: 'public', requestedUrl: 'https://example.com/start', url: 'https://example.org/final',
+    coverage: {blockedRequests:2,failedRequests:3,omittedRules:1,omittedNodes:4},
     scanner: { ...data.report.scanner, fixture: 'public' }, limitations: ['Controlled URL-report UI response; no public site fetched.'] };
   let publicResponse = publicReport, publicStatus = 200;
+  let demoFailure = false; const demoRequests = [];
   let delayPublic = false, releasePublic, publicHeld = false, notifyPublic;
-  async function assertDownload(expected) {
+  async function assertDownload(expected, coverage = expected.mode === 'public' ? expected.coverage : undefined) {
     const requestsBefore = apiRequests;
     const pending = page.waitForEvent('download');
     const link = page.getByRole('link', { name: 'Download report JSON', exact: true });
@@ -34,6 +36,7 @@ try {
     assert.equal(exported.report.url, expected.url);
     assert.equal(exported.report.requestedUrl, expected.requestedUrl);
     assert.equal(exported.report.generatedAt, expected.generatedAt);
+    assert.deepEqual(exported.report.coverage,coverage ?? undefined);
     assert.deepEqual(exported.report.findings, expected.findings);
     assert.deepEqual(exported.report.scanner, expected.scanner);
     assert.deepEqual(exported.report.manualChecks, expected.manualChecks);
@@ -47,9 +50,16 @@ try {
     return await link.getAttribute('href');
   }
   async function printablePdf(expected) {
+    const screenCoverage=expected.mode==='public'?await page.locator('.results .scan-coverage').textContent():undefined;
     await page.emulateMedia({ media: 'print' });
     const printed = page.locator('.print-report');
     assert.equal(await printed.isVisible(), true);
+    assert.equal(await printed.getByRole('region',{name:'Scan coverage',exact:true}).count(),expected.mode==='public'?1:0);
+    if(expected.mode==='public'){
+      assert.equal(await printed.locator('.scan-coverage').isVisible(),true);
+      assert.equal(await printed.locator('.scan-coverage').textContent(),screenCoverage);
+      assert.ok((await printed.textContent()).includes('Zero violations does not establish accessibility conformance.'));
+    }
     assert.equal(await page.locator('main').isVisible(), false);
     assert.equal(await printed.locator('.printed-finding').count(), expected.findings.length + (expected.scanner?.incomplete.length ?? 0));
     assert.equal(await printed.locator('iframe, img, script, details').count(), 0);
@@ -86,8 +96,11 @@ try {
     if (url.protocol === 'blob:' && url.origin === 'http://kindpath-ui.invalid') { await route.continue(); return; }
     if (url.pathname.startsWith('/api/')) apiRequests++;
     if (url.hostname !== 'kindpath-ui.invalid') { unexpected.push(url.hostname); await route.abort(); return; }
-    if (url.pathname === '/api/scanning-capabilities') { await route.fulfill({ json: { publicScanningEnabled: publicCapabilities, publicCaptureEnabled: captureCapabilities, allowedHosts: ['example.com'] } }); return; }
-    if (url.pathname === '/api/analyze') { await route.fulfill({ json: data.demoReport }); return; }
+    if (url.pathname === '/api/scanning-capabilities') { await route.fulfill({ json: { publicScanningEnabled: publicCapabilities, publicCaptureEnabled: captureCapabilities, urlPolicy: 'public-http-https' } }); return; }
+    if (url.pathname === '/api/analyze') {
+      demoRequests.push(route.request().postDataJSON());
+      await route.fulfill(demoFailure?{status:503,json:{error:'Controlled failure'}}:{json:data.demoReport});return;
+    }
     if (url.pathname === '/api/scan-public') {
       publicCalls++;
       assert.deepEqual(route.request().postDataJSON(), { url: publicReport.requestedUrl });
@@ -121,6 +134,31 @@ try {
     await route.fulfill(asset ? { body: asset.body, contentType: asset.type } : { status: 404, body: '' });
   });
   await page.goto('http://kindpath-ui.invalid/');
+  const websiteEntry=page.getByLabel('Your website URL');
+  assert.equal(await websiteEntry.getAttribute('type'),'text');
+  assert.equal(await websiteEntry.getAttribute('inputmode'),'url');
+  assert.match(await websiteEntry.getAttribute('aria-describedby'),/website-entry-note/);
+  await page.getByText('Enter a website address. HTTPS is added if you leave it out.',{exact:true}).waitFor();
+  demoFailure=true;
+  await websiteEntry.fill('  Example.com  ');await websiteEntry.press('Enter');
+  await page.getByRole('alert').waitFor();
+  assert.equal(await websiteEntry.inputValue(),'https://example.com/');
+  assert.deepEqual(demoRequests.at(-1),{url:'https://example.com/'});
+  demoFailure=false;
+  const demoRetry=page.getByRole('button',{name:'Try again',exact:true});
+  assert.equal(await demoRetry.evaluate(node=>node===document.activeElement),true);
+  await demoRetry.click();
+  await page.getByRole('region',{name:'Example issues to explore',exact:true}).waitFor();
+  assert.deepEqual(demoRequests.slice(-2),[{url:'https://example.com/'},{url:'https://example.com/'}]);
+  assert.equal(publicCalls,0,'Disabled mode must not submit a public scan');
+  for(const entry of ['javascript:alert(1)','https:/example.com','https:///example.com','user@example.com','https://user:pass@example.com']) {
+    const before=apiRequests;await websiteEntry.fill(entry);await websiteEntry.press('Enter');
+    await page.getByRole('alert').waitFor();assert.equal(apiRequests,before);
+    assert.equal(await page.locator('.results').count(),0);
+  }
+  await websiteEntry.fill('');
+  await page.getByRole('button',{name:'Explore accessibility',exact:true}).click();
+  assert.equal(await websiteEntry.evaluate(node=>node.validity.valueMissing),true);
   await page.getByRole('button', { name: 'Scan built-in page' }).click();
   // First exercise the actual bounded report returned by the fixture scanner.
   const violations = page.getByRole('region', { name: 'Confirmed automated violations', exact: true });
@@ -397,16 +435,53 @@ try {
   // Mock capability/HTTP responses inside network-none only. The actual app/API gates stay disabled.
   publicCapabilities = true;
   await page.reload();
-  const publicButton = page.getByRole('button', { name: 'Scan allowlisted website', exact: true });
+  const publicButton = page.getByRole('button', { name: 'Scan website', exact: true });
   await publicButton.waitFor();
-  await page.getByLabel('Your website URL').fill(publicReport.requestedUrl);
+  for(const entry of ['127.0.0.1','printer.local','example.com:8443','https://example.com/#section']) {
+    const before=apiRequests;await websiteEntry.fill(entry);await publicButton.click();
+    await page.getByRole('alert').waitFor();assert.equal(apiRequests,before);
+    assert.equal(await page.locator('.results').count(),0);
+  }
+  await websiteEntry.fill('  example.com/start  ');
   await publicButton.click();
   await page.locator('.results').getByText('Scanned page: ' + publicReport.url, { exact: true }).waitFor();
+  assert.equal(await websiteEntry.inputValue(),publicReport.requestedUrl);
   await page.locator('.results').getByText('Requested URL: ' + publicReport.requestedUrl, { exact: true }).waitFor();
   await page.waitForFunction(() => document.activeElement?.matches('.results'));
   assert.equal(await page.getByText('Automated page scan', { exact: true }).count(), 1);
+  const coverageNotice=page.locator('.results').getByRole('region',{name:'Scan coverage',exact:true});
+  await coverageNotice.getByText('Scan coverage is limited',{exact:true}).waitFor();
+  assert.match(await coverageNotice.textContent(),/2 requests blocked.*3 requests failed.*overlap/);
+  assert.match(await coverageNotice.textContent(),/1 rules and 4 affected elements.*partial/);
+  await page.setViewportSize({width:1280,height:900});
+  const coverageDesktop=(await page.screenshot({fullPage:true})).toString('base64');
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await coverageNotice.isVisible(),true);
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Coverage notice must fit the mobile viewport');
+  const coverageMobile=(await page.screenshot({fullPage:true})).toString('base64');
+  await page.setViewportSize({width:1280,height:900});
   await assertDownload(publicReport);
   await printablePdf(publicReport);
+  // Controlled responses exercise zero findings, unavailable data and stale coverage without external requests.
+  for(const coverage of [{blockedRequests:0,failedRequests:0,omittedRules:0,omittedNodes:0},undefined,
+    {...publicReport.coverage,failedRequests:-1},{blockedRequests:0,failedRequests:0,omittedRules:0,omittedNodes:2}]) {
+    publicResponse={...publicReport,findings:[],coverage};
+    await publicButton.click();
+    await page.waitForFunction(()=>document.querySelector('form').getAttribute('aria-busy')==='false');
+    await coverageNotice.waitFor();
+    const text=await coverageNotice.textContent();
+    assert.ok(text.includes('Zero violations does not establish accessibility conformance.'));
+    if(!coverage||coverage.failedRequests<0)assert.ok(text.includes('Scan coverage details unavailable'));
+    else if(coverage.omittedNodes)assert.ok(text.includes('returned results are partial'));
+    else {
+      assert.ok(text.includes('Other scan limitations still apply'));
+      assert.ok(!text.includes('Scan coverage is limited'));
+    }
+    assert.ok(!text.includes('2 requests blocked'),'Earlier request counts must not remain');
+    await assertDownload(publicResponse,(!coverage||coverage.failedRequests<0)?null:coverage);
+    await printablePdf(publicResponse);
+  }
+  publicResponse=publicReport;
   await page.getByRole('button', { name: /Visual preview/ }).click();
   assert.equal(await page.locator('iframe').count(), 0);
   await page.getByText('This built-in illustration is separate from the website report. Public websites are not captured.', { exact: true }).waitFor();
@@ -415,9 +490,13 @@ try {
   await page.getByRole('button', { name: 'Just exploring? Try an example', exact: true }).click();
   await page.getByRole('region', { name: 'Example issues to explore', exact: true }).waitFor();
   assert.equal(publicCalls, scansBeforeExample);
+  assert.equal(await page.locator('.results .scan-coverage').count(),0,'Demo reports do not inherit public coverage');
   await page.getByLabel('Your website URL').fill(publicReport.requestedUrl);
   for (const wrong of [{ ...publicReport, requestedUrl: 'https://example.com/old' },
-    { ...publicReport, url: 'http://127.0.0.1/' }, data.demoReport]) {
+    { ...publicReport, url: 'http://127.0.0.1/' },
+    { ...publicReport, url: 'http://printer.local/' },
+    { ...publicReport, url: 'https://user:pass@example.org/' },
+    { ...publicReport, url: 'https://example.org:8443/' }, data.demoReport]) {
     publicResponse = wrong;
     await publicButton.click();
     await page.getByRole('alert').filter({ hasText: 'report did not match' }).waitFor();
@@ -487,6 +566,47 @@ try {
     await page.getByRole('alert').filter({hasText:'snapshot did not match'}).waitFor();
     assert.equal(await page.locator('iframe').count(),0); assert.equal(await page.locator('.results').count(),0);
   }
+  let qualityEmpty,qualitySparse;
+  const qualityCases={...data.qualityPreviews,
+    unknown:{...data.qualityPreviews.text,capturedTextCharacters:undefined},
+    malformed:{...data.qualityPreviews.text,capturedTextCharacters:-1}};
+  for(const [kind,snapshot] of Object.entries(qualityCases)) {
+    publicResponse={...publicReport,scanId:snapshot.scanId,sitePreview:snapshot};
+    await publicButton.click();
+    await page.locator('.results').getByText('Requested URL: '+publicReport.requestedUrl,{exact:true}).waitFor();
+    const scansBefore=publicCalls;
+    await page.getByRole('button',{name:/Visual preview/}).click();
+    assert.equal(publicCalls,scansBefore,'Quality feedback must not request another scan');
+    assert.equal(await page.getByRole('alert').count(),0,'Quality feedback must not turn a report into an error');
+    const feedback=page.getByRole('region',{name:'Preview detail',exact:true});
+    if(kind==='empty'||kind==='whitespace') {
+      await feedback.getByRole('heading',{name:'Website preview unavailable',exact:true}).waitFor();
+      assert.match(await feedback.textContent(),/findings and report exports are still available/);
+      assert.equal(await page.locator('iframe').count(),0);
+      assert.equal(await page.getByRole('button',{name:'Apply visual effects',exact:true}).count(),0);
+      if(kind==='empty') {
+        await page.setViewportSize({width:390,height:844});
+        assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+        qualityEmpty=(await page.locator('.preview-workspace').screenshot()).toString('base64');
+        await page.setViewportSize({width:1280,height:900});
+        await assertDownload(publicResponse);await printablePdf(publicResponse);
+      }
+    }else {
+      assert.equal(await page.locator('iframe').count(),2);
+      assert.equal(await page.getByRole('button',{name:'Apply visual effects',exact:true}).count(),1);
+      if(kind==='sparse') {
+        await page.frameLocator('iframe').first().getByText('Short page',{exact:true}).waitFor();
+        await feedback.getByRole('heading',{name:'Limited preview detail',exact:true}).waitFor();
+        assert.match(await feedback.textContent(),/page may simply be short/);
+        qualitySparse=(await page.locator('.preview-workspace').screenshot()).toString('base64');
+      }else if(kind==='text')assert.equal(await feedback.count(),0,'Previous empty/sparse feedback must disappear');
+      else await feedback.getByRole('heading',{name:'Preview detail could not be assessed',exact:true}).waitFor();
+      if(kind!=='sparse')await page.frameLocator('iframe').first().locator('body').filter({hasText:'Captured page content.'}).waitFor();
+    }
+    await page.getByRole('button',{name:/Accessibility findings/}).click();
+    assert.equal(await page.getByRole('region',{name:'Confirmed automated violations',exact:true}).locator('article').count(),publicReport.findings.length);
+    await page.getByRole('link',{name:'Download report JSON',exact:true}).waitFor();
+  }
   // Cancellation and retry preserve the selected action and reject late responses.
   publicCapabilities=false; captureCapabilities=false;
   await page.reload();
@@ -520,5 +640,5 @@ try {
   await page.getByLabel('Your website URL').fill('https://example.com/new-request');
   assert.equal(await page.locator('.results').count(),0);
   assert.deepEqual(unexpected, []);
-  process.stdout.write(JSON.stringify({ passed: true, engine, version: browser.version(), desktop, mobile, findingsDesktop, findingsMobile, matchingDesktop, matchingMobile, fixturePdf, demoPdf }));
+  process.stdout.write(JSON.stringify({ passed: true, engine, version: browser.version(), desktop, mobile, findingsDesktop, findingsMobile, matchingDesktop, matchingMobile, coverageDesktop, coverageMobile, qualityEmpty, qualitySparse, fixturePdf, demoPdf }));
 } finally { await browser.close(); }

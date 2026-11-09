@@ -1,3 +1,5 @@
+import { readScanCoverage } from '../../shared/scanCoverage.js';
+import { readDiagnostic, classifyFailure } from '../../scanner/gateway/diagnostics.mjs';
 import { randomUUID } from 'node:crypto';
 import { mapSitePreview } from './sitePreview.js';
 import { PUBLIC_SCANNING_ENABLED, PUBLIC_CAPTURE_ENABLED, validatePublicUrl } from './publicPolicy.js';
@@ -9,14 +11,11 @@ export function mapPublicReport(raw: unknown, requestedUrl?: string) {
   const report = mapWorkerReport(raw, 'public');
   const result = raw as { url?: unknown; coverage?: { blockedRequests?: unknown; failedRequests?: unknown; omittedRules?: unknown; omittedNodes?: unknown } };
   const finalUrl = validatePublicUrl(result.url);
-  const coverage = result.coverage;
-  if (!coverage || !Number.isSafeInteger(coverage.blockedRequests) || Number(coverage.blockedRequests) < 0
-    || !Number.isSafeInteger(coverage.failedRequests) || Number(coverage.failedRequests) < 0
-    || !Number.isSafeInteger(coverage.omittedRules) || Number(coverage.omittedRules) < 0
-    || !Number.isSafeInteger(coverage.omittedNodes) || Number(coverage.omittedNodes) < 0) throw new Error('Invalid scan coverage.');
-  return { ...report, mode: 'public' as const, url: finalUrl, ...(requestedUrl ? { requestedUrl: validatePublicUrl(requestedUrl) } : {}), limitations: [
+  const coverage = readScanCoverage(result.coverage);
+  if (!coverage) throw new Error('Invalid scan coverage.');
+  return { ...report, mode: 'public' as const, coverage, url: finalUrl, ...(requestedUrl ? { requestedUrl: validatePublicUrl(requestedUrl) } : {}), limitations: [
     'Only the initial top-level page at the default viewport was scanned; embedded frames and interactive states are excluded.',
-    `${coverage.blockedRequests} requests were blocked by policy and ${coverage.failedRequests} requests failed. Missing resources can change the result.`,
+    `${coverage.blockedRequests} requests were blocked by policy and ${coverage.failedRequests} requests failed (including gateway denials). Missing resources can change the result.`,
     ...(Number(coverage.omittedRules) || Number(coverage.omittedNodes) ? [
       `Result limits omitted ${coverage.omittedRules} rules and ${coverage.omittedNodes} affected elements. The displayed list is partial.`,
     ] : []),
@@ -34,9 +33,11 @@ export function createPublicSiteScanner({ enabled = () => PUBLIC_SCANNING_ENABLE
     const target = validatePublicUrl(value);
     signal?.throwIfAborted();
     const capture = captureEnabled();
+    let stage: 'worker-execution'|'worker-result' = 'worker-execution';
     try {
       const raw = await worker(target, signal);
       signal?.throwIfAborted();
+      stage = 'worker-result';
       const report = mapPublicReport(raw, target);
       const preview = (raw as {preview?: unknown}).preview;
       if (!capture && preview !== undefined) throw new Error('Capture is disabled');
@@ -44,8 +45,10 @@ export function createPublicSiteScanner({ enabled = () => PUBLIC_SCANNING_ENABLE
       return {...report,scanId,...(capture ? {sitePreview:mapSitePreview(preview,{scanId,requestedUrl:target,url:report.url})} : {})};
     } catch (error) {
       if (error instanceof ScannerError && error.code !== 'SCAN_FAILED') throw error;
-      // Never expose DNS, browser, Docker or untrusted worker diagnostics to the caller.
-      throw new ScannerError('SCAN_FAILED', 'The website scan failed or timed out. No report was produced.');
+      // Never expose raw DNS, browser, Docker or worker error text to the caller.
+      throw new ScannerError('SCAN_FAILED', 'The website scan failed or timed out. No report was produced.',
+        readDiagnostic(error instanceof ScannerError ? error.diagnostic : undefined)
+          ?? (stage==='worker-result' ? {stage,code:'INVALID_OUTPUT'} : classifyFailure(error,stage,signal)));
     }
   };
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hasMatchingSitePreview } from './sitePreview.js';
+import { hasMatchingSitePreview, previewTextFeedback } from './sitePreview.js';
 import { createReportExport } from './reportExport.js';
 import { mapSitePreview } from '../../server/scanner/sitePreview.js';
 import { createDemoReport } from '../../server/services/analyze.js';
@@ -22,4 +22,19 @@ test('report exports exclude captured content and ephemeral scan identifiers',()
   assert.equal(exported.report.url,report.url);assert.equal(exported.report.requestedUrl,report.requestedUrl);
   assert.equal(exported.report.sitePreview,undefined);assert.equal(exported.report.scanId,undefined);
   assert.ok(!JSON.stringify(exported).includes('Captured marker'));
+  assert.ok(!JSON.stringify(exported).includes('capturedTextCharacters'));
+});
+
+test('empty previews are unavailable while sparse previews remain a caution rather than a failure',()=>{
+  assert.equal(previewTextFeedback(0)?.kind,'empty');
+  assert.match(previewTextFeedback(0)!.message,/findings and report exports are still available/);
+  for(const value of [1,15,99])assert.equal(previewTextFeedback(value)?.kind,'sparse');
+  assert.match(previewTextFeedback(15)!.message,/page may simply be short/);
+  for(const value of [100,10000])assert.equal(previewTextFeedback(value),undefined);
+});
+test('missing and malformed quality hints stay unknown without rejecting an otherwise matching report',()=>{
+  for(const value of [undefined,null,-1,1.5,NaN,Infinity,10001,'0','constructor','__proto__',{}]) {
+    assert.equal(previewTextFeedback(value)?.kind,'unknown');
+    assert.equal(hasMatchingSitePreview({...report,sitePreview:{...preview,capturedTextCharacters:value as any}}),true);
+  }
 });

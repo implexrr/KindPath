@@ -1,4 +1,5 @@
 export const IMAGE = 'kindpath-fixture-scanner:local';
+export const QA_IMAGE = 'kindpath-browser-qa:local';
 import type { FixtureId, PreviewFixtureId } from '../../shared/fixtures.js';
 export { FIXTURES, isFixture } from '../../shared/fixtures.js';
 export type { FixtureId } from '../../shared/fixtures.js';

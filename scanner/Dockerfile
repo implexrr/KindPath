@@ -6,6 +6,41 @@ RUN sed -i 's|http://|https://|g' /etc/apt/sources.list.d/ubuntu.sources \
     && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Install the locked JavaScript packages in a disposable build source. The lean
+# runtime copies only these packages and Node, never this stage's browser layers.
+FROM patched AS packages
+WORKDIR /opt/kindpath-worker
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts \
+    && mkdir /scanner-browsers \
+    && cp -a /ms-playwright/chromium_headless_shell-* /ms-playwright/ffmpeg-* /scanner-browsers/
+
+FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS chromium-runtime
+COPY --from=patched /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=patched /usr/bin/node /usr/bin/node
+RUN sed -i 's|http://|https://|g' /etc/apt/sources.list.d/ubuntu.sources \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates libatomic1 libstdc++6 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+WORKDIR /opt/kindpath-worker
+COPY package.json package-lock.json ./
+COPY --from=packages /opt/kindpath-worker/node_modules ./node_modules
+COPY --from=packages /scanner-browsers /ms-playwright
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+# Reuse the pinned distribution's headless Chromium/FFmpeg and install only the
+# locked CLI's Chromium system dependencies. No npm or other browser enters.
+RUN node node_modules/playwright/cli.js install-deps chromium \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+FROM chromium-runtime AS worker
+COPY worker.mjs preview.mjs site-preview.mjs public-worker.mjs public-report.mjs public-report.test.mjs ./
+COPY gateway/ ./gateway/
+COPY firewall/ ./firewall/
+COPY fixtures/ ./fixtures/
+USER 1000:1000
+ENTRYPOINT ["node", "worker.mjs"]
+
 FROM patched AS codec-builder
 # Rebuild only the affected library from Ubuntu's authenticated, patched source.
 # Build tools and development headers stay in this disposable stage.
@@ -51,7 +86,7 @@ RUN --network=none cd gst-plugins-bad1.0-1.24.2 \
     && cd build/gst-libs/gst/codecparsers \
     && sha256sum libgstcodecparsers-1.0.so.0.2402.0 > /build/codec.sha256
 
-FROM patched AS worker
+FROM patched AS qa
 COPY --from=codec-builder /build/gst-plugins-bad1.0-1.24.2/build/gst-libs/gst/codecparsers/libgstcodecparsers-1.0.so.0.2402.0 /tmp/patched-codec.so
 COPY --from=codec-builder /build/codec.sha256 /usr/share/kindpath/codec.sha256
 COPY --from=codec-builder /build/prerequisite.patch /build/fix.patch /usr/share/doc/libgstreamer-plugins-bad1.0-0/kindpath-patches/

@@ -11,7 +11,6 @@ interface WebsiteFormProps {
   canRetry: boolean;
   cancelled: boolean;
   publicScanningEnabled: boolean;
-  allowedHosts: string[];
   busy: boolean;
   error: string;
   onUrlChange: (url: string) => void;
@@ -22,7 +21,7 @@ interface WebsiteFormProps {
   onFixtureScan: () => void;
 }
 
-export function WebsiteForm({ url, activity, onCancel, onRetry, canRetry, cancelled, busy, error, onUrlChange, onSubmit, onExample, onFixtureScan, fixture, onFixtureChange, publicScanningEnabled, allowedHosts }: WebsiteFormProps) {
+export function WebsiteForm({ url, activity, onCancel, onRetry, canRetry, cancelled, busy, error, onUrlChange, onSubmit, onExample, onFixtureScan, fixture, onFixtureChange, publicScanningEnabled }: WebsiteFormProps) {
   const retryButton=useRef<HTMLButtonElement>(null);
   useLayoutEffect(()=>{ if((cancelled || error) && canRetry)retryButton.current?.focus(); },[cancelled,error,canRetry]);
   return <>
@@ -31,15 +30,17 @@ export function WebsiteForm({ url, activity, onCancel, onRetry, canRetry, cancel
       <div className="url-field">
         <span aria-hidden="true">↗</span>
         <input
-          id="website" type="url" disabled={busy} placeholder="https://your-website.com" value={url}
+          id="website" type="text" inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+          disabled={busy} placeholder="example.com" value={url}
           onChange={e => onUrlChange(e.target.value)} required maxLength={2048}
-          aria-describedby={error ? 'url-error demo-note' : 'demo-note'}
+          aria-describedby={error ? 'url-error website-entry-note demo-note' : 'website-entry-note demo-note'}
         />
         <button disabled={busy} type="submit">
-          {busy ? 'Preparing…' : publicScanningEnabled ? 'Scan allowlisted website' : 'Explore accessibility'} <span aria-hidden="true">→</span>
+          {busy ? 'Preparing…' : publicScanningEnabled ? 'Scan website' : 'Explore accessibility'} <span aria-hidden="true">→</span>
         </button>
       </div>
-      <p id="demo-note" className="form-note">{publicScanningEnabled ? `Allowed hosts: ${allowedHosts.join(', ')}. Automated single-page checks only.` : 'Demo mode · URLs aren’t fetched. Findings are illustrative.'}</p>
+      <p id="website-entry-note" className="form-note">Enter a website address. HTTPS is added if you leave it out.</p>
+      <p id="demo-note" className="form-note">{publicScanningEnabled ? 'Public HTTP/HTTPS pages only. Private networks and sign-in-protected pages are unsupported. Automated single-page checks only.' : 'Demo mode · URLs aren’t fetched. Findings are illustrative.'}</p>
       <p className="form-note" role="status" aria-live="polite">{activity}</p>
       {busy && <button type="button" className="secondary" onClick={onCancel}>Cancel request</button>}
       {canRetry && <button ref={retryButton} type="button" className="secondary" onClick={onRetry}>Try again</button>}

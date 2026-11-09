@@ -57,3 +57,15 @@ test('public exports retain requested and final URLs without changing demo or fi
   assert.equal(createReportExport(builtIn).report.requestedUrl, undefined);
   assert.match(reportFilename(report), /^kindpath-public-report-/);
 });
+
+test('public exports retain only validated coverage counts without incidental worker fields or shared references',()=>{
+  const coverage={blockedRequests:2,failedRequests:3,omittedRules:1,omittedNodes:4};
+  const report:Report={...fixture(),mode:'public',coverage:{...coverage,rawMarker:'discard'} as any};
+  const exported=createReportExport(report).report;
+  assert.deepEqual(exported.coverage,coverage);
+  exported.coverage!.blockedRequests=99;
+  assert.equal(report.coverage!.blockedRequests,2);
+  for(const mode of ['demo','fixture'] as const) assert.equal(createReportExport({...report,mode}).report.coverage,undefined);
+  assert.equal(createReportExport({...report,coverage:{...coverage,failedRequests:-1}}).report.coverage,undefined);
+  assert.equal(createReportExport({...report,coverage:undefined}).report.coverage,undefined);
+});

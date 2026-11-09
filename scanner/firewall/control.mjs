@@ -25,9 +25,12 @@ try {
     // NET_ADMIN only, inside the per-scan network namespace. Never host networking.
     if (process.getuid() !== 0 || !/^CapEff:\s+0*1000$/m.test(readFileSync('/proc/self/status', 'utf8'))) throw new Error('Unexpected setup privileges');
     const ips = addresses(JSON.parse(raw));
-    if (task === 'setup') {
+    if (task === 'replace') {
+      if (!/^[a-f0-9]{64}$/.test(expected ?? '') || hash(nft(['--stateless', 'list', 'table', 'inet', 'kindpath'])) !== expected) throw new Error('Firewall changed before update');
+    }
+    if (task === 'setup' || task === 'replace') {
       const path = '/tmp/kindpath-rules.nft';
-      writeFileSync(path, rules(ips), { mode: 0o600, flag: 'wx' });
+      writeFileSync(path, (task === 'replace' ? 'delete table inet kindpath\n' : '') + rules(ips), { mode: 0o600, flag: 'wx' });
       try { nft(['--check', '-f', path]); nft(['-f', path]); } finally { unlinkSync(path); }
     } else if (task !== 'verify') throw new Error('Unknown firewall task');
     const canonical = nft(['--stateless', 'list', 'table', 'inet', 'kindpath']);

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Command } from './dockerWorker.js';
 import type { Resources } from './resources.js';
-import { IMAGE } from './containerPolicy.js';
+import { QA_IMAGE } from './containerPolicy.js';
 import { validateDestinationPlan } from './destinationSnapshot.js';
 import type { DestinationPlan } from './destinationSnapshot.js';
 import { PUBLIC_LABEL } from './publicPolicy.js';
@@ -14,12 +14,13 @@ export type Namespace = { id: string; network: string; addresses: string[]; hash
 export const memoryTmpfs = '/tmp:rw,nosuid,nodev,noexec,size=16777216';
 
 export function firewallArguments(name: string, network: string, role: 'holder' | 'admin' | 'probe' | 'origin', args: string[]) {
+  // Fixed test origins need TLS fixture tools; submitted-page workers use the lean IMAGE.
   const admin = role === 'admin';
   if (admin && !/^container:[a-f0-9]{64}$/.test(network)) throw new Error('Firewall administration requires an owned container namespace');
   return ['create', '--pull=never', '--rm', '--name', name, '--label', PUBLIC_LABEL, `--network=${network}`,
     '--read-only', `--user=${admin ? '0:0' : '1000:1000'}`, '--cap-drop=ALL', ...(admin ? ['--cap-add=NET_ADMIN'] : []),
     '--security-opt=no-new-privileges:true', '--ipc=private', '--memory=128m', '--cpus=0.5', '--pids-limit=64',
-    `--tmpfs=${memoryTmpfs}`, '--init', '--entrypoint=node', role === 'origin' ? IMAGE : FIREWALL_IMAGE, ...args];
+    `--tmpfs=${memoryTmpfs}`, '--init', '--entrypoint=node', role === 'origin' ? QA_IMAGE : FIREWALL_IMAGE, ...args];
 }
 export function assertFirewallContainer(value: unknown, network: string, admin: boolean, running = false) {
   const fail = () => { throw new Error('Firewall container isolation mismatch'); };
@@ -63,9 +64,9 @@ export async function prepareNamespace(command: Command, resources: Resources, s
   await command(['start', holder.name], signal);
   return { id: holder.id, network, addresses: fixture === true ? [FIXTURE_IP] : [] };
 }
-export async function firewallControl(command: Command, resources: Resources, ns: Namespace, task: 'setup' | 'verify', signal: AbortSignal) {
+export async function firewallControl(command: Command, resources: Resources, ns: Namespace, task: 'setup' | 'verify' | 'replace', signal: AbortSignal) {
   const helper = await createFirewallContainer(command, resources, `container:${ns.id}`, 'admin',
-    ['firewall/control.mjs', task, JSON.stringify(ns.addresses), ...(task === 'verify' ? [ns.hash ?? ''] : [])], signal);
+    ['firewall/control.mjs', task, JSON.stringify(ns.addresses), ...(task !== 'setup' ? [ns.hash ?? ''] : [])], signal);
   const proof = JSON.parse(await command(['start', '--attach', helper.name], signal));
   if (!/^[a-f0-9]{64}$/.test(proof?.policyHash) || !Number.isSafeInteger(proof?.droppedPackets) || proof.droppedPackets < 0
     || (task === 'verify' && proof.policyHash !== ns.hash)) throw new Error('Invalid firewall verification');

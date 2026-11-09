@@ -11,7 +11,14 @@ export interface Finding {
   impact: string;
   elements: FindingElement[];
 }
+export interface ScanCoverage {
+  blockedRequests: number;
+  failedRequests: number;
+  omittedRules: number;
+  omittedNodes: number;
+}
 export interface Report {
+  coverage?: ScanCoverage;
   mode: 'demo' | 'fixture' | 'public';
   requestedUrl?: string;
   scanId?: string;
@@ -33,6 +40,8 @@ export interface FixturePreview {
 }
 
 export interface SitePreview {
+  // Non-whitespace UTF-16 units in accepted text nodes; not a visibility or fidelity measure.
+  capturedTextCharacters?: number;
   mode: 'public';
   scanId: string;
   requestedUrl: string;

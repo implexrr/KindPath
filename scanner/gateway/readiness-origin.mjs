@@ -17,6 +17,7 @@ fetch('/forbidden-method',{method:'POST'}).catch(()=>{});
 fetch('/subresource-redirect').catch(()=>{});
 </script></body>`);
 const contentPage=await readFile(new URL('../fixtures/content-page.html',import.meta.url),'utf8');
+const retentionPage=await readFile(new URL('../fixtures/retention-page.html',import.meta.url),'utf8');
 const formPage=await readFile(new URL('../fixtures/form-page.html',import.meta.url),'utf8');
 const siteCss='*{box-sizing:border-box}body{font:18px Arial;color:#111;background:#fff;margin:0;padding:24px}.content-card{max-width:900px;padding:20px;border:1px solid #333}table{border-collapse:collapse}th,td{padding:8px;border:1px solid #333}.guide-link:hover{color:rgb(255,0,0)}.offscreen-panel{display:none}';
 function handle(req,res){
@@ -24,9 +25,16 @@ function handle(req,res){
   process.stdout.write(JSON.stringify({method:req.method,path})+'\n');
   if(path==='/site.css'){setTimeout(()=>{res.writeHead(200,{'Content-Type':'text/css'});res.end(siteCss);},150);return;}
   if(path==='/content'||path==='/forms'){res.writeHead(200,{'Content-Type':'text/html'});res.end(path==='/content'?contentPage:formPage);return;}
+  if(path==='/indented-content'||path==='/indented-budget'){
+    const count=path==='/indented-content'?96:300;
+    const blocks=Array.from({length:count},(_,index)=>`<p>Controlled paragraph ${index}</p>`).join('\n');
+    res.writeHead(200,{'Content-Type':'text/html'});res.end(retentionPage.replace('<!-- retention-blocks -->',blocks));return;
+  }
   if(path==='/missing'){res.writeHead(404,{'Content-Type':'text/plain'});res.end('Controlled missing page');return;}
   if(path==='/redirect'){res.writeHead(302,{Location:'/barriers'});res.end();return;}
   if(path==='/blocked-redirect'||path==='/subresource-redirect'){res.writeHead(302,{Location:'http://10.0.0.1/private'});res.end();return;}
+  const historyTask = path === '/same-url-history' ? 'history.replaceState(null,"",location.href)' : path === '/same-url-reload' ? 'location.reload()' : undefined;
+  if(historyTask){res.writeHead(200,{'Content-Type':'text/html'});res.end(html.replace('</body>', `<script>let observedAxe;Object.defineProperty(window,'axe',{configurable:true,get(){return observedAxe;},set(value){observedAxe=value;queueMicrotask(()=>{${historyTask}});}});</script></body>`));return;}
   const body = path === '/moving' ? html.replace('</body>', `<script>let observedAxe;Object.defineProperty(window,'axe',{configurable:true,get(){return observedAxe;},set(value){observedAxe=value;queueMicrotask(()=>history.replaceState(null,'','/moving?analysis=started'));}});</script></body>`) : html;
   res.writeHead(200,{'Content-Type':'text/html'});res.end(body);
 }

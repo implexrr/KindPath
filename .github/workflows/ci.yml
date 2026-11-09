@@ -47,7 +47,7 @@ jobs:
       - name: Audit isolated worker dependencies
         run: npm --prefix scanner audit --audit-level=low
 
-      - name: Build isolated fixture worker
+      - name: Build scanner, browser QA and firewall images
         run: npm run scanner:build
 
       - name: Verify isolation and real fixture scans

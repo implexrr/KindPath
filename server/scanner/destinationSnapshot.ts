@@ -1,3 +1,4 @@
+import { websiteUrl } from '../../scanner/gateway/url.mjs';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { validatePublicUrl } from './publicPolicy.js';
@@ -22,7 +23,7 @@ export type DestinationPlan = Readonly<{
   destinations: Readonly<Record<string, readonly string[]>>;
 }>;
 function freezePlan(target: string, values: unknown): DestinationPlan {
-  const url = validatePublicUrl(target);
+  const url = websiteUrl(target).href;
   if (!Array.isArray(values) || !values.length || values.length > 16 || !values.every(isPublicIpv4)) throw new Error('Invalid destination snapshot');
   const addresses = Object.freeze([...new Set(values as string[])].sort());
   return Object.freeze({ target: url, addresses, destinations: Object.freeze({ [new URL(url).hostname]: addresses }) });
@@ -48,7 +49,7 @@ export async function createDestinationPlan(target: string, resolver: Resolver =
   try {
     const answers = await Promise.race([resolver(new URL(url).hostname, { all: true, family: 4, verbatim: true }),
       new Promise<never>((_, reject) => {
-        onAbort = () => reject(new Error('Destination DNS lookup cancelled or timed out'));
+        onAbort = () => reject(deadline.reason);
         if (deadline.aborted) onAbort(); else deadline.addEventListener('abort', onAbort, { once: true });
       })]);
     deadline.throwIfAborted();

@@ -1,3 +1,4 @@
+import { classifyFailure, DIAGNOSTIC_PREFIX } from './gateway/diagnostics.mjs';
 import { captureSiteSnapshot } from './site-preview.mjs';
 import net from 'node:net';
 import http from 'node:http';
@@ -12,7 +13,15 @@ const socketPath = '/run/kindpath/egress.sock';
 const allowed = JSON.parse(process.env.KINDPATH_ALLOWED_HOSTS ?? '[]');
 const target = process.argv[2];
 const capture = process.argv[3] === '--capture';
-const deadline = setTimeout(() => process.exit(2), 40_000);
+let stage = 'worker-setup';
+let rejectedStatus;
+let missingResponse = false;
+let diagnosticEmitted = false;
+function emitDiagnostic(value) {
+  if (diagnosticEmitted) return;
+  diagnosticEmitted=true;process.stderr.write(DIAGNOSTIC_PREFIX + JSON.stringify(value) + '\n');
+}
+const deadline = setTimeout(() => {emitDiagnostic({stage,code:'TIMEOUT'});process.exit(2);}, 40_000);
 let browser;
 let relay;
 let rejectedNavigation = false;
@@ -66,27 +75,43 @@ try {
     await context.routeWebSocket('**/*', socket => socket.close());
     const page = await context.newPage();
     page.on('popup', popup => popup.close());
+    let scanningDocument = false;
+    let latestDocumentRequest;
     page.on('request', request => {
       if (request.isNavigationRequest()) {
+        if(request.frame()===page.mainFrame()){
+          latestDocumentRequest=request;
+          if(scanningDocument)pageChanged=true;
+        }
         try { validateTarget(request.url(), allowed); } catch { rejectedNavigation = true; }
       }
     });
     page.on('requestfailed', () => { failedRequests++; });
     page.on('response', response => { if (response.status() >= 400) failedRequests++; });
+    stage = 'page-loading';
     const response = await page.goto(target, { waitUntil: 'load', timeout: 15_000 });
-    if (!response || !response.ok()) throw new Error('Navigation failed');
+    if (!response) {missingResponse=true;throw new Error('Navigation failed');}
+    if (!response.ok()) {rejectedStatus=response.status();throw new Error('Navigation failed');}
     const scannedUrl = page.url();
-    page.on('framenavigated', frame => { if (frame === page.mainFrame()) pageChanged = true; });
+    if(latestDocumentRequest!==response.request()){pageChanged=true;throw new Error('Pending document navigation');}
+    scanningDocument=true;
+    // History API events at the same URL do not replace the document. Actual
+    // main-document requests, URL changes and document identity changes still invalidate it.
+    page.on('framenavigated', frame => { if (frame === page.mainFrame() && frame.url()!==scannedUrl) pageChanged = true; });
     validateTarget(scannedUrl, allowed);
+    const scannedDocument=await page.evaluateHandle(()=>document);
+    stage = 'accessibility-analysis';
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).options({ iframes: false }).analyze();
     // Do not label findings from one document with another URL, including same-URL reloads.
-    if (pageChanged || page.url() !== scannedUrl || result.url !== scannedUrl) {
+    if (pageChanged || page.url() !== scannedUrl || result.url !== scannedUrl || !(await page.evaluate(original=>original===document,scannedDocument))) {
       pageChanged = true; throw new Error('Page changed during scan');
     }
+    if (capture) stage = 'capture';
     const preview = capture ? await captureSiteSnapshot(page) : undefined;
-    if (pageChanged || page.url() !== scannedUrl || (preview && preview.url !== scannedUrl)) {
+    if (pageChanged || page.url() !== scannedUrl || (preview && preview.url !== scannedUrl) || !(await page.evaluate(original=>original===document,scannedDocument))) {
       pageChanged = true; throw new Error('Page changed during capture');
     }
+    stage = 'worker-result';
     const violations = summarizeRules(result.violations);
     const incomplete = summarizeRules(result.incomplete);
     process.stdout.write(JSON.stringify({ fixture: 'public', url: scannedUrl, ...(preview ? {preview} : {}),
@@ -96,8 +121,12 @@ try {
       passes: result.passes.length, inapplicable: result.inapplicable.length }));
   }
 } catch (error) {
-  const code = error instanceof Error && error.message.includes('ERR_CERT_AUTHORITY_INVALID') ? 'TLS_CERTIFICATE_REJECTED'
+  const diagnostic = missingResponse ? {stage,code:'NO_RESPONSE'} : rejectedStatus !== undefined ? {stage:'page-loading',code:'HTTP_STATUS',httpStatus:rejectedStatus}
+    : pageChanged ? {stage,code:'PAGE_CHANGED_DURING_SCAN'}
+    : classifyFailure(error,stage);
+  const code = diagnostic?.code === 'TLS_CERTIFICATE_REJECTED' ? 'TLS_CERTIFICATE_REJECTED'
     : pageChanged ? 'PAGE_CHANGED_DURING_SCAN' : rejectedNavigation ? 'DESTINATION_REJECTED' : 'SCAN_FAILED';
+  emitDiagnostic(diagnostic);
   process.stderr.write(`Isolated gateway scan failed: ${code}.\n`); process.exitCode = 1;
 }
-finally { if (browser) await browser.close(); if (relay) relay.close(); clearTimeout(deadline); }
+finally { stage='cleanup'; if (browser) await browser.close(); if (relay) relay.close(); clearTimeout(deadline); }

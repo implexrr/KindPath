@@ -1,5 +1,6 @@
+import { readDiagnostic } from '../../scanner/gateway/diagnostics.mjs';
 import { Router } from 'express';
-import { PUBLIC_SCANNING_ENABLED, PUBLIC_CAPTURE_ENABLED, ALLOWED_PUBLIC_HOSTS, validatePublicUrl } from '../scanner/publicPolicy.js';
+import { PUBLIC_SCANNING_ENABLED, PUBLIC_CAPTURE_ENABLED, validatePublicUrl } from '../scanner/publicPolicy.js';
 import { scanPublicSite } from '../scanner/publicScanner.js';
 import { ScannerError } from '../scanner/dockerWorker.js';
 
@@ -7,7 +8,7 @@ import { ScannerError } from '../scanner/dockerWorker.js';
 export function createPublicRouter({ enabled = (): boolean => PUBLIC_SCANNING_ENABLED, captureEnabled = (): boolean => PUBLIC_CAPTURE_ENABLED, scan = scanPublicSite } = {}) {
   const publicRouter = Router();
   publicRouter.get('/scanning-capabilities', (_req, res) => {
-    res.json({ publicScanningEnabled: enabled(), publicCaptureEnabled: enabled() && captureEnabled(), allowedHosts: ALLOWED_PUBLIC_HOSTS });
+    res.json({ publicScanningEnabled: enabled(), publicCaptureEnabled: enabled() && captureEnabled(), urlPolicy: 'public-http-https' });
   });
   publicRouter.post('/scan-public', async (req, res, next) => {
     if (!enabled()) {
@@ -15,17 +16,20 @@ export function createPublicRouter({ enabled = (): boolean => PUBLIC_SCANNING_EN
       return;
     }
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).length !== 1 || !('url' in req.body)) {
-      res.status(400).json({ error: 'Supply one allowlisted URL.' }); return;
+      res.status(400).json({ error: 'Supply one public URL.' }); return;
     }
     try { validatePublicUrl(req.body.url); } catch {
-      res.status(400).json({ error: 'Use an allowlisted HTTP/HTTPS URL on its standard port without credentials or fragments.' }); return;
+      res.status(400).json({ error: 'Use a public HTTP/HTTPS URL on its standard port without credentials or fragments.' }); return;
     }
     const abort = new AbortController();
     res.once('close', () => { if (!res.writableEnded) abort.abort(); });
     try { res.json(await scan(req.body.url, abort.signal)); }
     catch (error) {
       if (res.destroyed) return;
-      if (error instanceof ScannerError) res.status(error.code === 'SCANNER_BUSY' ? 429 : 503).json({ error: error.message, code: error.code });
+      if (error instanceof ScannerError) {
+        const diagnostic=readDiagnostic(error.diagnostic);
+        res.status(error.code === 'SCANNER_BUSY' ? 429 : 503).json({ error: error.message, code: error.code, ...(diagnostic ? {diagnostic} : {}) });
+      }
       else next(error);
     }
   });

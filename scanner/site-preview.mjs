@@ -55,11 +55,30 @@ export async function captureSiteSnapshot(page) {
       }
       return result;
     }
+    // These tags remain block-level if the output style budget is exhausted.
+    // Omitted/hidden nodes and styled inline tags cannot justify removing a separator.
+    const blockTags = new Set(['header','nav','main','section','article','aside','footer','div','p','h1','h2','h3','h4','h5','h6','blockquote','figure','figcaption','dl','dt','dd','table','hr','ul','ol','li','form']);
+    function blockInFlow(node) {
+      if (!(node instanceof HTMLElement) || !blockTags.has(node.localName) || node.hidden) return false;
+      const computed = getComputedStyle(node);
+      return ['block','flow-root','list-item','flex','grid','table'].includes(computed.display)
+        && !['hidden','collapse'].includes(computed.visibility)
+        && !['absolute','fixed'].includes(computed.position) && computed.getPropertyValue('float') === 'none';
+    }
+    function formattingSpace(node, text) {
+      // Discard only short, collapsible ASCII spacing beside normal-flow blocks.
+      // Inline word separators and preformatted/out-of-flow spacing must survive.
+      if (text.length > 4000 || !/^[ \t\r\n]+$/.test(text) || !node.parentElement
+        || !['normal','nowrap'].includes(getComputedStyle(node.parentElement).whiteSpace)) return false;
+      const before = node.previousSibling, after = node.nextSibling;
+      return !!(before || after) && (!before || blockInFlow(before)) && (!after || blockInFlow(after));
+    }
     function capture(node, depth) {
       visited++;
       if (depth > 15) { omittedSubtrees++; return null; }
       if (node.nodeType === Node.TEXT_NODE) {
         const text = node.textContent ?? '';
+        if (formattingSpace(node, text)) return null;
         const value = text.slice(0,Math.min(textLeft,4000));
         omittedText += text.length-value.length; textLeft -= value.length;
         if (!value) return null;

@@ -11,7 +11,7 @@ import { scanFixture } from './scanner/fixtureScanner.js';
 import { mapSitePreview } from './scanner/sitePreview.js';
 import { createDemoReport } from './services/analyze.js';
 import { openLocalDockerSession, removeAndConfirm } from './scanner/dockerWorker.js';
-import { assertContainerIsolation, containerArguments, IMAGE } from './scanner/containerPolicy.js';
+import { assertContainerIsolation, containerArguments, IMAGE, QA_IMAGE } from './scanner/containerPolicy.js';
 
 // Fulfill the app's requests from the built assets and real fixture responses, entirely inside network none.
 test('reports, exports and isolated previews work in Chromium, Firefox and WebKit', { timeout: 180000 }, async () => {
@@ -21,13 +21,17 @@ test('reports, exports and isolated previews work in Chromium, Firefox and WebKi
   const report = await scanFixture('barriers');
   const clearReport = await scanFixture('clear');
   const demoReport = createDemoReport(new URL('https://example.com'));
-  const sitePreview = mapSitePreview({url:'https://example.com/final',capturedAt:new Date().toISOString(),omittedSubtrees:0,omittedText:0,omittedStyles:0,nodes:[
+  const sitePreview = mapSitePreview({url:'https://example.org/final',capturedAt:new Date().toISOString(),omittedSubtrees:0,omittedText:0,omittedStyles:0,nodes:[
     {tag:'h1',attributes:{},style:{},hover:{},children:[{text:'Captured website marker'}]},
     {tag:'a',attributes:{},style:{color:'rgb(0, 0, 0)'},hover:{color:'rgb(255, 0, 0)'},children:[{text:'Captured link'}]},
     {tag:'form',attributes:{},style:{},hover:{},children:[{tag:'input',attributes:{},style:{},hover:{},children:[]},
       {tag:'button',attributes:{},style:{},hover:{},children:[{text:'Inactive captured button'}]}]},
     {tag:'aside',attributes:{},style:{},hover:{},children:[{text:'Static captured advertisement'}]},
-  ]},{scanId:'11111111-1111-4111-8111-111111111111',requestedUrl:'https://example.com/start',url:'https://example.com/final'});
+  ]},{scanId:'11111111-1111-4111-8111-111111111111',requestedUrl:'https://example.com/start',url:'https://example.org/final'});
+  const qualityPreviews=Object.fromEntries(Object.entries({empty:[],whitespace:[{text:' \n\t '}],sparse:[{text:'Short page'}],
+    text:[{text:'Captured page content. '.repeat(12)}]}).map(([key,nodes])=>[key,mapSitePreview({
+      url:sitePreview.url,capturedAt:new Date().toISOString(),omittedSubtrees:0,omittedText:0,omittedStyles:0,nodes,
+    },{scanId:sitePreview.scanId,requestedUrl:sitePreview.requestedUrl,url:sitePreview.url})]));
   const root = fileURLToPath(new URL('../', import.meta.url));
   const assets: Record<string, { body: string; type: string }> = {
     '/': { body: await readFile(join(root, 'dist/index.html'), 'utf8'), type: 'text/html' },
@@ -46,6 +50,7 @@ test('reports, exports and isolated previews work in Chromium, Firefox and WebKi
       args[args.indexOf('--label') + 1] = 'kindpath.preview=qa';
       args.splice(1, 0, '--interactive');
       args.splice(args.indexOf(IMAGE), 0, '--entrypoint=node');
+      args[args.indexOf(IMAGE)] = QA_IMAGE; // UI engines never select the scanner runtime image.
       args.splice(args.length - 1, 1, '--input-type=module', '-e', script);
       await session.command(args);
       assertContainerIsolation(JSON.parse(await session.command(['inspect', name])));
@@ -56,14 +61,14 @@ test('reports, exports and isolated previews work in Chromium, Firefox and WebKi
           { env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' }, timeout: 60000, maxBuffer: 5 * 1024 * 1024 },
           (error, output) => error ? reject(error) : resolve(output));
         child.stdin!.on('error', () => {});
-        child.stdin!.end(JSON.stringify({ browser, snapshot, barriersSnapshot, clearSnapshot, report, clearReport, demoReport, sitePreview, assets }));
+        child.stdin!.end(JSON.stringify({ browser, snapshot, barriersSnapshot, clearSnapshot, report, clearReport, demoReport, sitePreview, qualityPreviews, assets }));
       });
       const result = JSON.parse(stdout); assert.equal(result.passed, true); assert.equal(result.engine, browser);
       console.info(`${browser} ${result.version}: controlled browser checks passed`);
       for (const kind of browser === 'chromium' ? ['fixture', 'demo'] : []) {
         await writeFile(join(tmpdir(), `kindpath-report-export-${kind}.pdf`), Buffer.from(result[`${kind}Pdf`], 'base64'));
       }
-      for (const size of ['desktop', 'mobile', 'findingsDesktop', 'findingsMobile', 'matchingDesktop', 'matchingMobile']) {
+      for (const size of ['desktop', 'mobile', 'findingsDesktop', 'findingsMobile', 'matchingDesktop', 'matchingMobile', 'coverageDesktop', 'coverageMobile', 'qualityEmpty', 'qualitySparse']) {
         await writeFile(join(tmpdir(), `kindpath-${browser}-static-preview-${size}.png`), Buffer.from(result[size], 'base64'));
       }
     } finally {

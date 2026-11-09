@@ -69,7 +69,9 @@ test('forbidden redirects, untrusted TLS and a page changing during analysis nev
 
 for (const scenario of [
   {path:'/redirect',final:'/barriers'}, {path:'/content',final:'/content'},
+  {path:'/indented-content',final:'/indented-content'}, {path:'/indented-budget',final:'/indented-budget'},
   {path:'/forms',final:'/forms'}, {path:'/missing',final:'/missing'},
+  {path:'/same-url-history',final:'/same-url-history'}, {path:'/same-url-reload',final:'/same-url-reload'},
 ]) {
 test(`URL scan/capture handles controlled ${scenario.path} without public access`, {timeout:90000}, async () => {
   const { default: express } = await import('express');
@@ -112,12 +114,13 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
     const response = await fetch(`http://127.0.0.1:${address.port}/api/scan-public`, {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url:target}), signal: AbortSignal.timeout(80000),
     });
-    if (scenario.path === '/missing') {
+    if (scenario.path === '/missing' || scenario.path === '/same-url-reload') {
       assert.equal(response.status,503); const failure=await response.json();
       assert.equal(failure.code,'SCAN_FAILED'); assert.equal(failure.sitePreview,undefined);
+      assert.deepEqual(failure.diagnostic,scenario.path==='/missing' ? {stage:'page-loading',code:'HTTP_STATUS',httpStatus:404} : {stage:'accessibility-analysis',code:'PAGE_CHANGED_DURING_SCAN'});
     } else {
-    assert.equal(response.status, 200);
     const report = await response.json();
+    assert.equal(response.status,200,JSON.stringify({code:report.code,diagnostic:report.diagnostic}));
     assert.equal(report.mode, 'public'); assert.equal(report.requestedUrl, target); assert.equal(report.url,'http://example.com'+scenario.final);
     if (scenario.path === '/redirect') for (const id of ['image-alt','label','button-name']) assert.ok(report.findings.some((finding: {id:string}) => finding.id === id));
     assert.ok(report.limitations.some((text: string) => /requests were blocked by policy/.test(text)));
@@ -145,6 +148,23 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
       assert.ok(!report.sitePreview.html.includes('controlled-name-value'));
       assert.ok(!report.sitePreview.html.includes('hidden-style-marker'));
     }
+    if(scenario.path==='/indented-content'||scenario.path==='/indented-budget') {
+      const html=report.sitePreview.html;
+      assert.match(html,/Inline-left<\/span> <span\b[^>]*>Inline-right/);
+      assert.match(html,/Box-left<\/span> <span\b[^>]*>Box-right/);
+      assert.match(html,/Pre-left<\/p>\n<p\b[^>]*>Pre-right/);
+      assert.match(html,/Nonbreaking-left<\/p>\u00a0<p\b[^>]*>Nonbreaking-right/);
+      assert.match(html,/Omitted-left<\/span> <span\b[^>]*>Omitted-right/);
+      assert.match(html,/Hidden-left<\/span> <span\b[^>]*>Hidden-right/);
+      assert.match(html,/Floating-left<\/span> <span\b[^>]*>Floating-right/);
+      assert.doesNotMatch(html,/controlled-retention-value|controlled-hidden-retention-marker|controlled-omitted-retention-marker|controlled-hidden-gap-marker/);
+      assert.match(html,/input[^>]* disabled/);
+      if(scenario.path==='/indented-content')assert.match(html,/Retained end-of-page marker/);
+      else {
+        assert.doesNotMatch(html,/Retained end-of-page marker/);
+        assert.ok(report.sitePreview.limitations.some((text:string)=>/At least [1-9]\d* subtrees/.test(text)));
+      }
+    }
     assert.ok(report.sitePreview.limitations.length>0);
     }
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
@@ -156,4 +176,65 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
   } finally { await session.dispose(); }
 });
 
+}
+
+for (const scenario of ['multi-host','private-redirect','late-policy-failure']) {
+ const privateRedirect=scenario==='private-redirect', failLate=scenario==='late-policy-failure';
+ test(`public website controller handles controlled ${scenario} without public access`,{timeout:90000},async()=>{
+  const {createPublicUrlWorkerRunner}=await import('./scanner/publicUrlWorker.js');
+  const {createPublicSiteScanner}=await import('./scanner/publicScanner.js');
+  const {createDestinationPlan}=await import('./scanner/destinationSnapshot.js');
+  const {prepareNamespace,createFirewallContainer}=await import('./scanner/firewallDocker.js');
+  const calls=new Map<string,number>();
+  let browserCompleted=false,injectedFailure=false;
+  let releaseLate!:()=>void;const lateDns=new Promise<void>(resolve=>releaseLate=resolve);
+  const capturedCommands:string[][]=[];
+  const worker=createPublicUrlWorkerRunner({enabled:()=>true,captureEnabled:()=>true,
+   planTarget:(url,signal)=>createDestinationPlan(url,async host=>{
+    calls.set(host,(calls.get(host)??0)+1);
+    if(host==='late.example.net')await lateDns;
+    // Rebinding or DNS-private resource answers must never create a connection.
+    const address=host==='blocked.example.org'||host==='rebind.example.net'&&calls.get(host)!==1?'127.0.0.1':host==='example.com'?'93.184.216.34':'93.184.216.36';
+    return [{address,family:4}];
+   },signal),
+   openSession:async()=>{
+    const session=await openLocalDockerSession();
+    return {...session,command:async(...args:Parameters<typeof session.command>)=>{
+      capturedCommands.push(args[0]);
+      if(failLate&&browserCompleted&&args[0].includes('replace')){injectedFailure=true;throw new Error('Controlled late firewall failure');}
+      const result=await session.command(...args);
+      if(args[0][0]==='start'&&args[0].some(arg=>arg.startsWith('kindpath-public-browser-'))){browserCompleted=true;releaseLate();}
+      return result;
+    }};
+   },
+   prepareNetwork:async(command,resources,signal)=>{
+    const ns=await prepareNamespace(command,resources,signal,'pinned');
+    for(const address of ['93.184.216.34','93.184.216.36']){
+     const origin=await createFirewallContainer(command,resources,ns.network,'origin',['gateway/public-origin.mjs'],signal,address);
+     await command(['start',origin.name],signal);
+    }
+    return ns;
+   },
+  });
+  const scan=createPublicSiteScanner({enabled:()=>true,captureEnabled:()=>true,worker});
+  const target='http://example.com/'+(privateRedirect?'private-redirect':'redirect');
+  if(privateRedirect||failLate)await assert.rejects(scan(target),error=>error instanceof ScannerError&&error.code==='SCAN_FAILED');
+  else {
+   const report=await scan(target);
+   assert.equal(report.mode,'public');assert.equal(report.requestedUrl,target);assert.equal(report.url,'http://example.org/page');
+   assert.equal(report.sitePreview?.scanId,report.scanId);assert.equal(report.sitePreview?.url,report.url);
+   assert.match(report.sitePreview!.html,/Multi-host rendered marker/);assert.match(report.sitePreview!.html,/Static website advertisement/);
+   assert.match(report.sitePreview!.html,/color:rgb\(0, 128, 0\)/);assert.match(report.sitePreview!.html,/:hover\{color:rgb\(255, 0, 0\)/);
+   assert.doesNotMatch(report.sitePreview!.html,/<(?:script|iframe|form|img|svg)\b|\b(?:href|src|onclick)=|synthetic-form-value/i);
+   for(const host of ['example.com','example.org','static.example.net','rebind.example.net','blocked.example.org','late.example.net'])assert.equal(calls.get(host),1,host);
+   assert.ok(report.limitations.some(text=>text.includes('requests failed')));
+  }
+  if(!privateRedirect)assert.ok(capturedCommands.some(args=>args.includes('replace')),'Additional public host must require a verified firewall update');
+  if(failLate)assert.equal(injectedFailure,true,'The late policy failure must be exercised after browser completion');
+  assert.equal(calls.get('blocked.example.org'),1);
+  const session=await openLocalDockerSession();
+  try {
+   for(const args of [['ps','--all','--quiet'],['network','ls','--quiet'],['volume','ls','--quiet']])assert.equal((await session.command([...args,'--filter','label=kindpath.scanner=public'])).trim(),'');
+  } finally {await session.dispose();}
+ });
 }
