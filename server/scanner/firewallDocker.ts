@@ -8,6 +8,8 @@ import { PUBLIC_LABEL } from './publicPolicy.js';
 
 export const FIREWALL_IMAGE = 'kindpath-firewall:local';
 export const FIXTURE_IP = '198.18.0.2';
+export const PINNED_FIXTURE_IP = '93.184.216.34';
+const PINNED_FIXTURE_SUBNET = '93.184.216.32/29';
 export type Namespace = { id: string; network: string; addresses: string[]; hash?: string; egress?: string };
 export const memoryTmpfs = '/tmp:rw,nosuid,nodev,noexec,size=16777216';
 
@@ -45,20 +47,21 @@ export async function createFirewallContainer(command: Command, resources: Resou
   if (typeof inspect[0].Id !== 'string' || !/^[a-f0-9]{64}$/.test(inspect[0].Id)) throw new Error('Missing namespace identity');
   return { name, id: inspect[0].Id as string };
 }
-export async function prepareNamespace(command: Command, resources: Resources, signal: AbortSignal, fixture = false): Promise<Namespace> {
+export async function prepareNamespace(command: Command, resources: Resources, signal: AbortSignal, fixture: boolean | 'pinned' = false): Promise<Namespace> {
+  const subnet = fixture === 'pinned' ? PINNED_FIXTURE_SUBNET : fixture ? '198.18.0.0/24' : undefined;
   const network = `kindpath-firewall-${randomUUID()}`;
   resources.networks.push(network);
   await command(['network', 'create', '--driver=bridge', '--internal', '--ipv6=false',
     '--opt=com.docker.network.bridge.gateway_mode_ipv4=isolated', '--label', PUBLIC_LABEL,
-    ...(fixture ? ['--subnet=198.18.0.0/24'] : []), network], signal);
+    ...(subnet ? [`--subnet=${subnet}`] : []), network], signal);
   const info = JSON.parse(await command(['network', 'inspect', network], signal));
   const n = info?.[0];
   if (info.length !== 1 || n.Name !== network || n.Driver !== 'bridge' || n.Internal !== true || n.EnableIPv6 !== false
     || n.Options?.['com.docker.network.bridge.gateway_mode_ipv4'] !== 'isolated'
-    || (fixture && n.IPAM?.Config?.[0]?.Subnet !== '198.18.0.0/24')) throw new Error('Unsafe firewall network');
-  const holder = await createFirewallContainer(command, resources, network, 'holder', ['firewall/control.mjs', fixture ? 'hold-fixture' : 'hold'], signal, fixture ? '198.18.0.3' : undefined);
+    || (subnet && n.IPAM?.Config?.[0]?.Subnet !== subnet)) throw new Error('Unsafe firewall network');
+  const holder = await createFirewallContainer(command, resources, network, 'holder', ['firewall/control.mjs', fixture ? 'hold-fixture' : 'hold'], signal, fixture === 'pinned' ? '93.184.216.35' : fixture ? '198.18.0.3' : undefined);
   await command(['start', holder.name], signal);
-  return { id: holder.id, network, addresses: fixture ? [FIXTURE_IP] : [] };
+  return { id: holder.id, network, addresses: fixture === true ? [FIXTURE_IP] : [] };
 }
 export async function firewallControl(command: Command, resources: Resources, ns: Namespace, task: 'setup' | 'verify', signal: AbortSignal) {
   const helper = await createFirewallContainer(command, resources, `container:${ns.id}`, 'admin',
