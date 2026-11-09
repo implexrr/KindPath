@@ -1,3 +1,5 @@
+import { exchangeDockerJson } from './dockerExchange.js';
+import type { Exchange } from './dockerExchange.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
@@ -12,7 +14,7 @@ import type { WorkerTask } from './containerPolicy.js';
 const exec = promisify(execFile);
 const profile = fileURLToPath(new URL('../../scanner/seccomp.json', import.meta.url));
 export type Command = (args: string[], signal?: AbortSignal, timeout?: number) => Promise<string>;
-export interface DockerSession { command: Command; dispose: () => Promise<void> }
+export interface DockerSession { command: Command; exchange?: Exchange; dispose: () => Promise<void> }
 
 export class ScannerError extends Error {
   constructor(public code: 'SCANNER_BUSY' | 'SCANNER_UNAVAILABLE' | 'SCAN_FAILED' | 'SCANNER_CLEANUP_FAILED', message: string) { super(message); }
@@ -119,6 +121,7 @@ export async function openLocalDockerSession(): Promise<DockerSession> {
       });
       return stdout;
     }),
+    exchange: (args, handle, signal) => exchangeDockerJson(docker, [...prefix, ...args], handle, signal),
     dispose: () => rm(config, { recursive: true, force: true }),
   };
 }

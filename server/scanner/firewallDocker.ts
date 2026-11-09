@@ -64,9 +64,9 @@ export async function prepareNamespace(command: Command, resources: Resources, s
   await command(['start', holder.name], signal);
   return { id: holder.id, network, addresses: fixture === true ? [FIXTURE_IP] : [] };
 }
-export async function firewallControl(command: Command, resources: Resources, ns: Namespace, task: 'setup' | 'verify', signal: AbortSignal) {
+export async function firewallControl(command: Command, resources: Resources, ns: Namespace, task: 'setup' | 'verify' | 'replace', signal: AbortSignal) {
   const helper = await createFirewallContainer(command, resources, `container:${ns.id}`, 'admin',
-    ['firewall/control.mjs', task, JSON.stringify(ns.addresses), ...(task === 'verify' ? [ns.hash ?? ''] : [])], signal);
+    ['firewall/control.mjs', task, JSON.stringify(ns.addresses), ...(task !== 'setup' ? [ns.hash ?? ''] : [])], signal);
   const proof = JSON.parse(await command(['start', '--attach', helper.name], signal));
   if (!/^[a-f0-9]{64}$/.test(proof?.policyHash) || !Number.isSafeInteger(proof?.droppedPackets) || proof.droppedPackets < 0
     || (task === 'verify' && proof.policyHash !== ns.hash)) throw new Error('Invalid firewall verification');

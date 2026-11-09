@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 
 // Only the trusted controller supplies numeric snapshots. No hostname, script, or rule text is accepted.
 export function addresses(value) {
-  if (!Array.isArray(value) || value.length > 16 || value.some(ip => typeof ip !== 'string' || isIP(ip) !== 4)) throw new Error('Invalid firewall snapshot');
+  if (!Array.isArray(value) || value.length > 64 || value.some(ip => typeof ip !== 'string' || isIP(ip) !== 4)) throw new Error('Invalid firewall snapshot');
   if (new Set(value).size !== value.length) throw new Error('Duplicate destination');
   return [...value].sort();
 }

@@ -1,3 +1,4 @@
+import { websiteUrl } from './url.mjs';
 import ipaddr from 'ipaddr.js';
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
@@ -17,7 +18,8 @@ export function validateTarget(raw, allowedHosts, connect = false) {
   const url = new URL(connect ? `https://${raw}/` : raw);
   if (url.username || url.password || url.hash || !['http:', 'https:'].includes(url.protocol)) throw new Error('Blocked destination');
   const host = url.hostname.toLowerCase();
-  if (isIP(host.replace(/^\[|\]$/g, '')) || !allowedHosts.includes(host) || host.endsWith('.')) throw new Error('Blocked destination');
+  if (allowedHosts === null) websiteUrl(url.href);
+  if (isIP(host.replace(/^\[|\]$/g, '')) || (allowedHosts !== null && !allowedHosts.includes(host)) || host.endsWith('.')) throw new Error('Blocked destination');
   const port = Number(url.port || (url.protocol === 'https:' ? 443 : 80));
   if (port !== (url.protocol === 'https:' ? 443 : 80)) throw new Error('Blocked port');
   if (connect && (raw !== `${host}:443` || url.protocol !== 'https:')) throw new Error('Blocked tunnel');
@@ -50,7 +52,7 @@ export function snapshotResolver(value, allowedHosts) {
   const entries = Object.entries(value);
   if (entries.length > allowedHosts.length) throw new Error('Invalid snapshot');
   const snapshot = new Map(entries.map(([host, answers]) => {
-    if (!allowedHosts.includes(host) || !Array.isArray(answers) || !answers.length || answers.length > 16) throw new Error('Invalid snapshot');
+    if ((allowedHosts !== null && !allowedHosts.includes(host)) || !Array.isArray(answers) || !answers.length || answers.length > 16) throw new Error('Invalid snapshot');
     const parsed = answers.map(publicAddress);
     if (parsed.some(item => !item || item.family !== 4)) throw new Error('Invalid snapshot');
     return [host, parsed.map(item => ({ address: item.address, family: 4 }))];

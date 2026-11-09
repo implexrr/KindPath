@@ -27,7 +27,7 @@ export async function cleanResources(command: Command, resources: Resources) {
   if (failed) throw failure();
 }
 export function createResourceRunner(
-  operation: (command: Command, resources: Resources, task: string, signal: AbortSignal) => Promise<unknown>,
+  operation: (command: Command, resources: Resources, task: string, signal: AbortSignal, session: DockerSession) => Promise<unknown>,
   openSession: () => Promise<DockerSession> = openLocalDockerSession,
 ) {
   let pending: Resources | undefined;
@@ -48,7 +48,7 @@ export function createResourceRunner(
       ]) if ((await session.command(args, deadline)).trim()) throw failure();
       owned = { containers: [], volumes: [], networks: [] };
       pending = owned;
-      return await operation(session.command, owned, task, deadline);
+      return await operation(session.command, owned, task, deadline, session);
     } catch (error) {
       if (error instanceof ScannerError) throw error;
       throw new ScannerError('SCAN_FAILED', 'The isolated firewall operation failed. No report was produced.');
