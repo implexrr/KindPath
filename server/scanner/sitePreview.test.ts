@@ -34,3 +34,15 @@ test('preview URL, capture metadata and omission counts must be valid', () => {
   const result=mapSitePreview({...raw(),omittedSubtrees:2,omittedText:10,omittedStyles:3},identity);
   assert.ok(result.limitations.some(text=>text.includes('2 subtrees, 10 text characters and 3 style declarations')));
 });
+
+test('common article and table structure keeps safe semantics and bounded layout styles',()=>{
+  const result=mapSitePreview(raw([element('article',[element('h4',[{text:'Details'}]),element('blockquote',[{text:'Quoted text'}]),
+    element('table',[element('caption',[{text:'Garden schedule'}]),element('tbody',[element('tr',[
+      element('th',[{text:'Day'}],{},{},{scope:'row'}),element('td',[{text:'Monday'}],{},{},{colspan:'2'})])])],{'border-collapse':'collapse','box-sizing':'border-box'}),element('hr')],
+    {'display':'grid','grid-template-columns':'200px 300px','white-space':'pre-wrap'})]),identity);
+  assert.match(result.html,/<h4/);assert.match(result.html,/<blockquote/);assert.match(result.html,/<table/);
+  assert.match(result.html,/scope="row"/);assert.match(result.html,/colspan="2"/);assert.match(result.html,/<hr[^>]*>/);
+  assert.match(result.html,/grid-template-columns:200px 300px;/);
+  for(const bad of [element('td',[],{},{},{colspan:'0'}),element('td',[],{},{},{rowspan:'101'}),
+    element('th',[],{},{},{scope:'script'}),element('div',[],{},{},{colspan:'1'})])assert.throws(()=>mapSitePreview(raw([bad]),identity));
+});

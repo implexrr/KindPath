@@ -73,7 +73,7 @@ try {
     });
     page.on('requestfailed', () => { failedRequests++; });
     page.on('response', response => { if (response.status() >= 400) failedRequests++; });
-    const response = await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 15_000 });
+    const response = await page.goto(target, { waitUntil: 'load', timeout: 15_000 });
     if (!response || !response.ok()) throw new Error('Navigation failed');
     const scannedUrl = page.url();
     page.on('framenavigated', frame => { if (frame === page.mainFrame()) pageChanged = true; });

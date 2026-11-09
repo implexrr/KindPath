@@ -9,7 +9,7 @@ export function SiteVisualPreview({ snapshot }: { snapshot: SitePreview }) {
   return <div className="preview-workspace">
     <div className="snapshot-source"><div><h3>Scanned website snapshot</h3>
       <p>This snapshot was captured in the same browser visit as this report. It is a limited visual approximation of {snapshot.url}.</p>
-      <p>Captured at <time dateTime={snapshot.capturedAt}>{new Date(snapshot.capturedAt).toLocaleTimeString()}</time>. Run another scan to create a new report and snapshot together.</p>
+      <p>Captured at <time dateTime={snapshot.capturedAt}>{new Date(snapshot.capturedAt).toLocaleTimeString()}</time>. Scroll within each preview to explore the page. This reflects the scan viewport, not a responsive device preview. Run another scan to update both the report and snapshot.</p>
     </div></div>
     <VisionControls settings={settings} onChange={setSettings}/>
     <div className="comparison">

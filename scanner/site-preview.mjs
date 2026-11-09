@@ -1,13 +1,17 @@
 // A bounded visual approximation. No source HTML, stylesheet text, image URLs or form values leave the worker.
 export async function captureSiteSnapshot(page) {
   const snapshot = await page.evaluate(() => {
-    const tags = new Set(['header','nav','main','section','article','aside','footer','div','span','p','h1','h2','h3','a','form','input','button','label','strong','em','small','br','ul','ol','li']);
+    const tags = new Set(['header','nav','main','section','article','aside','footer','div','span','p','h1','h2','h3','h4','h5','h6','blockquote','figure','figcaption','dl','dt','dd','table','caption','thead','tbody','tfoot','tr','th','td','hr','a','form','input','button','label','strong','em','small','br','ul','ol','li']);
     const length = /^(?:auto|none|normal|-?(?:\d{1,5})(?:\.\d{1,4})?px)(?: (?:auto|-?\d{1,5}(?:\.\d{1,4})?px)){0,3}$/;
     const color = /^(?:transparent|[a-z]{1,24}|#[a-fA-F0-9]{3,8}|rgba?\([0-9.,% ]{1,80}\))$/;
     const rules = new Map([
-      ...['width','max-width','min-height','margin','padding','gap','font-size','line-height','border-width','border-radius'].map(key => [key,length]),
+      ...['width','height','max-width','max-height','min-width','min-height','margin','padding','gap','font-size','line-height','border-width','border-radius'].map(key => [key,length]),
       ...['color','background-color','border-color'].map(key => [key,color]),
-      ['display', /^(?:none|block|inline|inline-block|flex|inline-flex|grid|list-item)$/],
+      ['box-sizing', /^(?:content-box|border-box)$/],
+      ['white-space', /^(?:normal|nowrap|pre|pre-wrap|pre-line|break-spaces)$/],
+      ['overflow-wrap', /^(?:normal|break-word|anywhere)$/], ['border-collapse', /^(?:collapse|separate)$/],
+      ['grid-template-columns', /^(?:none|\d{1,5}(?:\.\d{1,4})?px(?: \d{1,5}(?:\.\d{1,4})?px){0,7})$/],
+      ['display', /^(?:none|block|inline|inline-block|flex|inline-flex|grid|list-item|table|inline-table|table-row-group|table-header-group|table-footer-group|table-row|table-cell|table-column-group|table-column|table-caption)$/],
       ['font-weight', /^(?:normal|bold|[1-9]00)$/], ['font-style', /^(?:normal|italic|oblique)$/],
       ['text-align', /^(?:start|end|left|right|center|justify)$/], ['text-decoration-line', /^(?:none|underline|line-through|overline)$/],
       ['border-style', /^(?:none|solid|dashed|dotted|double)$/], ['flex-direction', /^(?:row|column|row-reverse|column-reverse)$/],
@@ -62,6 +66,8 @@ export async function captureSiteSnapshot(page) {
         nodes++; return {text:value};
       }
       if (!(node instanceof HTMLElement) || (!tags.has(node.localName) && !(node instanceof HTMLImageElement))) { omittedSubtrees++; return null; }
+      const computed=getComputedStyle(node);
+      if (node.hidden || computed.display === 'none' || ['hidden','collapse'].includes(computed.visibility)) { omittedSubtrees++; return null; }
       if (node instanceof HTMLImageElement) return capture(document.createTextNode('[Image omitted]'),depth);
       nodes++;
       const attributes = {};
@@ -69,7 +75,14 @@ export async function captureSiteSnapshot(page) {
         const value = node.getAttribute(key);
         if (value && value.length <= 120) attributes[key] = value;
       }
-      const normal = styles(getComputedStyle(node)); const highlighted = {};
+      if (['td','th'].includes(node.localName)) {
+        for (const key of ['colspan','rowspan']) {
+          const value=node.getAttribute(key); if (value && /^(?:[1-9][0-9]?|100)$/.test(value)) attributes[key]=value;
+        }
+        const scope=node.getAttribute('scope');
+        if (node.localName === 'th' && ['row','col','rowgroup','colgroup'].includes(scope)) attributes.scope=scope;
+      }
+      const normal = styles(computed); const highlighted = {};
       if (node.localName === 'a' || node.localName === 'button') {
         for (const [selector, declaration] of hover) {
           try { if (node.matches(selector)) Object.assign(highlighted,styles(declaration)); } catch {}

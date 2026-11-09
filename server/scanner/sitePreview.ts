@@ -2,13 +2,17 @@ import { PREVIEW_GUARD } from '../../shared/previewPolicy.js';
 import type { SitePreview } from '../../shared/types.js';
 import { validatePublicUrl } from './publicPolicy.js';
 
-const tags = new Set(['header','nav','main','section','article','aside','footer','div','span','p','h1','h2','h3','a','form','input','button','label','strong','em','small','br','ul','ol','li']);
+const tags = new Set(['header','nav','main','section','article','aside','footer','div','span','p','h1','h2','h3','h4','h5','h6','blockquote','figure','figcaption','dl','dt','dd','table','caption','thead','tbody','tfoot','tr','th','td','hr','a','form','input','button','label','strong','em','small','br','ul','ol','li']);
 const length = /^(?:auto|none|normal|-?(?:\d{1,5})(?:\.\d{1,4})?px)(?: (?:auto|-?\d{1,5}(?:\.\d{1,4})?px)){0,3}$/;
 const color = /^(?:transparent|[a-z]{1,24}|#[a-fA-F0-9]{3,8}|rgba?\([0-9.,% ]{1,80}\))$/;
 const styles = new Map<string,RegExp>([
-  ...['width','max-width','min-height','margin','padding','gap','font-size','line-height','border-width','border-radius'].map(key => [key,length] as [string,RegExp]),
+  ...['width','height','max-width','max-height','min-width','min-height','margin','padding','gap','font-size','line-height','border-width','border-radius'].map(key => [key,length] as [string,RegExp]),
   ...['color','background-color','border-color'].map(key => [key,color] as [string,RegExp]),
-  ['display', /^(?:none|block|inline|inline-block|flex|inline-flex|grid|list-item)$/],
+  ['box-sizing', /^(?:content-box|border-box)$/],
+      ['white-space', /^(?:normal|nowrap|pre|pre-wrap|pre-line|break-spaces)$/],
+      ['overflow-wrap', /^(?:normal|break-word|anywhere)$/], ['border-collapse', /^(?:collapse|separate)$/],
+      ['grid-template-columns', /^(?:none|\d{1,5}(?:\.\d{1,4})?px(?: \d{1,5}(?:\.\d{1,4})?px){0,7})$/],
+      ['display', /^(?:none|block|inline|inline-block|flex|inline-flex|grid|list-item|table|inline-table|table-row-group|table-header-group|table-footer-group|table-row|table-cell|table-column-group|table-column|table-caption)$/],
   ['font-weight', /^(?:normal|bold|[1-9]00)$/], ['font-style', /^(?:normal|italic|oblique)$/],
   ['text-align', /^(?:start|end|left|right|center|justify)$/], ['text-decoration-line', /^(?:none|underline|line-through|overline)$/],
   ['border-style', /^(?:none|solid|dashed|dotted|double)$/], ['flex-direction', /^(?:row|column|row-reverse|column-reverse)$/],
@@ -47,7 +51,13 @@ export function mapSitePreview(raw: unknown, identity: {scanId:string;requestedU
     if (Object.keys(node).sort().join(',') !== 'attributes,children,hover,style,tag' || typeof node.tag !== 'string' || !tags.has(node.tag) || !Array.isArray(node.children)) return invalid();
     const tag = node.tag === 'form' ? 'div' : node.tag;
     const attrs = Object.entries(record(node.attributes));
-    if (attrs.some(([key,value]) => !['aria-label','aria-hidden'].includes(key) || typeof value !== 'string' || value.length > 120)) return invalid();
+    if (attrs.some(([key,value]) => {
+      if (typeof value !== 'string' || value.length > 120) return true;
+      if (['aria-label','aria-hidden'].includes(key)) return false;
+      if (['td','th'].includes(tag) && ['colspan','rowspan'].includes(key)) return !/^(?:[1-9][0-9]?|100)$/.test(value);
+      if (tag === 'th' && key === 'scope') return !['row','col','rowgroup','colgroup'].includes(value);
+      return true;
+    })) return invalid();
     const className = `kp-node-${count}`;
     const normal = declarations(node.style), hover = declarations(node.hover);
     if (hover && !['a','button'].includes(tag)) return invalid();
@@ -55,7 +65,7 @@ export function mapSitePreview(raw: unknown, identity: {scanId:string;requestedU
     if (css.length > 30000) return invalid();
     const attributes = attrs.filter(([key]) => tag !== 'a' || key !== 'aria-hidden').map(([key,value]) => ` ${key}="${escape(value as string)}"`).join('');
     const disabled = tag === 'a' ? ' aria-disabled="true"' : ['input','button'].includes(tag) ? ' disabled' : '';
-    if (tag === 'input' || tag === 'br') { if (node.children.length) return invalid(); return `<${tag} class="${className}"${attributes}${disabled}>`; }
+    if (tag === 'input' || tag === 'br' || tag === 'hr') { if (node.children.length) return invalid(); return `<${tag} class="${className}"${attributes}${disabled}>`; }
     return `<${tag} class="${className}"${attributes}${disabled}>${node.children.map(child => render(child,depth+1)).join('')}</${tag}>`;
   }
   const body = snapshot.nodes.map(node => render(node)).join('');
