@@ -34,6 +34,10 @@ export async function preparePublicEgress(command: Command, resources: Resources
 // Callers own all resources and must verify cleanup before returning this untrusted output.
 export async function scanInNamespace(command: Command, resources: Resources, ns: Namespace, value: DestinationPlan | undefined, signal: AbortSignal): Promise<unknown> {
   const plan = value ? validateDestinationPlan(value) : undefined;
+  if (plan && (!ns.egress || !resources.networks.includes(ns.egress)
+    || JSON.stringify(ns.addresses) !== JSON.stringify(plan.addresses) || !/^[a-f0-9]{64}$/.test(ns.hash ?? ''))) {
+    throw new Error('Public scan requires verified pinned egress');
+  }
   const id = randomUUID();
   const volume = `kindpath-public-ipc-${id}`;
   resources.volumes.push(volume);

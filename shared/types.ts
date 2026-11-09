@@ -13,6 +13,7 @@ export interface Finding {
 }
 export interface Report {
   mode: 'demo' | 'fixture' | 'public';
+  requestedUrl?: string;
   url: string;
   generatedAt: string;
   manualChecks: string[];
