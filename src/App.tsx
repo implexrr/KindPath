@@ -110,7 +110,7 @@ export function App() {
     <main id="main">
       <section className="hero"><div className="hero-copy"><div className="eyebrow"><span className="tiny-sun" aria-hidden="true">✳</span> A MORE INCLUSIVE INTERNET STARTS HERE</div><h1>A clearer web.<br/><em>For everyone.</em></h1><p>See your website from a different perspective.<br className="desktop-break"/> Find accessibility barriers, understand their impact,<br className="desktop-break"/> and take the next step toward a more welcoming web.</p>
       <WebsiteForm activity={busy ? lastAttempt?.mode === 'demo' ? 'Preparing an example report…' : 'Checking the page and preparing your report…' : cancelled ? 'Request cancelled. You can try again shortly.' : report ? 'Report ready.' : ''}
-        onCancel={cancel} canRetry={!busy && !!lastAttempt && (!!error || cancelled)}
+        onCancel={cancel} cancelled={cancelled} canRetry={!busy && !!lastAttempt && (!!error || cancelled)}
         onRetry={() => { if (lastAttempt) void analyze(lastAttempt.value,lastAttempt.mode); }} publicScanningEnabled={publicEnabled} allowedHosts={allowedHosts} url={url} busy={busy} error={error} onUrlChange={changeUrl} onSubmit={submit}
         onExample={() => { setUrl('https://example.com'); void analyze('https://example.com', 'demo'); }}
         fixture={selectedFixture} onFixtureChange={changeFixture} onFixtureScan={() => { void analyze(selectedFixture, 'fixture'); }}/></div>

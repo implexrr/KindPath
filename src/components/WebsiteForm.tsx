@@ -1,5 +1,6 @@
 import { FIXTURES, fixtureTitle } from '../../shared/fixtures';
 import type { FixtureId } from '../../shared/fixtures';
+import { useLayoutEffect, useRef } from 'react';
 import type { FormEvent } from 'react';
 
 interface WebsiteFormProps {
@@ -8,6 +9,7 @@ interface WebsiteFormProps {
   onCancel: () => void;
   onRetry: () => void;
   canRetry: boolean;
+  cancelled: boolean;
   publicScanningEnabled: boolean;
   allowedHosts: string[];
   busy: boolean;
@@ -20,7 +22,9 @@ interface WebsiteFormProps {
   onFixtureScan: () => void;
 }
 
-export function WebsiteForm({ url, activity, onCancel, onRetry, canRetry, busy, error, onUrlChange, onSubmit, onExample, onFixtureScan, fixture, onFixtureChange, publicScanningEnabled, allowedHosts }: WebsiteFormProps) {
+export function WebsiteForm({ url, activity, onCancel, onRetry, canRetry, cancelled, busy, error, onUrlChange, onSubmit, onExample, onFixtureScan, fixture, onFixtureChange, publicScanningEnabled, allowedHosts }: WebsiteFormProps) {
+  const retryButton=useRef<HTMLButtonElement>(null);
+  useLayoutEffect(()=>{ if(cancelled && canRetry)retryButton.current?.focus(); },[cancelled,canRetry]);
   return <>
     <form onSubmit={onSubmit} aria-busy={busy}>
       <label htmlFor="website">Your website URL</label>
@@ -38,7 +42,7 @@ export function WebsiteForm({ url, activity, onCancel, onRetry, canRetry, busy, 
       <p id="demo-note" className="form-note">{publicScanningEnabled ? `Allowed hosts: ${allowedHosts.join(', ')}. Automated single-page checks only.` : 'Demo mode · URLs aren’t fetched. Findings are illustrative.'}</p>
       <p className="form-note" role="status" aria-live="polite">{activity}</p>
       {busy && <button type="button" className="secondary" onClick={onCancel}>Cancel request</button>}
-      {canRetry && <button type="button" className="secondary" onClick={onRetry}>Try again</button>}
+      {canRetry && <button ref={retryButton} type="button" className="secondary" onClick={onRetry}>Try again</button>}
       {error && <p role="alert" id="url-error" className="error">{error}</p>}
     </form>
     <button className="text-button" disabled={busy} onClick={onExample}>

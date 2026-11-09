@@ -494,6 +494,7 @@ try {
   await page.getByRole('button',{name:'Cancel request',exact:true}).click();
   await page.getByRole('status').filter({hasText:'Request cancelled'}).waitFor();
   assert.equal(await page.locator('.results').count(),0);
+  assert.equal(await page.getByRole('button',{name:'Try again',exact:true}).evaluate(node=>node===document.activeElement),true);
   delayScan=false; activeReport=data.report; releaseScan();
   await page.getByRole('button',{name:'Try again',exact:true}).click();
   await page.getByText('Scanned fixture: Garden form with barriers',{exact:true}).waitFor();
