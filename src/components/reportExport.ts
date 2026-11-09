@@ -13,7 +13,7 @@ export function reportSource(report: Report) {
     page: isFixture(report.scanner?.fixture) ? fixtureTitle(report.scanner.fixture) : report.url,
     description: 'Real automated results for a built-in page. No submitted public website was fetched.',
   };
-  return { label: 'Automated page scan', page: report.url, description: 'Automated results for the submitted page only.' };
+  return { label: 'Automated page scan', page: report.url, description: 'Automated results for the final scanned page only; this may differ from the requested URL after a redirect.' };
 }
 
 // Project the known report fields explicitly. Preview HTML and incidental UI/server fields are not exported.
@@ -31,6 +31,7 @@ export function createReportExport(report: Report) {
   ])];
   const exported: Report = {
     mode: report.mode, url: report.url, generatedAt: report.generatedAt,
+    ...(report.mode === 'public' && report.requestedUrl ? { requestedUrl: report.requestedUrl } : {}),
     manualChecks: [...report.manualChecks], findings: report.findings.map(copyFinding), limitations,
     ...(report.scanner ? { scanner: {
       engineVersion: report.scanner.engineVersion, fixture: report.scanner.fixture,

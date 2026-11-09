@@ -14,25 +14,31 @@ try {
   let previews = 0; const unexpected = [];
   let activeReport = data.report;
   let apiRequests = 0;
+  let publicCapabilities = false, publicCalls = 0;
+  const publicReport = { ...data.report, mode: 'public', requestedUrl: 'https://example.com/start', url: 'https://example.com/final',
+    scanner: { ...data.report.scanner, fixture: 'public' }, limitations: ['Controlled URL-report UI response; no public site fetched.'] };
+  let publicResponse = publicReport, publicStatus = 200;
+  let delayPublic = false, releasePublic, publicHeld = false, notifyPublic;
   async function assertDownload(expected) {
     const requestsBefore = apiRequests;
     const pending = page.waitForEvent('download');
     const link = page.getByRole('link', { name: 'Download report JSON', exact: true });
     await link.press('Enter');
     const download = await pending;
-    assert.match(download.suggestedFilename(), /^kindpath-(demo|fixture)-report-[0-9TZ-]+\.json$/);
+    assert.match(download.suggestedFilename(), /^kindpath-(demo|fixture|public)-report-[0-9TZ-]+\.json$/);
     const stream = await download.createReadStream();
     const parts = []; for await (const chunk of stream) parts.push(chunk);
     const exported = JSON.parse(Buffer.concat(parts).toString('utf8'));
     assert.equal(exported.application, 'KindPath'); assert.equal(exported.formatVersion, 1);
     assert.equal(exported.report.mode, expected.mode);
     assert.equal(exported.report.url, expected.url);
+    assert.equal(exported.report.requestedUrl, expected.requestedUrl);
     assert.equal(exported.report.generatedAt, expected.generatedAt);
     assert.deepEqual(exported.report.findings, expected.findings);
     assert.deepEqual(exported.report.scanner, expected.scanner);
     assert.deepEqual(exported.report.manualChecks, expected.manualChecks);
     for (const limitation of expected.limitations ?? []) assert.ok(exported.report.limitations.includes(limitation));
-    assert.equal(exported.source.label, expected.mode === 'demo' ? 'Illustrative report' : 'Real fixture scan');
+    assert.equal(exported.source.label, expected.mode === 'demo' ? 'Illustrative report' : expected.mode === 'fixture' ? 'Real fixture scan' : 'Automated page scan');
     assert.ok(exported.report.limitations.some(text => text.includes('do not establish accessibility conformance')));
     assert.equal('html' in exported.report, false);
     assert.equal(apiRequests, requestsBefore, 'Export must not request another scan or capture');
@@ -50,6 +56,10 @@ try {
       for (const element of finding.elements) assert.ok((await printed.textContent()).includes(element.guidance));
     }
     assert.ok((await printed.textContent()).includes(expected.generatedAt));
+    if (expected.requestedUrl) {
+      assert.ok((await printed.textContent()).includes(expected.requestedUrl));
+      assert.ok((await printed.textContent()).includes(expected.url));
+    }
     const pdf = engine === 'chromium' ? await page.pdf({ format: 'A4', printBackground: false, tagged: true, outline: true }) : null;
     if (pdf) {
       assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
@@ -73,8 +83,16 @@ try {
     if (url.protocol === 'blob:' && url.origin === 'http://kindpath-ui.invalid') { await route.continue(); return; }
     if (url.pathname.startsWith('/api/')) apiRequests++;
     if (url.hostname !== 'kindpath-ui.invalid') { unexpected.push(url.hostname); await route.abort(); return; }
-    if (url.pathname === '/api/scanning-capabilities') { await route.fulfill({ json: { publicScanningEnabled: false, allowedHosts: ['example.com'] } }); return; }
+    if (url.pathname === '/api/scanning-capabilities') { await route.fulfill({ json: { publicScanningEnabled: publicCapabilities, allowedHosts: ['example.com'] } }); return; }
     if (url.pathname === '/api/analyze') { await route.fulfill({ json: data.demoReport }); return; }
+    if (url.pathname === '/api/scan-public') {
+      publicCalls++;
+      assert.deepEqual(route.request().postDataJSON(), { url: publicReport.requestedUrl });
+      const response = publicResponse, status = publicStatus, delayed = delayPublic;
+      if (delayed) { publicHeld = true; notifyPublic?.(); await new Promise(resolve => { releasePublic = resolve; }); }
+      try { await route.fulfill({ status, json: response }); } catch (error) { if (!delayed) throw error; }
+      return;
+    }
     if (url.pathname === '/api/scan-fixture') {
       assert.ok(['barriers', 'clear'].includes(route.request().postDataJSON().fixture));
       const report = activeReport;
@@ -371,6 +389,56 @@ try {
   await page.waitForFunction(() => document.activeElement?.matches('.results'));
   await assertDownload(data.demoReport);
   const demoPdf = await printablePdf(data.demoReport);
+  // Mock capability/HTTP responses inside network-none only. The actual app/API gates stay disabled.
+  publicCapabilities = true;
+  await page.reload();
+  const publicButton = page.getByRole('button', { name: 'Scan allowlisted website', exact: true });
+  await publicButton.waitFor();
+  await page.getByLabel('Your website URL').fill(publicReport.requestedUrl);
+  await publicButton.click();
+  await page.locator('.results').getByText('Scanned page: ' + publicReport.url, { exact: true }).waitFor();
+  await page.locator('.results').getByText('Requested URL: ' + publicReport.requestedUrl, { exact: true }).waitFor();
+  await page.waitForFunction(() => document.activeElement?.matches('.results'));
+  assert.equal(await page.getByText('Automated page scan', { exact: true }).count(), 1);
+  await assertDownload(publicReport);
+  await printablePdf(publicReport);
+  await page.getByRole('button', { name: /Visual preview/ }).click();
+  assert.equal(await page.locator('iframe').count(), 0);
+  await page.getByText('This built-in illustration is separate from the website report. Public websites are not captured.', { exact: true }).waitFor();
+  // Example exploration must remain a demo even when URL scanning is available.
+  const scansBeforeExample = publicCalls;
+  await page.getByRole('button', { name: 'Just exploring? Try an example', exact: true }).click();
+  await page.getByRole('region', { name: 'Example issues to explore', exact: true }).waitFor();
+  assert.equal(publicCalls, scansBeforeExample);
+  await page.getByLabel('Your website URL').fill(publicReport.requestedUrl);
+  for (const wrong of [{ ...publicReport, requestedUrl: 'https://example.com/old' },
+    { ...publicReport, url: 'http://127.0.0.1/' }, data.demoReport]) {
+    publicResponse = wrong;
+    await publicButton.click();
+    await page.getByRole('alert').filter({ hasText: 'report did not match' }).waitFor();
+    assert.equal(await page.locator('.results').count(), 0);
+  }
+  for (const [status, code] of [[429, 'SCANNER_BUSY'], [503, 'SCAN_FAILED']]) {
+    publicStatus = status; publicResponse = { error: 'Controlled unavailable scan', code };
+    await publicButton.click();
+    await page.getByRole('alert').filter({ hasText: 'Controlled unavailable scan' }).waitFor();
+    assert.equal(await page.locator('.results').count(), 0);
+  }
+  publicStatus = 200; publicResponse = publicReport;
+  delayPublic = true;
+  const publicStarted = new Promise(resolve => { notifyPublic = resolve; });
+  await publicButton.click();
+  await page.waitForFunction(() => document.querySelector('form').getAttribute('aria-busy') === 'true');
+  let heldTimer;
+  try { await Promise.race([publicStarted, new Promise((_, reject) => { heldTimer = setTimeout(() => reject(new Error('Controlled URL request was not intercepted')), 10000); })]); }
+  finally { clearTimeout(heldTimer); }
+  assert.equal(publicHeld, true);
+  await page.getByLabel('Built-in page').selectOption('clear');
+  activeReport = data.clearReport;
+  delayPublic = false; releasePublic();
+  await page.getByRole('button', { name: 'Run isolated fixture scan' }).click();
+  await page.getByText('Scanned fixture: Labelled garden form', { exact: true }).waitFor();
+  assert.equal(await page.locator('.results').getByText('Scanned page: ' + publicReport.url, { exact: true }).count(), 0);
   assert.deepEqual(unexpected, []);
   process.stdout.write(JSON.stringify({ passed: true, engine, version: browser.version(), desktop, mobile, findingsDesktop, findingsMobile, matchingDesktop, matchingMobile, fixturePdf, demoPdf }));
 } finally { await browser.close(); }

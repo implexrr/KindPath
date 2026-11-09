@@ -19,7 +19,8 @@ export function PrintableReport({ report }: { report: Report }) {
   return <article className="print-report" aria-label="Complete printable accessibility report">
     <header><p>KindPath · {exported.source.label}</p><h1>Accessibility report</h1>
       <p><strong>Source:</strong> {exported.source.page}</p>
-      <p><strong>{report.mode === 'fixture' ? 'Fixture identifier' : 'Submitted URL'}:</strong> {complete.url}</p>
+      <p><strong>{report.mode === 'fixture' ? 'Fixture identifier' : report.mode === 'public' ? 'Scanned page' : 'Submitted URL'}:</strong> {complete.url}</p>
+      {complete.mode === 'public' && complete.requestedUrl && <p><strong>Requested URL:</strong> {complete.requestedUrl}</p>}
       <p><strong>Report generated:</strong> <time dateTime={complete.generatedAt}>{complete.generatedAt}</time></p>
       <p>{exported.source.description}</p>
       <p>Complete report · All returned findings and element guidance are included, regardless of the on-screen filter. Preview snapshots and visual effects are excluded.</p>

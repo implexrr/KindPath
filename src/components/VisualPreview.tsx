@@ -38,7 +38,7 @@ export function VisualPreview({ fixture }: { fixture: PreviewFixtureId }) {
   }
   return <div className="preview-workspace">
     <div className="snapshot-source">
-      <div><h3>Built-in {title} snapshot</h3><p>{fixture === 'garden' ? 'This illustration is separate from the demo report.' : 'This preview uses the same built-in page as the fixture findings above.'} Public websites are not captured.</p>
+      <div><h3>Built-in {title} snapshot</h3><p>{fixture === 'garden' ? 'This built-in illustration is separate from the website report.' : 'This preview uses the same built-in page as the fixture findings above.'} Public websites are not captured.</p>
         {snapshot && <p>Captured at <time dateTime={snapshot.capturedAt}>{new Date(snapshot.capturedAt).toLocaleTimeString()}</time>. Scroll within each preview to explore the whole page.</p>}</div>
       <button className="secondary" disabled={busy} onClick={() => { void generate(); }}>
         {busy ? 'Generating snapshot…' : snapshot ? 'Refresh fixture snapshot' : 'Generate fixture snapshot'}

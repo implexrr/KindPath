@@ -43,7 +43,7 @@ export function WebsiteForm({ url, busy, error, onUrlChange, onSubmit, onExample
         {FIXTURES.map(id => <option key={id} value={id}>{fixtureTitle(id)}</option>)}
       </select>
       <button className="secondary" disabled={busy} onClick={onFixtureScan}>Run isolated fixture scan</button>
-      <p className="form-note" id="fixture-selection-note">Scan this built-in page, then preview the same page. Changing the selection clears current results. Public URL scanning is disabled.</p>
+      <p className="form-note" id="fixture-selection-note">Scan this built-in page, then preview the same page. Changing the selection clears current results.{!publicScanningEnabled && ' Public URL scanning is disabled.'}</p>
     </div>
   </>;
 }
