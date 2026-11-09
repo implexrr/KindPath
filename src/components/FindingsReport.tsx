@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { Finding, Report } from '../../shared/types';
 
-const severityOrder: Finding['severity'][] = ['Critical', 'Serious', 'Moderate', 'Minor', 'Unknown'];
+import { severityOrder } from './reportExport';
 
 function ElementGuidance({ finding, review = false }: { finding: Finding; review?: boolean }) {
   return <details className="element-guidance">

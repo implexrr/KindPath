@@ -12,7 +12,7 @@
     "dev:api": "tsx watch server/index.ts",
     "check": "tsc --noEmit",
     "build": "npm run check && vite build",
-    "test": "tsx --test server/app.test.ts server/scanner/*.test.ts src/components/visualEffects.test.ts",
+    "test": "tsx --test server/app.test.ts server/scanner/*.test.ts src/components/visualEffects.test.ts src/components/reportExport.test.ts",
     "scanner:build": "node scripts/build-scanner.mjs",
     "test:scanner": "tsx --test server/scanner.integration.ts",
     "test:gateway:unit": "node scripts/test-gateway-unit.mjs",

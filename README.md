@@ -7,6 +7,7 @@ KindPath explores website accessibility through automated checks, actionable exa
 - Website URL submission with server-side validation and clear error messages.
 - Real axe-core checks on two controlled fixtures, with violations separated from checks needing review.
 - Impact-first findings, severity counts/filtering, and repair guidance paired with each affected element.
+- Complete JSON downloads and a print layout for saving reports as PDF.
 - Example accessibility findings with severity, impact, and suggested improvements.
 - Side-by-side previews with adjustable colour, contrast, blur, and peripheral field effects.
 - Matching snapshots for both scanning fixtures, plus a separate garden illustration for demo reports; navigation and forms stay disabled.
@@ -34,7 +35,7 @@ Open http://127.0.0.1:5173. The development launcher starts Vite on port 5173 an
 
 ```sh
 npm run check  # Check frontend and backend TypeScript
-npm test       # Run API, validation, and visual-effect model tests
+npm test       # Run API, validation, visual-effect, and report export tests
 npm run build  # Check types and create the frontend dist/ output
 ```
 
@@ -117,6 +118,14 @@ Report findings now use this structure, including `scanner.incomplete` entries:
 
 `elements` replaces the previous flattened `location` and `fix` fields. An empty target list means no selector was supplied; an empty element list receives a manual-review prompt. Worker summaries are validated before mapping, and raw element HTML is omitted. Scanner output is bounded to 100 rules per category and 20 elements per rule; displayed counts describe returned results. Demo findings use the same structure and remain clearly illustrative. Public URL capture and scanning remain disabled.
 
+## Export reports
+
+After generating a report, choose **Download report JSON** or **Print / save as PDF**. In the browser print dialog, select a PDF destination to save a file. Both exports include the full report regardless of the severity filter: source labels, submitted URL or fixture identifier, report timestamp, every returned finding and element guidance, inconclusive checks, manual-check prompts, scanner metadata when available, and scope limitations. Printing includes guidance even when its on-screen disclosure is collapsed. Preview snapshots and vision settings are excluded.
+
+Exports are generated locally from the existing report; they do not trigger scans, capture websites, or upload data. Download filenames use report mode and timestamp. The versioned JSON envelope contains `application: "KindPath"`, `formatVersion: 1`, `source`, and `report`; report fields are explicitly selected rather than copying arbitrary response properties. Text remains text in both formats. The temporary download URL is released when the report changes or is cleared.
+
+Demo exports remain labelled **Illustrative report** and state that the URL was not fetched or assessed. Fixture exports identify the built-in page and remain distinct from checks needing manual review. Zero findings is not a conformance claim. PDF pagination and accessibility tagging depend on the browser; this print feature does not certify an accessible PDF.
+
 ## Technology
 
 React, TypeScript, Vite, and Express. Tests use Node's built-in test runner through tsx. The lockfile records resolved dependency versions.
@@ -181,4 +190,4 @@ npm run scanner:build
 npm run test:preview # Isolated browser checks for reports and previews
 ```
 
-The browser check runs Chromium inside the existing isolated Docker image, with no host mounts or network access. Only public build assets and generated fixture responses are passed through standard input. It exercises report sorting/filtering, per-element guidance, manual-review and empty states, demo/fixture reports, matching fixture previews, selection changes with delayed/mismatched responses, loading/failure/retry, hover behavior, disabled navigation/forms, independent and combined visual effects, rendered-image changes, keyboard interaction, presets/pause/reset, refresh/tab persistence, and a 390px layout. Screenshots are written to the operating system's temporary directory. No browser is installed or launched on the host.
+The browser check runs Chromium, Firefox, and WebKit inside the existing isolated Docker image, with no host mounts or network access. Only public build assets and generated fixture responses are passed through standard input. It exercises real JSON downloads, complete print output with active filters, download URL cleanup, report sorting/filtering, per-element guidance, manual-review and empty states, demo/fixture reports, matching fixture previews, selection changes with delayed/mismatched responses, loading/failure/retry, hover behavior, disabled navigation/forms, independent and combined visual effects, rendered-image changes, keyboard interaction, presets/pause/reset, refresh/tab persistence, and a 390px layout. Each engine verifies downloads and print-media layout. Chromium additionally produces tagged PDF samples with English language, headings, lists, and an outline; regression checks inspect those markers. This does not certify PDF/UA conformance or control native print-dialog settings. WebKit verification covers the engine, not the Safari application. Screenshots and browser-generated print samples are written to the operating system's temporary directory. No browser is installed or launched on the host.
