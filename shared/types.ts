@@ -11,7 +11,14 @@ export interface Finding {
   impact: string;
   elements: FindingElement[];
 }
+export interface ScanCoverage {
+  blockedRequests: number;
+  failedRequests: number;
+  omittedRules: number;
+  omittedNodes: number;
+}
 export interface Report {
+  coverage?: ScanCoverage;
   mode: 'demo' | 'fixture' | 'public';
   requestedUrl?: string;
   scanId?: string;

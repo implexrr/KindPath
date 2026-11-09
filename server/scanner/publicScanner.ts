@@ -1,3 +1,4 @@
+import { readScanCoverage } from '../../shared/scanCoverage.js';
 import { readDiagnostic, classifyFailure } from '../../scanner/gateway/diagnostics.mjs';
 import { randomUUID } from 'node:crypto';
 import { mapSitePreview } from './sitePreview.js';
@@ -10,12 +11,9 @@ export function mapPublicReport(raw: unknown, requestedUrl?: string) {
   const report = mapWorkerReport(raw, 'public');
   const result = raw as { url?: unknown; coverage?: { blockedRequests?: unknown; failedRequests?: unknown; omittedRules?: unknown; omittedNodes?: unknown } };
   const finalUrl = validatePublicUrl(result.url);
-  const coverage = result.coverage;
-  if (!coverage || !Number.isSafeInteger(coverage.blockedRequests) || Number(coverage.blockedRequests) < 0
-    || !Number.isSafeInteger(coverage.failedRequests) || Number(coverage.failedRequests) < 0
-    || !Number.isSafeInteger(coverage.omittedRules) || Number(coverage.omittedRules) < 0
-    || !Number.isSafeInteger(coverage.omittedNodes) || Number(coverage.omittedNodes) < 0) throw new Error('Invalid scan coverage.');
-  return { ...report, mode: 'public' as const, url: finalUrl, ...(requestedUrl ? { requestedUrl: validatePublicUrl(requestedUrl) } : {}), limitations: [
+  const coverage = readScanCoverage(result.coverage);
+  if (!coverage) throw new Error('Invalid scan coverage.');
+  return { ...report, mode: 'public' as const, coverage, url: finalUrl, ...(requestedUrl ? { requestedUrl: validatePublicUrl(requestedUrl) } : {}), limitations: [
     'Only the initial top-level page at the default viewport was scanned; embedded frames and interactive states are excluded.',
     `${coverage.blockedRequests} requests were blocked by policy and ${coverage.failedRequests} requests failed (including gateway denials). Missing resources can change the result.`,
     ...(Number(coverage.omittedRules) || Number(coverage.omittedNodes) ? [
