@@ -15,6 +15,8 @@ import { assertContainerIsolation, containerArguments, IMAGE } from './scanner/c
 // Fulfill the app's requests from the built assets and real fixture responses, entirely inside network none.
 test('fixture reports and previews support actionable findings, keyboard controls, isolation, and mobile layout', { timeout: 90000 }, async () => {
   const snapshot = await captureFixturePreview();
+  const barriersSnapshot = await captureFixturePreview('barriers');
+  const clearSnapshot = await captureFixturePreview('clear');
   const report = await scanFixture('barriers');
   const clearReport = await scanFixture('clear');
   const demoReport = createDemoReport(new URL('https://example.com'));
@@ -45,10 +47,10 @@ test('fixture reports and previews support actionable findings, keyboard control
         { env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' }, timeout: 60000, maxBuffer: 5 * 1024 * 1024 },
         (error, output) => error ? reject(error) : resolve(output));
       child.stdin!.on('error', () => {});
-      child.stdin!.end(JSON.stringify({ snapshot, report, clearReport, demoReport, assets }));
+      child.stdin!.end(JSON.stringify({ snapshot, barriersSnapshot, clearSnapshot, report, clearReport, demoReport, assets }));
     });
     const result = JSON.parse(stdout); assert.equal(result.passed, true);
-    for (const size of ['desktop', 'mobile', 'findingsDesktop', 'findingsMobile']) {
+    for (const size of ['desktop', 'mobile', 'findingsDesktop', 'findingsMobile', 'matchingDesktop', 'matchingMobile']) {
       await writeFile(join(tmpdir(), `kindpath-static-preview-${size}.png`), Buffer.from(result[size], 'base64'));
     }
   } finally {

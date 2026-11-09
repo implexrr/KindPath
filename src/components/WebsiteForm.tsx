@@ -1,3 +1,5 @@
+import { FIXTURES, fixtureTitle } from '../../shared/fixtures';
+import type { FixtureId } from '../../shared/fixtures';
 import type { FormEvent } from 'react';
 
 interface WebsiteFormProps {
@@ -9,10 +11,12 @@ interface WebsiteFormProps {
   onUrlChange: (url: string) => void;
   onSubmit: (event: FormEvent) => void;
   onExample: () => void;
+  fixture: FixtureId;
+  onFixtureChange: (fixture: FixtureId) => void;
   onFixtureScan: () => void;
 }
 
-export function WebsiteForm({ url, busy, error, onUrlChange, onSubmit, onExample, onFixtureScan, publicScanningEnabled, allowedHosts }: WebsiteFormProps) {
+export function WebsiteForm({ url, busy, error, onUrlChange, onSubmit, onExample, onFixtureScan, fixture, onFixtureChange, publicScanningEnabled, allowedHosts }: WebsiteFormProps) {
   return <>
     <form onSubmit={onSubmit} aria-busy={busy}>
       <label htmlFor="website">Your website URL</label>
@@ -34,8 +38,12 @@ export function WebsiteForm({ url, busy, error, onUrlChange, onSubmit, onExample
       Just exploring? Try an example <span aria-hidden="true">↗</span>
     </button>
     <div className="fixture-scan">
+      <label htmlFor="scan-fixture">Built-in page</label>
+      <select id="scan-fixture" value={fixture} onChange={event => onFixtureChange(event.target.value as FixtureId)} aria-describedby="fixture-selection-note">
+        {FIXTURES.map(id => <option key={id} value={id}>{fixtureTitle(id)}</option>)}
+      </select>
       <button className="secondary" disabled={busy} onClick={onFixtureScan}>Run isolated fixture scan</button>
-      <p className="form-note">Real axe-core checks on a built-in example. Public URL scanning is disabled.</p>
+      <p className="form-note" id="fixture-selection-note">Scan this built-in page, then preview the same page. Changing the selection clears current results. Public URL scanning is disabled.</p>
     </div>
   </>;
 }

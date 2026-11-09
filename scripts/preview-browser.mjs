@@ -10,17 +10,36 @@ try {
   page.setDefaultTimeout(10000);
   let previews = 0; const unexpected = [];
   let activeReport = data.report;
+  let delayScan = false, releaseScan, scanHeld = false;
+  let delayPreview = false, releasePreview, previewHeld = false;
+  let wrongPreview = false;
+  const capturedFixtures = [];
+  const snapshots = new Map([['garden', data.snapshot], ['barriers', data.barriersSnapshot], ['clear', data.clearSnapshot]]);
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.hostname !== 'kindpath-ui.invalid') { unexpected.push(url.hostname); await route.abort(); return; }
     if (url.pathname === '/api/scanning-capabilities') { await route.fulfill({ json: { publicScanningEnabled: false, allowedHosts: ['example.com'] } }); return; }
     if (url.pathname === '/api/analyze') { await route.fulfill({ json: data.demoReport }); return; }
-    if (url.pathname === '/api/scan-fixture') { await route.fulfill({ json: activeReport }); return; }
+    if (url.pathname === '/api/scan-fixture') {
+      assert.ok(['barriers', 'clear'].includes(route.request().postDataJSON().fixture));
+      const report = activeReport;
+      const delayed = delayScan;
+      if (delayed) { scanHeld = true; await new Promise(resolve => { releaseScan = resolve; }); }
+      try { await route.fulfill({ json: report }); } catch (error) { if (!delayed) throw error; } // The delayed request is deliberately cancelled below.
+      return;
+    }
     if (url.pathname === '/api/preview-fixture') {
       previews++;
-      assert.deepEqual(route.request().postDataJSON(), { fixture: 'garden' });
+      const { fixture } = route.request().postDataJSON();
+      assert.deepEqual(Object.keys(route.request().postDataJSON()), ['fixture']);
+      assert.ok(snapshots.has(fixture)); capturedFixtures.push(fixture);
+      const snapshot = wrongPreview ? data.clearSnapshot : snapshots.get(fixture);
+      wrongPreview = false;
+      const delayed = delayPreview;
+      if (delayed) { previewHeld = true; await new Promise(resolve => { releasePreview = resolve; }); }
       await new Promise(done => setTimeout(done, 300));
-      await route.fulfill(previews === 1 ? { status: 503, json: { error: 'Fixture preview is temporarily unavailable. Try again.' } } : { json: data.snapshot }); return;
+      try { await route.fulfill(previews === 1 ? { status: 503, json: { error: 'Fixture preview is temporarily unavailable. Try again.' } } : { json: snapshot }); } catch (error) { if (!delayed) throw error; }
+      return;
     }
     const asset = data.assets[url.pathname];
     await route.fulfill(asset ? { body: asset.body, contentType: asset.type } : { status: 404, body: '' });
@@ -38,6 +57,8 @@ try {
     assert.equal(await card.locator('.element-target code').first().textContent(), firstWithElements.elements[0].targets.join(' → ') || 'Page (no selector provided)');
     assert.equal(await card.locator('.element-summary').first().textContent(), firstWithElements.elements[0].guidance);
   }
+  await page.getByRole('button', { name: 'Just exploring? Try an example', exact: true }).click();
+  await page.getByRole('region', { name: 'Example issues to explore', exact: true }).waitFor();
   await page.getByRole('button', { name: /Visual preview/ }).click();
   assert.equal(await page.locator('iframe').count(), 0);
   await page.getByRole('button', { name: 'Generate fixture snapshot' }).click();
@@ -193,6 +214,7 @@ try {
   await filter.selectOption('Critical');
   await page.getByText('No violations match this severity. Other findings are still in this report.', { exact: true }).waitFor();
   assert.equal(await reviews.locator('article').count(), 1);
+  await page.getByLabel('Built-in page', { exact: true }).selectOption('clear');
   activeReport = { ...data.clearReport, generatedAt: '2026-11-08T00:00:02.000Z' };
   await page.getByRole('button', { name: 'Run isolated fixture scan' }).click();
   await page.getByText('No automated violations were reported. This does not establish accessibility conformance; review the checks below and test manually.', { exact: true }).waitFor();
@@ -206,6 +228,74 @@ try {
   await page.getByText('Illustrative report', { exact: true }).waitFor();
   await examples.locator('article').first().locator('summary').click();
   assert.equal(await examples.locator('article').first().locator('.element-summary').textContent(), data.demoReport.findings[0].elements[0].guidance);
+  // Match real scanning fixtures to their own previews and discard old work on selection changes.
+  const fixtureChoice = page.getByLabel('Built-in page', { exact: true });
+  const scanButton = page.getByRole('button', { name: 'Run isolated fixture scan', exact: true });
+  const results = page.locator('.results');
+  await fixtureChoice.selectOption('barriers');
+  assert.equal(await results.count(), 0);
+  activeReport = data.report;
+  await scanButton.click(); await violations.waitFor();
+  await page.getByText('Scanned fixture: Garden form with barriers', { exact: true }).waitFor();
+  await page.getByRole('button', { name: /Visual preview/ }).click();
+  assert.equal(await page.locator('iframe').count(), 0, 'The previous demo snapshot must not appear for a scanned page');
+  wrongPreview = true;
+  await page.getByRole('button', { name: 'Generate fixture snapshot', exact: true }).click();
+  await page.getByRole('alert').filter({ hasText: 'preview response was invalid' }).waitFor();
+  assert.equal(await page.locator('iframe').count(), 0);
+  await page.getByRole('button', { name: 'Generate fixture snapshot', exact: true }).click();
+  await page.getByRole('button', { name: 'Refresh fixture snapshot', exact: true }).waitFor();
+  assert.equal(capturedFixtures.at(-1), 'barriers');
+  await page.getByRole('heading', { name: 'Built-in Garden form with barriers snapshot', exact: true }).waitFor();
+  assert.equal(await page.locator('iframe').first().getAttribute('title'), 'Original Garden form with barriers fixture snapshot');
+  assert.equal(await page.frameLocator('iframe').first().locator('.kindpath-image-placeholder').count(), 1);
+  for (const frame of await page.locator('iframe').all()) assert.equal(await frame.getAttribute('sandbox'), '');
+  assert.equal(await page.evaluate(() => document.querySelector('iframe').contentDocument), null);
+  assert.equal(await page.frameLocator('iframe').first().locator('input').isDisabled(), true);
+  assert.equal(await page.frameLocator('iframe').first().locator('button').isDisabled(), true);
+  await page.setViewportSize({ width: 1280, height: 2200 });
+  await results.scrollIntoViewIfNeeded();
+  const matchingDesktop = (await results.screenshot()).toString('base64');
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.setViewportSize({ width: 390, height: 3600 });
+  await results.scrollIntoViewIfNeeded();
+  const matchingMobile = (await results.screenshot()).toString('base64');
+  delayPreview = true;
+  const heldPreviewRequest = page.waitForRequest(request => request.url().endsWith('/api/preview-fixture'));
+  await page.getByRole('button', { name: 'Refresh fixture snapshot', exact: true }).click(); await heldPreviewRequest;
+  assert.equal(previewHeld, true);
+  await fixtureChoice.selectOption('clear');
+  assert.equal(await results.count(), 0);
+  assert.equal(await page.locator('iframe').count(), 0);
+  delayPreview = false; releasePreview();
+  activeReport = data.clearReport;
+  await scanButton.click();
+  await page.getByText('Scanned fixture: Labelled garden form', { exact: true }).waitFor();
+  await page.getByRole('button', { name: /Visual preview/ }).click();
+  assert.equal(await page.locator('iframe').count(), 0);
+  await page.getByRole('button', { name: 'Generate fixture snapshot', exact: true }).click();
+  await page.getByRole('button', { name: 'Refresh fixture snapshot', exact: true }).waitFor();
+  assert.equal(capturedFixtures.at(-1), 'clear');
+  assert.equal(await page.locator('iframe').first().getAttribute('title'), 'Original Labelled garden form fixture snapshot');
+  await page.frameLocator('iframe').first().getByText('Email address', { exact: true }).waitFor();
+  assert.equal(await page.frameLocator('iframe').first().locator('.kindpath-image-placeholder').count(), 0);
+  // A delayed scan response for clear must not replace a newly selected barriers page.
+  delayScan = true;
+  const heldScanRequest = page.waitForRequest(request => request.url().endsWith('/api/scan-fixture'));
+  await scanButton.click(); await heldScanRequest;
+  assert.equal(scanHeld, true);
+  assert.equal(await results.count(), 0, 'Starting another scan clears its old report and snapshot');
+  await fixtureChoice.selectOption('barriers');
+  delayScan = false; releaseScan();
+  activeReport = data.clearReport; // Deliberate mismatched response.
+  await scanButton.click();
+  await page.getByRole('alert').filter({ hasText: 'report did not match' }).waitFor();
+  assert.equal(await results.count(), 0);
+  activeReport = data.report;
+  await scanButton.click(); await violations.waitFor();
+  assert.equal(await page.locator('iframe').count(), 0);
+  await page.getByText('Scanned fixture: Garden form with barriers', { exact: true }).waitFor();
   assert.deepEqual(unexpected, []);
-  process.stdout.write(JSON.stringify({ passed: true, desktop, mobile, findingsDesktop, findingsMobile }));
+  process.stdout.write(JSON.stringify({ passed: true, desktop, mobile, findingsDesktop, findingsMobile, matchingDesktop, matchingMobile }));
 } finally { await browser.close(); }
