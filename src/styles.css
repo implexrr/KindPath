@@ -34,3 +34,5 @@
 
 .scan-coverage{border:1px solid #aebdaa;border-left:4px solid var(--green);border-radius:4px;padding:14px 18px;margin:20px 0;background:#f0f2e9;overflow-wrap:anywhere}.scan-coverage p{font-size:13px;line-height:1.7;margin:5px 0;color:#304c36}.scan-coverage strong{font-size:14px}
 @media print{.print-report .scan-coverage{background:#fff;border-color:#555;padding:8pt;margin:12pt 0}.print-report .scan-coverage p{font:inherit;color:#000}}
+
+.preview-quality h4{font-size:15px;margin:0 0 8px}.preview-quality p{margin:0;line-height:1.7}
