@@ -7,6 +7,8 @@ import { WebsiteForm } from './components/WebsiteForm';
 import { ReportExports } from './components/ReportExports';
 import { PrintableReport } from './components/PrintableReport';
 import { FindingsReport } from './components/FindingsReport';
+import { SiteVisualPreview } from './components/SiteVisualPreview';
+import { hasMatchingSitePreview } from './components/sitePreview';
 import { VisualPreview } from './components/VisualPreview';
 import { SampleSite } from './components/SampleSite';
 
@@ -14,6 +16,7 @@ export function App() {
   const [url, setUrl] = useState('');
   const [selectedFixture, setSelectedFixture] = useState<FixtureId>('barriers');
   const [publicEnabled, setPublicEnabled] = useState(false);
+  const [publicCaptureEnabled,setPublicCaptureEnabled] = useState(false);
   const [allowedHosts, setAllowedHosts] = useState<string[]>([]);
   useEffect(() => {
     const abort = new AbortController();
@@ -23,6 +26,7 @@ export function App() {
     }).then(data => {
       if (Array.isArray(data.allowedHosts) && data.allowedHosts.every((host: unknown) => typeof host === 'string')) {
         setAllowedHosts(data.allowedHosts); setPublicEnabled(data.publicScanningEnabled === true);
+        setPublicCaptureEnabled(data.publicScanningEnabled === true && data.publicCaptureEnabled === true);
       }
     }).catch(() => {}); // Fail closed; the server gate remains authoritative.
     return () => abort.abort();
@@ -67,6 +71,9 @@ export function App() {
             && ['http:', 'https:'].includes(scanned.protocol) && !scanned.port && !scanned.username && !scanned.password && !scanned.hash;
         } catch { /* Reject missing or malformed report URLs without displaying their contents. */ }
         if (!matches) throw new Error('The report did not match the requested website. Try again.');
+        if ((publicCaptureEnabled && !hasMatchingSitePreview(data)) || (!publicCaptureEnabled && data.sitePreview !== undefined)) {
+          throw new Error('The website snapshot did not match this scan. Try again.');
+        }
       }
       if (fixture && (data.mode !== 'fixture' || data.scanner?.fixture !== value || data.url !== `fixture:${value}`)) {
         throw new Error('The report did not match the requested built-in page. Try scanning again.');
@@ -92,8 +99,8 @@ export function App() {
         fixture={selectedFixture} onFixtureChange={changeFixture} onFixtureScan={() => { void analyze(selectedFixture, true); }}/></div>
       <div className="hero-visual" aria-label="Illustration: a fictional website seen through different visual filters"><div className="visual-top"><span><i/> A DIFFERENT PERSPECTIVE</span><span>↗</span></div><div className="hero-sample"><SampleSite/><div className="comparison-slice" aria-hidden="true"/></div><div className="visual-bottom"><span>Same website. Different experience.</span><span className="visual-toggle" aria-hidden="true">●</span></div><div className="floating-note"><span aria-hidden="true">◉</span> Design with more people in mind.</div></div></section>
       <section className="principles" id="how-it-works" aria-label="How KindPath works"><article><span className="step">01 / DISCOVER</span><h2>Find the barriers.</h2><p>Explore clear findings with context about who they affect and why they matter.</p></article><article><span className="step">02 / SEE DIFFERENTLY</span><h2>Change your perspective.</h2><p>Compare an example page with visual effects that illustrate potential challenges.</p></article><article><span className="step">03 / MAKE PROGRESS</span><h2>Know your next step.</h2><p>Turn findings into practical improvements, one thoughtful change at a time.</p></article></section>
-      {report && <section className="results" ref={results} tabIndex={-1} aria-labelledby="report-title"><div className="section-heading"><div><span className="eyebrow">YOUR EXPLORATION</span><h2 id="report-title">Small changes. Meaningful impact.</h2><p className="report-url">{report.mode === 'fixture' ? 'Scanned fixture' : report.mode === 'public' ? 'Scanned page' : 'Submitted URL'}: {report.mode === 'fixture' && isFixture(report.scanner?.fixture) ? fixtureTitle(report.scanner.fixture) : report.url}</p>{report.mode === 'public' && report.requestedUrl && <p className="report-url">Requested URL: {report.requestedUrl}</p>}</div><span className="demo-badge">{report.mode === 'demo' ? 'Illustrative report' : report.mode === 'fixture' ? 'Real fixture scan' : 'Automated page scan'}</span></div><div className="notice">{report.mode === 'fixture' ? 'These are real automated results for the selected built-in page. The visual preview uses that same page. No public website was fetched.' : report.mode === 'demo' ? `This is demo data, not an assessment of ${new URL(report.url).hostname}.` : 'Automated results for the submitted page only. Manual review is still required.'}{report.mode !== 'fixture' && ' The visual preview uses a separate built-in fixture, not the submitted URL.'}</div><ReportExports key={`${report.mode}:${report.url}:${report.generatedAt}`} report={report}/><div className="view-switch" role="group" aria-label="Report view"><button aria-pressed={view === 'findings'} onClick={() => setView('findings')}>Accessibility findings <span>{report.findings.length}</span></button><button aria-pressed={view === 'preview'} onClick={() => setView('preview')}>Visual preview <span aria-hidden="true">◉</span></button></div>
-      <div hidden={view !== 'findings'}><FindingsReport key={`${report.mode}:${report.url}:${report.generatedAt}`} report={report}/></div><div hidden={view !== 'preview'}><VisualPreview key={report.mode === 'fixture' ? report.scanner?.fixture : 'garden'} fixture={report.mode === 'fixture' && isFixture(report.scanner?.fixture) ? report.scanner.fixture : 'garden'}/></div></section>}
+      {report && <section className="results" ref={results} tabIndex={-1} aria-labelledby="report-title"><div className="section-heading"><div><span className="eyebrow">YOUR EXPLORATION</span><h2 id="report-title">Small changes. Meaningful impact.</h2><p className="report-url">{report.mode === 'fixture' ? 'Scanned fixture' : report.mode === 'public' ? 'Scanned page' : 'Submitted URL'}: {report.mode === 'fixture' && isFixture(report.scanner?.fixture) ? fixtureTitle(report.scanner.fixture) : report.url}</p>{report.mode === 'public' && report.requestedUrl && <p className="report-url">Requested URL: {report.requestedUrl}</p>}</div><span className="demo-badge">{report.mode === 'demo' ? 'Illustrative report' : report.mode === 'fixture' ? 'Real fixture scan' : 'Automated page scan'}</span></div><div className="notice">{report.mode === 'fixture' ? 'These are real automated results for the selected built-in page. The visual preview uses that same page. No public website was fetched.' : report.mode === 'demo' ? `This is demo data, not an assessment of ${new URL(report.url).hostname}.` : 'Automated results for the submitted page only. Manual review is still required.'}{report.mode !== 'fixture' && !report.sitePreview && ' The visual preview uses a separate built-in fixture, not the submitted URL.'}</div><ReportExports key={`${report.mode}:${report.url}:${report.generatedAt}`} report={report}/><div className="view-switch" role="group" aria-label="Report view"><button aria-pressed={view === 'findings'} onClick={() => setView('findings')}>Accessibility findings <span>{report.findings.length}</span></button><button aria-pressed={view === 'preview'} onClick={() => setView('preview')}>Visual preview <span aria-hidden="true">◉</span></button></div>
+      <div hidden={view !== 'findings'}><FindingsReport key={`${report.mode}:${report.url}:${report.generatedAt}`} report={report}/></div><div hidden={view !== 'preview'}>{report.mode === 'public' && report.sitePreview ? <SiteVisualPreview key={report.scanId} snapshot={report.sitePreview}/> : <VisualPreview key={report.mode === 'fixture' ? report.scanner?.fixture : 'garden'} fixture={report.mode === 'fixture' && isFixture(report.scanner?.fixture) ? report.scanner.fixture : 'garden'}/>}</div></section>}
       <section className="closing"><span aria-hidden="true">✳</span><p>Accessibility is a practice.<br/><strong>Every step makes a difference.</strong></p></section>
     </main><footer><a className="brand" href="#">KindPath<span aria-hidden="true">↗</span></a><span>A more accessible web starts with a clearer perspective.</span><span>Built with intention.</span></footer>
   </>;

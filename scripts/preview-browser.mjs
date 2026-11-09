@@ -14,7 +14,7 @@ try {
   let previews = 0; const unexpected = [];
   let activeReport = data.report;
   let apiRequests = 0;
-  let publicCapabilities = false, publicCalls = 0;
+  let publicCapabilities = false, publicCalls = 0, captureCapabilities = false;
   const publicReport = { ...data.report, mode: 'public', requestedUrl: 'https://example.com/start', url: 'https://example.com/final',
     scanner: { ...data.report.scanner, fixture: 'public' }, limitations: ['Controlled URL-report UI response; no public site fetched.'] };
   let publicResponse = publicReport, publicStatus = 200;
@@ -41,6 +41,8 @@ try {
     assert.equal(exported.source.label, expected.mode === 'demo' ? 'Illustrative report' : expected.mode === 'fixture' ? 'Real fixture scan' : 'Automated page scan');
     assert.ok(exported.report.limitations.some(text => text.includes('do not establish accessibility conformance')));
     assert.equal('html' in exported.report, false);
+    assert.equal('sitePreview' in exported.report, false); assert.equal('scanId' in exported.report, false);
+    assert.ok(!JSON.stringify(exported).includes('Captured website marker'));
     assert.equal(apiRequests, requestsBefore, 'Export must not request another scan or capture');
     return await link.getAttribute('href');
   }
@@ -83,7 +85,7 @@ try {
     if (url.protocol === 'blob:' && url.origin === 'http://kindpath-ui.invalid') { await route.continue(); return; }
     if (url.pathname.startsWith('/api/')) apiRequests++;
     if (url.hostname !== 'kindpath-ui.invalid') { unexpected.push(url.hostname); await route.abort(); return; }
-    if (url.pathname === '/api/scanning-capabilities') { await route.fulfill({ json: { publicScanningEnabled: publicCapabilities, allowedHosts: ['example.com'] } }); return; }
+    if (url.pathname === '/api/scanning-capabilities') { await route.fulfill({ json: { publicScanningEnabled: publicCapabilities, publicCaptureEnabled: captureCapabilities, allowedHosts: ['example.com'] } }); return; }
     if (url.pathname === '/api/analyze') { await route.fulfill({ json: data.demoReport }); return; }
     if (url.pathname === '/api/scan-public') {
       publicCalls++;
@@ -439,6 +441,49 @@ try {
   await page.getByRole('button', { name: 'Run isolated fixture scan' }).click();
   await page.getByText('Scanned fixture: Labelled garden form', { exact: true }).waitFor();
   assert.equal(await page.locator('.results').getByText('Scanned page: ' + publicReport.url, { exact: true }).count(), 0);
+  // The capture-enabled test response still never fetches an external page or enables the real API.
+  captureCapabilities = true;
+  publicResponse = { ...publicReport, scanId:data.sitePreview.scanId, sitePreview:data.sitePreview };
+  await page.reload(); await publicButton.waitFor();
+  await page.getByLabel('Your website URL').fill(publicReport.requestedUrl);
+  await publicButton.click();
+  await page.locator('.results').getByText('Requested URL: ' + publicReport.requestedUrl, {exact:true}).waitFor();
+  await page.waitForFunction(() => document.activeElement?.matches('.results'));
+  await assertDownload(publicResponse);
+  await printablePdf(publicResponse);
+  await page.getByRole('button', {name:/Visual preview/}).click();
+  await page.getByRole('heading', {name:'Scanned website snapshot',exact:true}).waitFor();
+  const captured = page.frameLocator('iframe').first();
+  await captured.getByText('Captured website marker',{exact:true}).waitFor();
+  assert.equal(await page.locator('iframe').count(),2);
+  for(const frame of page.frames().slice(1)) {
+    assert.equal(await frame.locator('script,form,img,iframe,a[href]').count(),0);
+    assert.equal(await frame.locator('input').isDisabled(),true); assert.equal(await frame.locator('button').isDisabled(),true);
+    assert.equal(await frame.evaluate(()=>{try{void parent.document.body;return false;}catch{return true;}}),true);
+  }
+  const capturedLink = captured.getByText('Captured link',{exact:true});
+  await capturedLink.hover();
+  assert.equal(await capturedLink.evaluate(node=>getComputedStyle(node).color),'rgb(255, 0, 0)');
+  await capturedLink.dispatchEvent('click');
+  assert.equal(page.frames().slice(1).every(frame=>frame.url()==='about:srcdoc'),true);
+  await captured.getByText('Static captured advertisement',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Apply visual effects',exact:true}).click();
+  assert.equal(await page.getByRole('heading',{name:'Effects paused — original appearance',exact:true}).count(),1);
+  const oldFrame = await page.locator('iframe').first().elementHandle();
+  const nextId='22222222-2222-4222-8222-222222222222';
+  publicResponse={...publicResponse,scanId:nextId,sitePreview:{...data.sitePreview,scanId:nextId,html:data.sitePreview.html.replace('Captured website marker','New captured page marker')}};
+  await publicButton.click();
+  await oldFrame.waitForElementState('hidden');
+  await page.getByRole('button',{name:/Visual preview/}).click();
+  await page.frameLocator('iframe').first().getByText('New captured page marker',{exact:true}).waitFor();
+  assert.equal(await oldFrame.evaluate(node=>node.isConnected),false);
+  assert.equal(await page.getByRole('heading',{name:'With visual effects',exact:true}).count(),1);
+  for(const bad of [undefined,{...data.sitePreview,scanId:nextId},{...data.sitePreview,url:'https://example.com/old'}]) {
+    publicResponse={...publicReport,scanId:data.sitePreview.scanId,sitePreview:bad};
+    await publicButton.click();
+    await page.getByRole('alert').filter({hasText:'snapshot did not match'}).waitFor();
+    assert.equal(await page.locator('iframe').count(),0); assert.equal(await page.locator('.results').count(),0);
+  }
   assert.deepEqual(unexpected, []);
   process.stdout.write(JSON.stringify({ passed: true, engine, version: browser.version(), desktop, mobile, findingsDesktop, findingsMobile, matchingDesktop, matchingMobile, fixturePdf, demoPdf }));
 } finally { await browser.close(); }

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { captureFixturePreview } from './scanner/fixturePreview.js';
 import { scanFixture } from './scanner/fixtureScanner.js';
+import { mapSitePreview } from './scanner/sitePreview.js';
 import { createDemoReport } from './services/analyze.js';
 import { openLocalDockerSession, removeAndConfirm } from './scanner/dockerWorker.js';
 import { assertContainerIsolation, containerArguments, IMAGE } from './scanner/containerPolicy.js';
@@ -20,6 +21,13 @@ test('reports, exports and isolated previews work in Chromium, Firefox and WebKi
   const report = await scanFixture('barriers');
   const clearReport = await scanFixture('clear');
   const demoReport = createDemoReport(new URL('https://example.com'));
+  const sitePreview = mapSitePreview({url:'https://example.com/final',capturedAt:new Date().toISOString(),omittedSubtrees:0,omittedText:0,omittedStyles:0,nodes:[
+    {tag:'h1',attributes:{},style:{},hover:{},children:[{text:'Captured website marker'}]},
+    {tag:'a',attributes:{},style:{color:'rgb(0, 0, 0)'},hover:{color:'rgb(255, 0, 0)'},children:[{text:'Captured link'}]},
+    {tag:'form',attributes:{},style:{},hover:{},children:[{tag:'input',attributes:{},style:{},hover:{},children:[]},
+      {tag:'button',attributes:{},style:{},hover:{},children:[{text:'Inactive captured button'}]}]},
+    {tag:'aside',attributes:{},style:{},hover:{},children:[{text:'Static captured advertisement'}]},
+  ]},{scanId:'11111111-1111-4111-8111-111111111111',requestedUrl:'https://example.com/start',url:'https://example.com/final'});
   const root = fileURLToPath(new URL('../', import.meta.url));
   const assets: Record<string, { body: string; type: string }> = {
     '/': { body: await readFile(join(root, 'dist/index.html'), 'utf8'), type: 'text/html' },
@@ -48,7 +56,7 @@ test('reports, exports and isolated previews work in Chromium, Firefox and WebKi
           { env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' }, timeout: 60000, maxBuffer: 5 * 1024 * 1024 },
           (error, output) => error ? reject(error) : resolve(output));
         child.stdin!.on('error', () => {});
-        child.stdin!.end(JSON.stringify({ browser, snapshot, barriersSnapshot, clearSnapshot, report, clearReport, demoReport, assets }));
+        child.stdin!.end(JSON.stringify({ browser, snapshot, barriersSnapshot, clearSnapshot, report, clearReport, demoReport, sitePreview, assets }));
       });
       const result = JSON.parse(stdout); assert.equal(result.passed, true); assert.equal(result.engine, browser);
       console.info(`${browser} ${result.version}: controlled browser checks passed`);
