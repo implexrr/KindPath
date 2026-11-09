@@ -40,6 +40,7 @@ export interface FixturePreview {
 }
 
 export interface SitePreview {
+  // Non-whitespace UTF-16 units in accepted text nodes; not a visibility or fidelity measure.
   capturedTextCharacters?: number;
   mode: 'public';
   scanId: string;

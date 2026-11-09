@@ -228,6 +228,12 @@ A failed scan can return an optional allowlisted stage/code and, for a rejected 
 
 A [twenty-site local validation](scanner/WEBSITE-PREVIEW-VALIDATION.md) completed one explicitly approved anonymous scan-and-capture attempt per homepage. Sixteen returned reports and snapshots with matching identities; four failed without partial results. The returned captures passed isolation, effect-control and report/export checks, but six contained no rendered text and others were sparse. These results validate observed boundaries and flow, not broadly useful preview fidelity. Both public features were restored to disabled; further live execution requires approval.
 
+## Preview quality feedback
+
+The prepared public-preview view uses a text-based hint derived from accepted snapshot nodes on the backend. With no non-whitespace text, it shows **Website preview unavailable** and hides the empty panels and effect controls. Findings, JSON exports and print remain available. Fewer than 100 non-whitespace text units produces a caution while keeping the preview usable: a page can legitimately be short. Missing or malformed hint data is shown as unknown, without rejecting an otherwise matching report.
+
+The count measures captured text, not rendered visibility, layout fidelity or accessibility. More text does not establish a useful preview; content may be clipped, off-screen or omitted. No iframe access or permission change, extra scan, live retry or capture-budget increase is involved. Demo and fixture previews are unchanged. Public scanning and capture remain disabled; checks use controlled fixtures only.
+
 ## Same-visit website snapshots (disabled)
 
 `PUBLIC_CAPTURE_ENABLED` and `PUBLIC_SCANNING_ENABLED` are both `false`. Capabilities report `publicCaptureEnabled: false`; no request field or environment variable enables capture. The prepared capture is an optional part of the existing scan operation, not a separate URL-fetching endpoint. Ordinary scans do not collect snapshot data.

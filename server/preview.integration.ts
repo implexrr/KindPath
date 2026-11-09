@@ -28,6 +28,10 @@ test('reports, exports and isolated previews work in Chromium, Firefox and WebKi
       {tag:'button',attributes:{},style:{},hover:{},children:[{text:'Inactive captured button'}]}]},
     {tag:'aside',attributes:{},style:{},hover:{},children:[{text:'Static captured advertisement'}]},
   ]},{scanId:'11111111-1111-4111-8111-111111111111',requestedUrl:'https://example.com/start',url:'https://example.org/final'});
+  const qualityPreviews=Object.fromEntries(Object.entries({empty:[],whitespace:[{text:' \n\t '}],sparse:[{text:'Short page'}],
+    text:[{text:'Captured page content. '.repeat(12)}]}).map(([key,nodes])=>[key,mapSitePreview({
+      url:sitePreview.url,capturedAt:new Date().toISOString(),omittedSubtrees:0,omittedText:0,omittedStyles:0,nodes,
+    },{scanId:sitePreview.scanId,requestedUrl:sitePreview.requestedUrl,url:sitePreview.url})]));
   const root = fileURLToPath(new URL('../', import.meta.url));
   const assets: Record<string, { body: string; type: string }> = {
     '/': { body: await readFile(join(root, 'dist/index.html'), 'utf8'), type: 'text/html' },
@@ -57,14 +61,14 @@ test('reports, exports and isolated previews work in Chromium, Firefox and WebKi
           { env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' }, timeout: 60000, maxBuffer: 5 * 1024 * 1024 },
           (error, output) => error ? reject(error) : resolve(output));
         child.stdin!.on('error', () => {});
-        child.stdin!.end(JSON.stringify({ browser, snapshot, barriersSnapshot, clearSnapshot, report, clearReport, demoReport, sitePreview, assets }));
+        child.stdin!.end(JSON.stringify({ browser, snapshot, barriersSnapshot, clearSnapshot, report, clearReport, demoReport, sitePreview, qualityPreviews, assets }));
       });
       const result = JSON.parse(stdout); assert.equal(result.passed, true); assert.equal(result.engine, browser);
       console.info(`${browser} ${result.version}: controlled browser checks passed`);
       for (const kind of browser === 'chromium' ? ['fixture', 'demo'] : []) {
         await writeFile(join(tmpdir(), `kindpath-report-export-${kind}.pdf`), Buffer.from(result[`${kind}Pdf`], 'base64'));
       }
-      for (const size of ['desktop', 'mobile', 'findingsDesktop', 'findingsMobile', 'matchingDesktop', 'matchingMobile', 'coverageDesktop', 'coverageMobile']) {
+      for (const size of ['desktop', 'mobile', 'findingsDesktop', 'findingsMobile', 'matchingDesktop', 'matchingMobile', 'coverageDesktop', 'coverageMobile', 'qualityEmpty', 'qualitySparse']) {
         await writeFile(join(tmpdir(), `kindpath-${browser}-static-preview-${size}.png`), Buffer.from(result[size], 'base64'));
       }
     } finally {

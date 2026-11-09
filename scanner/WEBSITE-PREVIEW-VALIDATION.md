@@ -91,7 +91,7 @@ Six snapshots—YouTube, Facebook, Instagram, Amazon, Microsoft and Spotify—ha
 
 Every capture reported omitted subtrees, ranging from 2 to 121, and style omissions ranged from 0 to 5,936 declarations. No text-budget truncation was reported. A zero omitted-text count does not mean all source text survived: dropping an entire subtree does not count its unvisited text as character-budget truncation. The retained snapshot and counters do not establish the exact per-site cause of an empty or sparse capture. No original-page DOM was retained, and no second public visit was made to determine the cause.
 
-This validates a continuous live report-to-snapshot UI path and its boundaries on the observed responses. It does not validate broadly useful visual fidelity across popular sites. Capture quality and clear feedback for empty/sparse snapshots remain follow-up work; these results do not justify increasing privileges, removing guards or enabling public features. Raw HTML, screenshots, generated query identifiers and temporary harness code remain outside the repository.
+This validates a continuous live report-to-snapshot UI path and its boundaries on the observed responses. It does not validate broadly useful visual fidelity across popular sites. At the end of this validation, capture quality and clear feedback for empty/sparse snapshots remained follow-up work; these results do not justify increasing privileges, removing guards or enabling public features. Raw HTML, screenshots, generated query identifiers and temporary harness code remain outside the repository.
 
 ## Final checks and restoration
 
@@ -100,3 +100,7 @@ All 105 unit/API tests and the TypeScript/Vite production build passed before an
 After the twentieth attempt, active work and cleanup settled, the temporary API stopped, and both source constants were restored to false. A fresh default API reported both public capabilities false and rejected public scanning with HTTP 503 / `PUBLIC_SCANNING_DISABLED`. Final daemon queries confirmed no owned fixture/public/QA containers, socket volumes or scanner networks and unchanged assessed image identities. No new container-image build or image vulnerability scan was run on this documentation-only branch because the assessed image inputs were unchanged; existing advisory findings remain recorded and unaccepted.
 
 All twenty approved attempts were consumed. Additional live requests require approval. No runtime change, dependency, service, continued activation, push, merge, deployment or purchase was added.
+
+## Subsequent feedback work
+
+The later [preview quality feedback](../README.md#preview-quality-feedback) adds unavailable feedback for zero captured text and a caution for very little text, using metadata derived by the trusted serializer. It does not repair content retention or change the outcomes above. The historical `innerText` measurements and the new non-whitespace accepted-text count are different signals; no live retry was performed to equate them or validate a fidelity improvement.

@@ -22,6 +22,7 @@ test('report exports exclude captured content and ephemeral scan identifiers',()
   assert.equal(exported.report.url,report.url);assert.equal(exported.report.requestedUrl,report.requestedUrl);
   assert.equal(exported.report.sitePreview,undefined);assert.equal(exported.report.scanId,undefined);
   assert.ok(!JSON.stringify(exported).includes('Captured marker'));
+  assert.ok(!JSON.stringify(exported).includes('capturedTextCharacters'));
 });
 
 test('empty previews are unavailable while sparse previews remain a caution rather than a failure',()=>{

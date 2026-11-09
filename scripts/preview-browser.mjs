@@ -566,6 +566,47 @@ try {
     await page.getByRole('alert').filter({hasText:'snapshot did not match'}).waitFor();
     assert.equal(await page.locator('iframe').count(),0); assert.equal(await page.locator('.results').count(),0);
   }
+  let qualityEmpty,qualitySparse;
+  const qualityCases={...data.qualityPreviews,
+    unknown:{...data.qualityPreviews.text,capturedTextCharacters:undefined},
+    malformed:{...data.qualityPreviews.text,capturedTextCharacters:-1}};
+  for(const [kind,snapshot] of Object.entries(qualityCases)) {
+    publicResponse={...publicReport,scanId:snapshot.scanId,sitePreview:snapshot};
+    await publicButton.click();
+    await page.locator('.results').getByText('Requested URL: '+publicReport.requestedUrl,{exact:true}).waitFor();
+    const scansBefore=publicCalls;
+    await page.getByRole('button',{name:/Visual preview/}).click();
+    assert.equal(publicCalls,scansBefore,'Quality feedback must not request another scan');
+    assert.equal(await page.getByRole('alert').count(),0,'Quality feedback must not turn a report into an error');
+    const feedback=page.getByRole('region',{name:'Preview detail',exact:true});
+    if(kind==='empty'||kind==='whitespace') {
+      await feedback.getByRole('heading',{name:'Website preview unavailable',exact:true}).waitFor();
+      assert.match(await feedback.textContent(),/findings and report exports are still available/);
+      assert.equal(await page.locator('iframe').count(),0);
+      assert.equal(await page.getByRole('button',{name:'Apply visual effects',exact:true}).count(),0);
+      if(kind==='empty') {
+        await page.setViewportSize({width:390,height:844});
+        assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+        qualityEmpty=(await page.locator('.preview-workspace').screenshot()).toString('base64');
+        await page.setViewportSize({width:1280,height:900});
+        await assertDownload(publicResponse);await printablePdf(publicResponse);
+      }
+    }else {
+      assert.equal(await page.locator('iframe').count(),2);
+      assert.equal(await page.getByRole('button',{name:'Apply visual effects',exact:true}).count(),1);
+      if(kind==='sparse') {
+        await page.frameLocator('iframe').first().getByText('Short page',{exact:true}).waitFor();
+        await feedback.getByRole('heading',{name:'Limited preview detail',exact:true}).waitFor();
+        assert.match(await feedback.textContent(),/page may simply be short/);
+        qualitySparse=(await page.locator('.preview-workspace').screenshot()).toString('base64');
+      }else if(kind==='text')assert.equal(await feedback.count(),0,'Previous empty/sparse feedback must disappear');
+      else await feedback.getByRole('heading',{name:'Preview detail could not be assessed',exact:true}).waitFor();
+      if(kind!=='sparse')await page.frameLocator('iframe').first().locator('body').filter({hasText:'Captured page content.'}).waitFor();
+    }
+    await page.getByRole('button',{name:/Accessibility findings/}).click();
+    assert.equal(await page.getByRole('region',{name:'Confirmed automated violations',exact:true}).locator('article').count(),publicReport.findings.length);
+    await page.getByRole('link',{name:'Download report JSON',exact:true}).waitFor();
+  }
   // Cancellation and retry preserve the selected action and reject late responses.
   publicCapabilities=false; captureCapabilities=false;
   await page.reload();
@@ -599,5 +640,5 @@ try {
   await page.getByLabel('Your website URL').fill('https://example.com/new-request');
   assert.equal(await page.locator('.results').count(),0);
   assert.deepEqual(unexpected, []);
-  process.stdout.write(JSON.stringify({ passed: true, engine, version: browser.version(), desktop, mobile, findingsDesktop, findingsMobile, matchingDesktop, matchingMobile, coverageDesktop, coverageMobile, fixturePdf, demoPdf }));
+  process.stdout.write(JSON.stringify({ passed: true, engine, version: browser.version(), desktop, mobile, findingsDesktop, findingsMobile, matchingDesktop, matchingMobile, coverageDesktop, coverageMobile, qualityEmpty, qualitySparse, fixturePdf, demoPdf }));
 } finally { await browser.close(); }
