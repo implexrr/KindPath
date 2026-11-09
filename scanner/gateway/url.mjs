@@ -1,5 +1,3 @@
-import { isIP } from 'node:net';
-
 // Syntax preflight only. The controller must still reject every non-public DNS
 // answer and install verified, pinned firewall destinations before connection.
 export function websiteUrl(value) {
@@ -8,7 +6,10 @@ export function websiteUrl(value) {
   const host = url.hostname;
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash
     || (url.port && Number(url.port) !== (url.protocol === 'https:' ? 443 : 80))
-    || isIP(host.replace(/^\[|\]$/g, '')) || host.length > 253 || !host.includes('.')
+    // WHATWG URL parsing normalizes numeric IPv4 spellings first; IPv6
+    // literals are rejected by the DNS-label syntax below. Keep this module
+    // browser-safe so client and scanner use the same URL syntax policy.
+    || /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.length > 253 || !host.includes('.')
     || !host.split('.').every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))
     || /(?:^|\.)(?:localhost|local|internal|invalid|test|example|onion)$/.test(host) || host.endsWith('.home.arpa')) {
     throw new Error('Use a public HTTP/HTTPS hostname on its standard port, without credentials or fragments.');

@@ -15,7 +15,7 @@ try {
   let activeReport = data.report;
   let apiRequests = 0;
   let publicCapabilities = false, publicCalls = 0, captureCapabilities = false;
-  const publicReport = { ...data.report, mode: 'public', requestedUrl: 'https://example.com/start', url: 'https://example.com/final',
+  const publicReport = { ...data.report, mode: 'public', requestedUrl: 'https://example.com/start', url: 'https://example.org/final',
     scanner: { ...data.report.scanner, fixture: 'public' }, limitations: ['Controlled URL-report UI response; no public site fetched.'] };
   let publicResponse = publicReport, publicStatus = 200;
   let delayPublic = false, releasePublic, publicHeld = false, notifyPublic;
@@ -417,7 +417,10 @@ try {
   assert.equal(publicCalls, scansBeforeExample);
   await page.getByLabel('Your website URL').fill(publicReport.requestedUrl);
   for (const wrong of [{ ...publicReport, requestedUrl: 'https://example.com/old' },
-    { ...publicReport, url: 'http://127.0.0.1/' }, data.demoReport]) {
+    { ...publicReport, url: 'http://127.0.0.1/' },
+    { ...publicReport, url: 'http://printer.local/' },
+    { ...publicReport, url: 'https://user:pass@example.org/' },
+    { ...publicReport, url: 'https://example.org:8443/' }, data.demoReport]) {
     publicResponse = wrong;
     await publicButton.click();
     await page.getByRole('alert').filter({ hasText: 'report did not match' }).waitFor();

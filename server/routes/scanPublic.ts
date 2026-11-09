@@ -18,7 +18,7 @@ export function createPublicRouter({ enabled = (): boolean => PUBLIC_SCANNING_EN
       res.status(400).json({ error: 'Supply one public URL.' }); return;
     }
     try { validatePublicUrl(req.body.url); } catch {
-      res.status(400).json({ error: 'Use an public HTTP/HTTPS URL on its standard port without credentials or fragments.' }); return;
+      res.status(400).json({ error: 'Use a public HTTP/HTTPS URL on its standard port without credentials or fragments.' }); return;
     }
     const abort = new AbortController();
     res.once('close', () => { if (!res.writableEnded) abort.abort(); });

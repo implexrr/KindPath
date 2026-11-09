@@ -8,7 +8,7 @@ const plan = (target: string, address = '93.184.216.34') => createDestinationPla
 test('public URL syntax accepts unrelated domains and rejects local names and numeric variants', () => {
   for (const url of ['https://www.wikipedia.org/wiki/Accessibility','http://example.org/a?b=1','https://xn--bcher-kva.de/']) assert.ok(websiteUrl(url));
   for (const url of ['file:///etc/passwd','http://localhost/','http://printer.local/','http://metadata.google.internal/',
-    'http://router.home.arpa/','http://127.1/','http://2130706433/','http://0x7f000001/','http://[::1]/',
+    'https://93.184.216.34/','http://[2606:4700::1111]/','http://router.home.arpa/','http://127.1/','http://2130706433/','http://0x7f000001/','http://[::1]/',
     'http://example.org./','http://example.org:8080/','https://user:pass@example.org/','https://example.org/#fragment',
     'https://bad_label.org/','https://example.org/\n']) assert.throws(() => websiteUrl(url), url);
 });
