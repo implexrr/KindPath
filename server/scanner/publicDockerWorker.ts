@@ -7,7 +7,7 @@ import { createResourceRunner } from './resources.js';
 import { createFirewallContainer, firewallControl, prepareNamespace, PINNED_FIXTURE_IP } from './firewallDocker.js';
 
 const controlledTargets = new Map([['verify-pinned-scan','http://example.com/redirect'],
-  ['verify-pinned-redirect','http://example.com/blocked-redirect'], ['verify-pinned-tls','https://example.com/barriers']]);
+  ['verify-pinned-redirect','http://example.com/blocked-redirect'], ['verify-pinned-tls','https://example.com/barriers'], ['verify-pinned-moving','http://example.com/moving']]);
 
 export function createPublicWorkerRunner(openSession: () => Promise<DockerSession>) {
   const run = createResourceRunner(async (command, resources, task, signal) => {
@@ -45,7 +45,7 @@ export function createPublicWorkerRunner(openSession: () => Promise<DockerSessio
     const result = await scanInNamespace(command, resources, ns, plan, signal);
     if (!plan) return result;
     const requests = (await command(['logs',originName!],signal)).trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
-    if (requests.some(request=>request.method !== 'GET' || !['/','/redirect','/barriers','/subresource-redirect'].includes(request.path))) throw new Error('Unexpected controlled origin request');
+    if (requests.some(request=>request.method !== 'GET' || !['/','/redirect','/barriers','/subresource-redirect','/moving'].includes(request.path))) throw new Error('Unexpected controlled origin request');
     return { result, requests, egressVerified: !!ns.egress };
 
   }, openSession);

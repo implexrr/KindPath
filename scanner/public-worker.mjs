@@ -14,6 +14,7 @@ const deadline = setTimeout(() => process.exit(2), 40_000);
 let browser;
 let relay;
 let rejectedNavigation = false;
+let pageChanged = false;
 try {
   if (process.getuid() === 0 || Object.values(networkInterfaces()).flat().some(a => a && !a.internal)) throw new Error('Isolation missing');
   // Wait briefly for the separate gateway to create its private socket.
@@ -71,11 +72,17 @@ try {
     page.on('response', response => { if (response.status() >= 400) failedRequests++; });
     const response = await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 15_000 });
     if (!response || !response.ok()) throw new Error('Navigation failed');
-    validateTarget(page.url(), allowed);
+    const scannedUrl = page.url();
+    page.on('framenavigated', frame => { if (frame === page.mainFrame()) pageChanged = true; });
+    validateTarget(scannedUrl, allowed);
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).options({ iframes: false }).analyze();
+    // Do not label findings from one document with another URL, including same-URL reloads.
+    if (pageChanged || page.url() !== scannedUrl || result.url !== scannedUrl) {
+      pageChanged = true; throw new Error('Page changed during scan');
+    }
     const violations = summarizeRules(result.violations);
     const incomplete = summarizeRules(result.incomplete);
-    process.stdout.write(JSON.stringify({ fixture: 'public', url: page.url(),
+    process.stdout.write(JSON.stringify({ fixture: 'public', url: scannedUrl,
       coverage: { blockedRequests, failedRequests, omittedRules: violations.omittedRules + incomplete.omittedRules,
         omittedNodes: violations.omittedNodes + incomplete.omittedNodes },
       engine: result.testEngine.version, violations: violations.rules, incomplete: incomplete.rules,
@@ -83,7 +90,7 @@ try {
   }
 } catch (error) {
   const code = error instanceof Error && error.message.includes('ERR_CERT_AUTHORITY_INVALID') ? 'TLS_CERTIFICATE_REJECTED'
-    : rejectedNavigation ? 'DESTINATION_REJECTED' : 'SCAN_FAILED';
+    : pageChanged ? 'PAGE_CHANGED_DURING_SCAN' : rejectedNavigation ? 'DESTINATION_REJECTED' : 'SCAN_FAILED';
   process.stderr.write(`Isolated gateway scan failed: ${code}.\n`); process.exitCode = 1;
 }
 finally { if (browser) await browser.close(); if (relay) relay.close(); clearTimeout(deadline); }

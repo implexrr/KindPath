@@ -19,7 +19,8 @@ function handle(req,res){
   process.stdout.write(JSON.stringify({method:req.method,path})+'\n');
   if(path==='/redirect'){res.writeHead(302,{Location:'/barriers'});res.end();return;}
   if(path==='/blocked-redirect'||path==='/subresource-redirect'){res.writeHead(302,{Location:'http://10.0.0.1/private'});res.end();return;}
-  res.writeHead(200,{'Content-Type':'text/html'});res.end(html);
+  const body = path === '/moving' ? html.replace('</body>', `<script>setInterval(()=>history.replaceState(null,'','/moving?frame='+Date.now()),10);</script></body>`) : html;
+  res.writeHead(200,{'Content-Type':'text/html'});res.end(body);
 }
 for(const port of [80,81])await new Promise((done,reject)=>http.createServer(handle).listen(port,'0.0.0.0',done).once('error',reject));
 await new Promise((done,reject)=>https.createServer(tls,handle).listen(443,'0.0.0.0',done).once('error',reject));

@@ -46,8 +46,8 @@ test('a frozen destination plan drives real gateway/browser scans behind verifie
   assert.ok(proof.requests.some(request=>request.path==='/barriers'));
   assert.equal(PUBLIC_SCANNING_ENABLED,false);
 });
-test('forbidden redirects and untrusted TLS certificates never produce a successful report', {timeout:120000},async()=>{
-  for(const [task,marker] of [['verify-pinned-redirect','DESTINATION_REJECTED'],['verify-pinned-tls','TLS_CERTIFICATE_REJECTED']]) {
+test('forbidden redirects, untrusted TLS and a page changing during analysis never produce a successful report', {timeout:120000},async()=>{
+  for(const [task,marker] of [['verify-pinned-redirect','DESTINATION_REJECTED'],['verify-pinned-tls','TLS_CERTIFICATE_REJECTED'],['verify-pinned-moving','PAGE_CHANGED_DURING_SCAN']]) {
     let verifiedRejection=false;
     const run=createPublicWorkerRunner(async()=>{
       const session=await openLocalDockerSession();
