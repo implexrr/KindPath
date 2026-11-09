@@ -75,8 +75,14 @@ try {
     await context.routeWebSocket('**/*', socket => socket.close());
     const page = await context.newPage();
     page.on('popup', popup => popup.close());
+    let scanningDocument = false;
+    let latestDocumentRequest;
     page.on('request', request => {
       if (request.isNavigationRequest()) {
+        if(request.frame()===page.mainFrame()){
+          latestDocumentRequest=request;
+          if(scanningDocument)pageChanged=true;
+        }
         try { validateTarget(request.url(), allowed); } catch { rejectedNavigation = true; }
       }
     });
@@ -87,17 +93,22 @@ try {
     if (!response) {missingResponse=true;throw new Error('Navigation failed');}
     if (!response.ok()) {rejectedStatus=response.status();throw new Error('Navigation failed');}
     const scannedUrl = page.url();
-    page.on('framenavigated', frame => { if (frame === page.mainFrame()) pageChanged = true; });
+    if(latestDocumentRequest!==response.request()){pageChanged=true;throw new Error('Pending document navigation');}
+    scanningDocument=true;
+    // History API events at the same URL do not replace the document. Actual
+    // main-document requests, URL changes and document identity changes still invalidate it.
+    page.on('framenavigated', frame => { if (frame === page.mainFrame() && frame.url()!==scannedUrl) pageChanged = true; });
     validateTarget(scannedUrl, allowed);
+    const scannedDocument=await page.evaluateHandle(()=>document);
     stage = 'accessibility-analysis';
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).options({ iframes: false }).analyze();
     // Do not label findings from one document with another URL, including same-URL reloads.
-    if (pageChanged || page.url() !== scannedUrl || result.url !== scannedUrl) {
+    if (pageChanged || page.url() !== scannedUrl || result.url !== scannedUrl || !(await page.evaluate(original=>original===document,scannedDocument))) {
       pageChanged = true; throw new Error('Page changed during scan');
     }
     if (capture) stage = 'capture';
     const preview = capture ? await captureSiteSnapshot(page) : undefined;
-    if (pageChanged || page.url() !== scannedUrl || (preview && preview.url !== scannedUrl)) {
+    if (pageChanged || page.url() !== scannedUrl || (preview && preview.url !== scannedUrl) || !(await page.evaluate(original=>original===document,scannedDocument))) {
       pageChanged = true; throw new Error('Page changed during capture');
     }
     stage = 'worker-result';

@@ -70,6 +70,7 @@ test('forbidden redirects, untrusted TLS and a page changing during analysis nev
 for (const scenario of [
   {path:'/redirect',final:'/barriers'}, {path:'/content',final:'/content'},
   {path:'/forms',final:'/forms'}, {path:'/missing',final:'/missing'},
+  {path:'/same-url-history',final:'/same-url-history'}, {path:'/same-url-reload',final:'/same-url-reload'},
 ]) {
 test(`URL scan/capture handles controlled ${scenario.path} without public access`, {timeout:90000}, async () => {
   const { default: express } = await import('express');
@@ -112,13 +113,13 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
     const response = await fetch(`http://127.0.0.1:${address.port}/api/scan-public`, {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url:target}), signal: AbortSignal.timeout(80000),
     });
-    if (scenario.path === '/missing') {
+    if (scenario.path === '/missing' || scenario.path === '/same-url-reload') {
       assert.equal(response.status,503); const failure=await response.json();
       assert.equal(failure.code,'SCAN_FAILED'); assert.equal(failure.sitePreview,undefined);
-      assert.deepEqual(failure.diagnostic,{stage:'page-loading',code:'HTTP_STATUS',httpStatus:404});
+      assert.deepEqual(failure.diagnostic,scenario.path==='/missing' ? {stage:'page-loading',code:'HTTP_STATUS',httpStatus:404} : {stage:'accessibility-analysis',code:'PAGE_CHANGED_DURING_SCAN'});
     } else {
-    assert.equal(response.status, 200);
     const report = await response.json();
+    assert.equal(response.status,200,JSON.stringify({code:report.code,diagnostic:report.diagnostic}));
     assert.equal(report.mode, 'public'); assert.equal(report.requestedUrl, target); assert.equal(report.url,'http://example.com'+scenario.final);
     if (scenario.path === '/redirect') for (const id of ['image-alt','label','button-name']) assert.ok(report.findings.some((finding: {id:string}) => finding.id === id));
     assert.ok(report.limitations.some((text: string) => /requests were blocked by policy/.test(text)));

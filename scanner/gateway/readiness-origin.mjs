@@ -27,6 +27,8 @@ function handle(req,res){
   if(path==='/missing'){res.writeHead(404,{'Content-Type':'text/plain'});res.end('Controlled missing page');return;}
   if(path==='/redirect'){res.writeHead(302,{Location:'/barriers'});res.end();return;}
   if(path==='/blocked-redirect'||path==='/subresource-redirect'){res.writeHead(302,{Location:'http://10.0.0.1/private'});res.end();return;}
+  const historyTask = path === '/same-url-history' ? 'history.replaceState(null,"",location.href)' : path === '/same-url-reload' ? 'location.reload()' : undefined;
+  if(historyTask){res.writeHead(200,{'Content-Type':'text/html'});res.end(html.replace('</body>', `<script>let observedAxe;Object.defineProperty(window,'axe',{configurable:true,get(){return observedAxe;},set(value){observedAxe=value;queueMicrotask(()=>{${historyTask}});}});</script></body>`));return;}
   const body = path === '/moving' ? html.replace('</body>', `<script>let observedAxe;Object.defineProperty(window,'axe',{configurable:true,get(){return observedAxe;},set(value){observedAxe=value;queueMicrotask(()=>history.replaceState(null,'','/moving?analysis=started'));}});</script></body>`) : html;
   res.writeHead(200,{'Content-Type':'text/html'});res.end(body);
 }
