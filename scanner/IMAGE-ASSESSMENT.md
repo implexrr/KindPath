@@ -1,6 +1,6 @@
 # Local container image assessment
 
-Assessed November 9, 2026 after the public-website implementation rebuilt the existing Chromium runtime, browser QA and firewall roles. No dependencies or base digests changed in this branch. This reassessment includes the review fixes for controller-approval deadlines and cross-host client report validation. **Public capture and scanning remain disabled.** The scanner and firewall images pass the raw high-severity threshold; the QA image still fails. This is evidence for a separate activation review, not activation or risk acceptance.
+Assessed November 9, 2026 after adding redacted failure diagnostics and fixing a controlled same-document History API false positive. Dependencies and base digests are unchanged. This table describes final post-fix builds; the two diagnostic retries used earlier pre-fix images recorded in the [diagnostic evidence](SCAN-FAILURE-DIAGNOSTICS.md). **Public capture and scanning remain disabled.** The scanner and firewall images pass the raw high-severity threshold; QA still fails it. This is not ongoing activation or risk acceptance.
 
 ## Image roles and build inputs
 
@@ -18,9 +18,9 @@ Free local Anchore Grype v0.121.2 inspected the squashed arm64 filesystems with 
 
 | Local image | Arm64 configuration digest (Grype imageID) | OCI index/repository digest |
 | --- | --- | --- |
-| Chromium scanner runtime | `sha256:b4c0e12f737c052fd2c97fd51270df1c212f742459912158b278c3a8e210dae7` | `sha256:184a68af8b10c0f1672831429aa43c30d66b92bede5c4b258749bce48fa901cb` |
-| Browser QA | `sha256:b05e7ec9104440c5f42cc0c492b8ca9586fc8a9be0c7eed29cc02b2f2a024a61` | `sha256:34579487e0de28f254db8247e619f97e9c601a03d6cca8087e3aeed43c51ad69` |
-| Firewall helper | `sha256:38024b7679a536a3d65e7044608021fa9a38a70e5a974d58b54c4250f1f3cf0f` | `sha256:025385f932a2215fa517268a9d663068b5002e4411130cbc5e27bc690172a68b` |
+| Chromium scanner runtime | `sha256:a04dffc64e7a8e34db9a63d7511e24b555e8ea752ae3054e998fb96607a193d9` | `sha256:499ec49be175a20f1eee3de9403b7adb4ffb587924eef043b6cda026f342a88c` |
+| Browser QA | `sha256:c526aa11d7ce955094193ec5efc0d6cf7f0304e51f945b0f48097fccb6c99ae1` | `sha256:3e28d69da58c58664248586c8cd6be084edfa36210c45b40d52115e0f9ffbea8` |
+| Firewall helper | `sha256:38024b7679a536a3d65e7044608021fa9a38a70e5a974d58b54c4250f1f3cf0f` | `sha256:6026381ef405f1e4a910c33e58fecd4801d1d5b71817629f2ffe9fc713529fcc` |
 
 Docker's local store reports the OCI index digest as its image ID; Grype reports the selected platform's configuration digest separately. Repository digests bind these reports to the local tags. Rebuilt attestation metadata can change an index even when the helper's filesystem/configuration stays unchanged.
 
@@ -40,7 +40,7 @@ The image split's sandboxed inventory checks found only `chromium_headless_shell
 
 The existing runtime isolation verification now rejects accidental Firefox/WebKit or GStreamer bad-package inclusion. Three-engine UI verification explicitly selects QA while keeping its existing network-none/read-only/non-root/capability and iframe checks. Synthetic TLS origins also select QA; this keeps test services separate from the submitted-page runtime. No arbitrary browser/image selector or fallback is exposed through HTTP.
 
-All 139 controlled tests passed: 90 unit/API, 7 isolated scanner, 25 gateway unit, 13 internal-origin gateway/API, 3 kernel firewall and 1 integration suite covering Chromium 158.0.8127.18, Firefox 159.0 and WebKit 27.2. TypeScript/Vite and all three image targets built successfully; both npm audits returned zero known vulnerabilities. Subsequent [report-only live validation](REAL-WEBSITE-VALIDATION.md) used these unchanged images for five approved attempts: three reports displayed and two scans failed with unresolved causes. Capture stayed disabled; this does not establish general site compatibility. An earlier restricted-build example.com attempt is recorded in the [validation record](MVP-VALIDATION.md). During initial implementation, one WebKit interaction timed out during concurrent image analysis. All three engines passed the subsequent review with cross-host report/preview and invalid-URL regressions; image analysis ran separately. No remote CI was run for this unpushed branch.
+All 148 controlled tests passed: 97 unit/API, 7 isolated scanner, 25 gateway unit, 15 internal-origin gateway/API, 3 kernel firewall and 1 integration suite covering Chromium 158.0.8127.18, Firefox 159.0 and WebKit 27.2. TypeScript/Vite and all three image targets built successfully; both npm audits returned zero known vulnerabilities. Earlier [report-only live validation](REAL-WEBSITE-VALIDATION.md) used the then-current builds for five approved attempts: three reports displayed and two scans failed with unresolved causes. Two subsequent pre-fix diagnostic retries recorded navigation-guard rejection during analysis; the final History API fix has controlled validation only. Capture stayed disabled; this does not establish general site compatibility. An earlier restricted-build example.com attempt is recorded in the [validation record](MVP-VALIDATION.md). During initial implementation, one WebKit interaction timed out during concurrent image analysis. All three engines passed the subsequent review with cross-host report/preview and invalid-URL regressions; image analysis ran separately. No remote CI was run for this unpushed branch.
 
 ## Open QA findings and activation decision
 
