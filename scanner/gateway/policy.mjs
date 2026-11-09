@@ -26,9 +26,9 @@ export function validateTarget(raw, allowedHosts, connect = false) {
   return { url, host, port };
 }
 
-export async function resolveTarget(raw, allowedHosts, connect = false, resolver = lookup) {
+export async function resolveTarget(raw, allowedHosts, connect = false, resolver = lookup, timeoutMs = 5000) {
   const target = validateTarget(raw, allowedHosts, connect);
-  const timeout = AbortSignal.timeout(5000);
+  const timeout = AbortSignal.timeout(timeoutMs);
   const answers = await Promise.race([
     resolver(target.host, { all: true, verbatim: true }),
     new Promise((_, reject) => timeout.addEventListener('abort', () => reject(new Error('DNS timeout')), { once: true })),

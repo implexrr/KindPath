@@ -26,7 +26,9 @@ const lookup = allowed === null ? controllerResolver(initial, host => new Promis
   pending.set(id, answers => { clearTimeout(timer); resolve(answers); });
   process.stdout.write(JSON.stringify({ id, host }) + '\n');
 })) : snapshotResolver(initial, allowed);
-const server = createGateway(allowed, { resolve: (raw, hosts, tunnel) => resolveTarget(raw, hosts, tunnel, lookup) });
+// Controller approval includes queued DNS and verified firewall updates. Its
+// deadline is separate from the controller's five-second per-host DNS limit.
+const server = createGateway(allowed, { resolve: (raw, hosts, tunnel) => resolveTarget(raw, hosts, tunnel, lookup, allowed === null ? 55000 : 5000) });
 await new Promise((resolve, reject) => server.listen(socketPath, resolve).once('error', reject));
 await chmod(socketPath, 0o600);
 process.stdout.write(allowed === null ? JSON.stringify({ready:true}) + '\n' : 'Gateway ready\n');
