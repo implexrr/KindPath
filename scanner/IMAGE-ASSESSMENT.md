@@ -1,6 +1,6 @@
 # Local container image assessment
 
-Assessed November 9, 2026 after separating the Chromium scanner runtime from browser QA. **Public capture and scanning remain disabled.** The scanner and firewall images pass the raw high-severity threshold; the QA image still fails. This is evidence for a separate activation review, not activation or risk acceptance.
+Assessed November 9, 2026 after the public-website implementation rebuilt the existing Chromium runtime, browser QA and firewall roles. No dependencies or base digests changed in this branch. **Public capture and scanning remain disabled.** The scanner and firewall images pass the raw high-severity threshold; the QA image still fails. This is evidence for a separate activation review, not activation or risk acceptance.
 
 ## Image roles and build inputs
 
@@ -14,13 +14,13 @@ Playwright/playwright-core remain locked at 1.65.0. The runtime uses the locked 
 
 ## Method and exact images
 
-Free local Anchore Grype v0.121.2 inspected the squashed arm64 filesystems with `--scope squashed -o json --fail-on high`. Its official release archive was checksum-verified previously. All three scans used the same validated database, schema v6.1.10, built `2026-11-08T06:19:57Z`; archive SHA-256 `dcca24722e16c2bcf4a542a3f7fdd2147baf9215c17b973f5a7d4243fbddacea`. A public database update check reported no newer candidate. Application update checks and automatic database updates were disabled during scanning. No inventories were sent to a cloud service, and no subscription, trial, Pro/ESM attachment or paid operation was used. Raw JSON evidence remains outside the repository.
+Free local Anchore Grype v0.121.2 inspected the squashed arm64 filesystems with `--scope squashed -o json --fail-on high`. Its official release archive was checksum-verified previously. All three scans used the same validated database, schema v6.1.10, built `2026-11-08T06:19:57Z`; archive SHA-256 `dcca24722e16c2bcf4a542a3f7fdd2147baf9215c17b973f5a7d4243fbddacea`. The same cached database was used for these local scans; an earlier update check that day reported no newer candidate. This reassessment did not perform a fresh database update check. Application update checks and automatic database updates were disabled during scanning. No inventories were sent to a cloud service, and no subscription, trial, Pro/ESM attachment or paid operation was used. Raw JSON evidence remains outside the repository.
 
 | Local image | Arm64 configuration digest (Grype imageID) | OCI index/repository digest |
 | --- | --- | --- |
-| Chromium scanner runtime | `sha256:2227fc9bf39bda03ff360804ceda1905b83519809b983613e58b86cebaaeba33` | `sha256:1fc94aca2f3e1fe7da9cb5366a1764440e07ec5c9c0e6c94a8ef93d5a842d1f6` |
-| Browser QA | `sha256:ffca4205bfb3aba1d842c0b94707489e815d9da788218f5248b4b833954d9b40` | `sha256:777fd8f2dbb818c47ce1ae4e5fdeba16e2b9771aa3cc28bdc90156d78657cd73` |
-| Firewall helper | `sha256:ed7936dcb3be22ca4f6e77959fefee4003ee43c59f7ab1771229650a20f9b1e8` | `sha256:7071f1f03b40d20b63416f255b069b5fa2520c8b178f59df91e69a6869bb4cde` |
+| Chromium scanner runtime | `sha256:bd6304c196a0696d9be5377a906a8e658aa8de51c8486bacaede46f809bd42ec` | `sha256:919f3c99368d2fc8137627a7dc9501a290ee23cbab8ba185517d938a39e2574f` |
+| Browser QA | `sha256:5bd8574f9a264deb8345311e8f5ac8bf4233e9703b84b688446afd84f36e44ec` | `sha256:dcc7906d997df6c264ef252eadf7d2aa14bbf7f857973f662e80e052184ff57f` |
+| Firewall helper | `sha256:38024b7679a536a3d65e7044608021fa9a38a70e5a974d58b54c4250f1f3cf0f` | `sha256:35fc26f78ba247bb94a204681c7891d050daaa3e0a53626d4c13a287c2a47376` |
 
 Docker's local store reports the OCI index digest as its image ID; Grype reports the selected platform's configuration digest separately. Repository digests bind these reports to the local tags. Rebuilt attestation metadata can change an index even when the helper's filesystem/configuration stays unchanged.
 
@@ -34,13 +34,13 @@ Counts are advisory/package matches, not unique CVEs or independently confirmed 
 
 ## Inventory and compatibility evidence
 
-The runtime contains 202 installed packages versus QA's 511. Docker reports 1,317,397,527 bytes for the runtime and 3,629,174,151 for QA: approximately 64% smaller. These are reported image sizes, not unique host disk usage or a promise that existing cached layers were deleted.
+The image split's earlier inventory contained 202 installed packages versus QA's 511. At that point Docker reported 1,317,397,527 bytes for the runtime and 3,629,174,151 for QA: approximately 64% smaller. These are reported image sizes, not unique host disk usage or a promise that existing cached layers were deleted.
 
-Sandboxed inventory checks found only `chromium_headless_shell-1254` and `ffmpeg-1013` under the runtime's browser directory. Firefox, WebKit and the two GStreamer bad-package records are absent. CA certificates are installed; npm and GCC are absent. The actual headless executable hashes match between runtime and QA: `6ce3e550aca822c99c1509e4352523d27903edb466818db964ba8087ebe068b4`. Both use Node v26.13.0 and Playwright 1.65.0.
+The image split's sandboxed inventory checks found only `chromium_headless_shell-1254` and `ffmpeg-1013` under the runtime's browser directory. Firefox, WebKit and the two GStreamer bad-package records are absent. CA certificates are installed; npm and GCC are absent. The actual headless executable hashes match between runtime and QA: `6ce3e550aca822c99c1509e4352523d27903edb466818db964ba8087ebe068b4`. Both use Node v26.13.0 and Playwright 1.65.0.
 
 The existing runtime isolation verification now rejects accidental Firefox/WebKit or GStreamer bad-package inclusion. Three-engine UI verification explicitly selects QA while keeping its existing network-none/read-only/non-root/capability and iframe checks. Synthetic TLS origins also select QA; this keeps test services separate from the submitted-page runtime. No arbitrary browser/image selector or fallback is exposed through HTTP.
 
-All 122 controlled tests passed: 80 unit/API, 7 isolated scanner, 22 gateway unit, 10 internal-origin gateway/API, 2 kernel firewall and 1 integration suite covering Chromium 158.0.8127.18, Firefox 159.0 and WebKit 27.2. TypeScript/Vite and all three image targets built successfully; both npm audits returned zero known vulnerabilities. Public DNS, valid public TLS and a real submitted-page smoke remain untested. No remote CI was run for this unpushed branch.
+All 138 controlled tests passed: 90 unit/API, 7 isolated scanner, 24 gateway unit, 13 internal-origin gateway/API, 3 kernel firewall and 1 integration suite covering Chromium 158.0.8127.18, Firefox 159.0 and WebKit 27.2. TypeScript/Vite and all three image targets built successfully; both npm audits returned zero known vulnerabilities. The expanded public-host path has not visited a public site. An earlier restricted-build example.com attempt is recorded in the [validation record](MVP-VALIDATION.md). One initial WebKit interaction timed out during concurrent image analysis; the unchanged UI suite passed when rerun separately. No remote CI was run for this unpushed branch.
 
 ## Open QA findings and activation decision
 
@@ -50,6 +50,6 @@ The former combined image's seven high matches are confined to QA after the spli
 
 The remaining two high package records concern CVE-2025-3887. QA retains the reviewed GStreamer source backport and its parser tests, bounds regression, symbol comparison, provenance and installed-library checksum `4852034e86f6c92af2ec63acb67caa4438e7ad287932aeecd718309018596727`. The package version remains unchanged, so version-based scanners still match it. The lean scanner does not include these packages or this custom backport.
 
-The runtime now passes this image threshold; that does not automatically enable the application or accept QA risks. Both public constants remain false. A separate enabled-path review and explicit approval for the bounded [example.com validation plan](MVP-VALIDATION.md) remain required. Do not bypass default gates through a test dependency injection or enable unsupported browsers to obtain a live result.
+The runtime now passes this image threshold; that does not automatically enable the application or accept QA risks. Both public constants remain false. A separate review of the expanded destination path and explicit approval for a bounded live validation remain required; the [validation plan](MVP-VALIDATION.md) records the earlier restricted-build attempt. Do not bypass default gates through a test dependency injection or enable unsupported browsers to obtain a live result.
 
 Historically, the Playwright 1.64.1 combined worker had 28 critical/144 high matches; the 1.65.0 combined image had 0 critical/7 high using this same database. The current role-specific table supersedes those combined-worker counts. Historical Docker Scout totals use different matching/feed data and are not directly comparable.
