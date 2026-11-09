@@ -188,6 +188,10 @@ The controlled tasks are fixed internal selectors, not new API actions. `/api/sc
 
 **Readiness decision: do not enable public scanning yet.** The targeted GStreamer source backport is described above; it does not clear the rest of the recorded image assessment. No subscription, credentials, risk acceptance, new image scan service, or base-image migration was added. The fresh [local image assessment](scanner/IMAGE-ASSESSMENT.md) is complete and failed the worker high-severity threshold. Review of remaining browser/image advisories, reassessment after further updates, a separate public-path security review, and an explicitly authorized `example.com` smoke test remain before activation. Passing controlled tests does not demonstrate host/VM safety or accessibility conformance.
 
+## Single-page MVP validation
+
+The [bounded validation plan](scanner/MVP-VALIDATION.md) separates existing controlled evidence from the still-unverified live URL-to-findings-to-preview flow. Preparation does not activate either public capability. The current advisory questions, explicit activation approval and one-attempt example.com smoke remain outstanding; no new application features or hosting are part of this milestone.
+
 ## Gated URL-to-report path
 
 The prepared URL path accepts only the candidate hostname `example.com` over HTTP/HTTPS on standard ports, with no credentials or fragments. **Public scanning and capture remain disabled.** The default router, report service and URL runner each check the same disabled policy; tests use separate dependency-injected instances, never request parameters or environment overrides. “Try an example” always requests demo findings, even if public scanning becomes available in a future release.
