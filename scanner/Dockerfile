@@ -15,6 +15,7 @@ RUN sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.s
         libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev curl ca-certificates patch
 WORKDIR /build
 RUN apt-get source gst-plugins-bad1.0=1.24.2-1ubuntu4
+# The older source lacks one context-only comment; restore it before applying the unmodified fix.
 RUN curl --fail --location --proto '=https' --tlsv1.2 \
         https://github.com/GStreamer/gstreamer/commit/e4351ef03f1331410b0c1216a6178d885f37e495.patch -o prerequisite.patch \
     && echo '67657bfba83291e4be2b7acbe0f481858270f26570a45fea7a2de78aaf432164  prerequisite.patch' | sha256sum -c -
@@ -40,11 +41,26 @@ RUN --network=none cd gst-plugins-bad1.0-1.24.2 \
         -I gst-libs /build/h265-regression.c -o /build/h265-regression \
         $(pkg-config --cflags --libs gstreamer-1.0) -L build/gst-libs/gst/codecparsers -lgstcodecparsers-1.0 \
     && /build/h265-regression --original \
-    && LD_LIBRARY_PATH=build/gst-libs/gst/codecparsers /build/h265-regression
+    && LD_LIBRARY_PATH=build/gst-libs/gst/codecparsers /build/h265-regression \
+    && original=/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/libgstcodecparsers-1.0.so.0.2402.0 \
+    && nm -D --defined-only "$original" > /build/original-nm \
+    && awk '{print $3}' /build/original-nm | sort > /build/original-symbols \
+    && nm -D --defined-only build/gst-libs/gst/codecparsers/libgstcodecparsers-1.0.so.0.2402.0 > /build/patched-nm \
+    && awk '{print $3}' /build/patched-nm | sort > /build/patched-symbols \
+    && diff -u /build/original-symbols /build/patched-symbols \
+    && cd build/gst-libs/gst/codecparsers \
+    && sha256sum libgstcodecparsers-1.0.so.0.2402.0 > /build/codec.sha256
 
 FROM patched AS worker
 COPY --from=codec-builder /build/gst-plugins-bad1.0-1.24.2/build/gst-libs/gst/codecparsers/libgstcodecparsers-1.0.so.0.2402.0 /tmp/patched-codec.so
-RUN install -m 0644 /tmp/patched-codec.so "$(find /usr/lib -name libgstcodecparsers-1.0.so.0.2402.0 -type f)" && rm /tmp/patched-codec.so
+COPY --from=codec-builder /build/codec.sha256 /usr/share/kindpath/codec.sha256
+COPY --from=codec-builder /build/prerequisite.patch /build/fix.patch /usr/share/doc/libgstreamer-plugins-bad1.0-0/kindpath-patches/
+# Fail closed if a base refresh changes the package targeted by this specific backport.
+RUN --network=none test "$(dpkg-query -W -f='${Version}' libgstreamer-plugins-bad1.0-0)" = '1.24.2-1ubuntu4' \
+    && target="$(find /usr/lib -name libgstcodecparsers-1.0.so.0.2402.0 -type f)" \
+    && test -f "$target" \
+    && install -m 0644 /tmp/patched-codec.so "$target" && rm /tmp/patched-codec.so \
+    && cd "$(dirname "$target")" && sha256sum -c /usr/share/kindpath/codec.sha256
 WORKDIR /opt/kindpath-worker
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force \
