@@ -11,7 +11,7 @@ import { scanFixture } from './scanner/fixtureScanner.js';
 import { mapSitePreview } from './scanner/sitePreview.js';
 import { createDemoReport } from './services/analyze.js';
 import { openLocalDockerSession, removeAndConfirm } from './scanner/dockerWorker.js';
-import { assertContainerIsolation, containerArguments, IMAGE } from './scanner/containerPolicy.js';
+import { assertContainerIsolation, containerArguments, IMAGE, QA_IMAGE } from './scanner/containerPolicy.js';
 
 // Fulfill the app's requests from the built assets and real fixture responses, entirely inside network none.
 test('reports, exports and isolated previews work in Chromium, Firefox and WebKit', { timeout: 180000 }, async () => {
@@ -46,6 +46,7 @@ test('reports, exports and isolated previews work in Chromium, Firefox and WebKi
       args[args.indexOf('--label') + 1] = 'kindpath.preview=qa';
       args.splice(1, 0, '--interactive');
       args.splice(args.indexOf(IMAGE), 0, '--entrypoint=node');
+      args[args.indexOf(IMAGE)] = QA_IMAGE; // UI engines never select the scanner runtime image.
       args.splice(args.length - 1, 1, '--input-type=module', '-e', script);
       await session.command(args);
       assertContainerIsolation(JSON.parse(await session.command(['inspect', name])));

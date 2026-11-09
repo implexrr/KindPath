@@ -1,4 +1,4 @@
-import { readFile, access } from 'node:fs/promises';
+import { readFile, access, readdir } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { connect } from 'node:net';
 import { chromium } from 'playwright';
@@ -16,6 +16,11 @@ try {
     throw new Error('External network interface detected');
   }
   if (task === 'verify-isolation') {
+    const browsers = await readdir('/ms-playwright');
+    if (!browsers.some(name => /^chromium_headless_shell-/.test(name))
+      || browsers.some(name => /^(?:firefox|webkit)-/.test(name))) throw new Error('Unexpected scanner browser inventory');
+    const packages = await readFile('/var/lib/dpkg/status', 'utf8');
+    if (/^Package: (?:gstreamer1\.0-plugins-bad|libgstreamer-plugins-bad1\.0-0)$/m.test(packages)) throw new Error('Unexpected scanner codec inventory');
     const status = await readFile('/proc/self/status', 'utf8');
     if (!/^NoNewPrivs:\s+1$/m.test(status) || !/^CapEff:\s+0+$/m.test(status)) {
       throw new Error('Privilege restrictions missing');
