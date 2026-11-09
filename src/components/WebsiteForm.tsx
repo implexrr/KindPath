@@ -24,7 +24,7 @@ interface WebsiteFormProps {
 
 export function WebsiteForm({ url, activity, onCancel, onRetry, canRetry, cancelled, busy, error, onUrlChange, onSubmit, onExample, onFixtureScan, fixture, onFixtureChange, publicScanningEnabled, allowedHosts }: WebsiteFormProps) {
   const retryButton=useRef<HTMLButtonElement>(null);
-  useLayoutEffect(()=>{ if(cancelled && canRetry)retryButton.current?.focus(); },[cancelled,canRetry]);
+  useLayoutEffect(()=>{ if((cancelled || error) && canRetry)retryButton.current?.focus(); },[cancelled,error,canRetry]);
   return <>
     <form onSubmit={onSubmit} aria-busy={busy}>
       <label htmlFor="website">Your website URL</label>

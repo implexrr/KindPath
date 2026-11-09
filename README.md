@@ -22,7 +22,7 @@ For fixture reports, the visual preview captures the same selected built-in page
 
 Automated checks and visual simulations cannot establish accessibility conformance. Keyboard, screen reader, and usability evaluation remain essential.
 
-The request status announces progress, completion and cancellation. **Cancel request** stops waiting and clears pending results; **Try again** repeats the last action only when explicitly selected. Worker cleanup can briefly keep the scanner busy after cancellation. Editing the URL or changing the built-in page clears previous results and retry state. Late responses cannot replace the current workspace.
+The request status announces progress, completion and cancellation. **Cancel request** stops waiting and clears pending results; **Try again** repeats the last action only when explicitly selected. Worker cleanup can briefly keep the scanner busy after cancellation. Editing the URL or changing the built-in page clears previous results and retry state. Late responses cannot replace the current workspace. Unreadable responses use a fixed message rather than raw parsing diagnostics, and cancellation or failure moves keyboard focus to **Try again**.
 
 ## Run locally
 

@@ -75,9 +75,13 @@ export function App() {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fixture ? { fixture: value } : { url: value }),
         signal: AbortSignal.any([abort.signal, AbortSignal.timeout(mode === 'demo' ? 10000 : 90000)]),
       });
-      const data = await response.json();
+      let data;
+      try { data = await response.json(); }
+      catch { throw new Error('The response could not be read. No report was created. Try again.'); }
       if (!response.ok) throw new Error(scanErrorMessage(data,response.status));
-      if (data.mode !== mode) throw new Error('The report did not match the requested scan. Try again.');
+      if (!data || typeof data !== 'object' || Array.isArray(data) || data.mode !== mode) {
+        throw new Error('The report did not match the requested scan. Try again.');
+      }
       if (mode === 'public') {
         let matches = false;
         try {

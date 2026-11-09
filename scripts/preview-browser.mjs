@@ -75,6 +75,7 @@ try {
     return pdf?.toString('base64') ?? null;
   }
   let delayScan = false, releaseScan, scanHeld = false;
+  let fixtureResponseOverride;
   let delayPreview = false, releasePreview, previewHeld = false;
   let wrongPreview = false;
   const capturedFixtures = [];
@@ -97,10 +98,10 @@ try {
     }
     if (url.pathname === '/api/scan-fixture') {
       assert.ok(['barriers', 'clear'].includes(route.request().postDataJSON().fixture));
-      const report = activeReport;
+      const response = fixtureResponseOverride ?? { json: activeReport };
       const delayed = delayScan;
       if (delayed) { scanHeld = true; await new Promise(resolve => { releaseScan = resolve; }); }
-      try { await route.fulfill({ json: report }); } catch (error) { if (!delayed) throw error; } // The delayed request is deliberately cancelled below.
+      try { await route.fulfill(response); } catch (error) { if (!delayed) throw error; } // The delayed request is deliberately cancelled below.
       return;
     }
     if (url.pathname === '/api/preview-fixture') {
@@ -496,7 +497,21 @@ try {
   assert.equal(await page.locator('.results').count(),0);
   assert.equal(await page.getByRole('button',{name:'Try again',exact:true}).evaluate(node=>node===document.activeElement),true);
   delayScan=false; activeReport=data.report; releaseScan();
-  await page.getByRole('button',{name:'Try again',exact:true}).click();
+  // Malformed proxy/error bodies must not become UI diagnostics, and a failed retry keeps usable focus.
+  const retryButton=page.getByRole('button',{name:'Try again',exact:true});
+  for (const response of [
+    {status:503,contentType:'text/html',body:'private-response-marker: invalid response'},
+    {json:null},
+  ]) {
+    fixtureResponseOverride=response;
+    await retryButton.click();
+    await page.getByRole('alert').filter({hasText: response.status ? 'The response could not be read.' : 'The report did not match the requested scan.'}).waitFor();
+    assert.equal(await page.locator('.results').count(),0);
+    assert.equal(await page.getByText(/private-response-marker/).count(),0);
+    assert.equal(await retryButton.evaluate(node=>node===document.activeElement),true);
+  }
+  fixtureResponseOverride=undefined;
+  await retryButton.click();
   await page.getByText('Scanned fixture: Garden form with barriers',{exact:true}).waitFor();
   assert.equal(await page.getByText('Scanned fixture: Labelled garden form',{exact:true}).count(),0);
   // Editing a URL clears the prior report instead of showing it under a new address.
