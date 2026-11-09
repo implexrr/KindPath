@@ -1,8 +1,11 @@
-import { PUBLIC_SCANNING_ENABLED, validatePublicUrl } from './publicPolicy.js';
-import { runPublicWorker } from './publicDockerWorker.js';
+import { randomUUID } from 'node:crypto';
+import { mapSitePreview } from './sitePreview.js';
+import { PUBLIC_SCANNING_ENABLED, PUBLIC_CAPTURE_ENABLED, validatePublicUrl } from './publicPolicy.js';
+import { runPublicUrlWorker } from './publicUrlWorker.js';
+import { ScannerError } from './dockerWorker.js';
 import { mapWorkerReport } from './fixtureScanner.js';
 
-export function mapPublicReport(raw: unknown) {
+export function mapPublicReport(raw: unknown, requestedUrl?: string) {
   const report = mapWorkerReport(raw, 'public');
   const result = raw as { url?: unknown; coverage?: { blockedRequests?: unknown; failedRequests?: unknown; omittedRules?: unknown; omittedNodes?: unknown } };
   const finalUrl = validatePublicUrl(result.url);
@@ -11,7 +14,7 @@ export function mapPublicReport(raw: unknown) {
     || !Number.isSafeInteger(coverage.failedRequests) || Number(coverage.failedRequests) < 0
     || !Number.isSafeInteger(coverage.omittedRules) || Number(coverage.omittedRules) < 0
     || !Number.isSafeInteger(coverage.omittedNodes) || Number(coverage.omittedNodes) < 0) throw new Error('Invalid scan coverage.');
-  return { ...report, mode: 'public' as const, url: finalUrl, limitations: [
+  return { ...report, mode: 'public' as const, url: finalUrl, ...(requestedUrl ? { requestedUrl: validatePublicUrl(requestedUrl) } : {}), limitations: [
     'Only the initial top-level page at the default viewport was scanned; embedded frames and interactive states are excluded.',
     `${coverage.blockedRequests} requests were blocked by policy and ${coverage.failedRequests} requests failed. Missing resources can change the result.`,
     ...(Number(coverage.omittedRules) || Number(coverage.omittedNodes) ? [
@@ -20,7 +23,30 @@ export function mapPublicReport(raw: unknown) {
     'Automated findings do not establish accessibility conformance.',
   ] };
 }
-export async function scanPublicSite(value: unknown, signal?: AbortSignal) {
-  if (!PUBLIC_SCANNING_ENABLED) throw new Error('Public URL scanning is disabled.');
-  return mapPublicReport(await runPublicWorker(validatePublicUrl(value), signal));
+interface Dependencies {
+  enabled?: () => boolean;
+  captureEnabled?: () => boolean;
+  worker?: (target: string, signal?: AbortSignal) => Promise<unknown>;
 }
+export function createPublicSiteScanner({ enabled = () => PUBLIC_SCANNING_ENABLED, captureEnabled = () => PUBLIC_CAPTURE_ENABLED, worker = runPublicUrlWorker }: Dependencies = {}) {
+  return async (value: unknown, signal?: AbortSignal) => {
+    if (!enabled()) throw new ScannerError('SCANNER_UNAVAILABLE', 'Public URL scanning is disabled pending security review.');
+    const target = validatePublicUrl(value);
+    signal?.throwIfAborted();
+    const capture = captureEnabled();
+    try {
+      const raw = await worker(target, signal);
+      signal?.throwIfAborted();
+      const report = mapPublicReport(raw, target);
+      const preview = (raw as {preview?: unknown}).preview;
+      if (!capture && preview !== undefined) throw new Error('Capture is disabled');
+      const scanId = randomUUID();
+      return {...report,scanId,...(capture ? {sitePreview:mapSitePreview(preview,{scanId,requestedUrl:target,url:report.url})} : {})};
+    } catch (error) {
+      if (error instanceof ScannerError && error.code !== 'SCAN_FAILED') throw error;
+      // Never expose DNS, browser, Docker or untrusted worker diagnostics to the caller.
+      throw new ScannerError('SCAN_FAILED', 'The website scan failed or timed out. No report was produced.');
+    }
+  };
+}
+export const scanPublicSite = createPublicSiteScanner();

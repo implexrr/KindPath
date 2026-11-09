@@ -1,5 +1,6 @@
 // Enabling the route is a separate reviewed change, after the gateway security tests.
 export const PUBLIC_SCANNING_ENABLED = false;
+export const PUBLIC_CAPTURE_ENABLED = false;
 export const ALLOWED_PUBLIC_HOSTS = ['example.com'] as const;
 export const PUBLIC_LABEL = 'kindpath.scanner=public';
 

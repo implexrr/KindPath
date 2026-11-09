@@ -46,8 +46,8 @@ test('a frozen destination plan drives real gateway/browser scans behind verifie
   assert.ok(proof.requests.some(request=>request.path==='/barriers'));
   assert.equal(PUBLIC_SCANNING_ENABLED,false);
 });
-test('forbidden redirects and untrusted TLS certificates never produce a successful report', {timeout:120000},async()=>{
-  for(const [task,marker] of [['verify-pinned-redirect','DESTINATION_REJECTED'],['verify-pinned-tls','TLS_CERTIFICATE_REJECTED']]) {
+test('forbidden redirects, untrusted TLS and a page changing during analysis never produce a successful report', {timeout:120000},async()=>{
+  for(const [task,marker] of [['verify-pinned-redirect','DESTINATION_REJECTED'],['verify-pinned-tls','TLS_CERTIFICATE_REJECTED'],['verify-pinned-moving','PAGE_CHANGED_DURING_SCAN']]) {
     let verifiedRejection=false;
     const run=createPublicWorkerRunner(async()=>{
       const session=await openLocalDockerSession();
@@ -66,3 +66,94 @@ test('forbidden redirects and untrusted TLS certificates never produce a success
     for(const args of [['ps','--all','--quiet'],['network','ls','--quiet'],['volume','ls','--quiet']])assert.equal((await session.command([...args,'--filter','label=kindpath.scanner=public'])).trim(),'');
   } finally {await session.dispose();}
 });
+
+for (const scenario of [
+  {path:'/redirect',final:'/barriers'}, {path:'/content',final:'/content'},
+  {path:'/forms',final:'/forms'}, {path:'/missing',final:'/missing'},
+]) {
+test(`URL scan/capture handles controlled ${scenario.path} without public access`, {timeout:90000}, async () => {
+  const { default: express } = await import('express');
+  const { createPublicRouter } = await import('./routes/scanPublic.js');
+  const { createPublicSiteScanner } = await import('./scanner/publicScanner.js');
+  const { createPublicUrlWorkerRunner } = await import('./scanner/publicUrlWorker.js');
+  const { createDestinationPlan } = await import('./scanner/destinationSnapshot.js');
+  const { prepareNamespace, createFirewallContainer, PINNED_FIXTURE_IP } = await import('./scanner/firewallDocker.js');
+  const { localRequests } = await import('./middleware/localRequests.js');
+  const target = 'http://example.com'+scenario.path;
+  let lookups = 0;
+  const worker = createPublicUrlWorkerRunner({
+    captureEnabled: () => true,
+    enabled: () => true, // Local test instance only; the application's router/runner gates stay false.
+    planTarget: async (url, signal) => {
+      assert.equal(url, target);
+      return createDestinationPlan(url, async host => {
+        lookups++; assert.equal(host, 'example.com'); return [{ address: PINNED_FIXTURE_IP, family: 4 }];
+      }, signal);
+    },
+    prepareNetwork: async (command, resources, signal) => {
+      // A more specific internal route binds the permitted public-shaped IP to our synthetic origin.
+      const ns = await prepareNamespace(command, resources, signal, 'pinned');
+      for (const ip of [PINNED_FIXTURE_IP, '93.184.216.36']) {
+        const origin = await createFirewallContainer(command, resources, ns.network, 'origin', ['gateway/readiness-origin.mjs'], signal, ip);
+        await command(['start', origin.name], signal);
+      }
+      const probe = await createFirewallContainer(command, resources, `container:${ns.id}`, 'probe', ['firewall/probe.mjs', 'before', 'pinned'], signal);
+      const proof = JSON.parse(await command(['start', '--attach', probe.name], signal, 20000));
+      assert.equal(proof.phase, 'before'); assert.equal(proof.allowedConnections, 2); assert.equal(proof.forbiddenConnections, 5);
+      return ns;
+    },
+  });
+  const scan = createPublicSiteScanner({ enabled: () => true, captureEnabled: () => true, worker });
+  const app = express(); app.use('/api', localRequests); app.use(express.json({limit:'4kb'}));
+  app.use('/api', createPublicRouter({enabled: () => true, captureEnabled: () => true, scan}));
+  const server = app.listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/scan-public`, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url:target}), signal: AbortSignal.timeout(80000),
+    });
+    if (scenario.path === '/missing') {
+      assert.equal(response.status,503); const failure=await response.json();
+      assert.equal(failure.code,'SCAN_FAILED'); assert.equal(failure.sitePreview,undefined);
+    } else {
+    assert.equal(response.status, 200);
+    const report = await response.json();
+    assert.equal(report.mode, 'public'); assert.equal(report.requestedUrl, target); assert.equal(report.url,'http://example.com'+scenario.final);
+    if (scenario.path === '/redirect') for (const id of ['image-alt','label','button-name']) assert.ok(report.findings.some((finding: {id:string}) => finding.id === id));
+    assert.ok(report.limitations.some((text: string) => /requests were blocked by policy/.test(text)));
+    assert.equal(lookups, 1); assert.equal(PUBLIC_SCANNING_ENABLED, false);
+    const { PUBLIC_CAPTURE_ENABLED } = await import('./scanner/publicPolicy.js'); assert.equal(PUBLIC_CAPTURE_ENABLED,false);
+    assert.equal(report.sitePreview.scanId,report.scanId); assert.equal(report.sitePreview.requestedUrl,target);
+    assert.equal(report.sitePreview.url,report.url);
+    if (scenario.path === '/redirect') {
+    assert.match(report.sitePreview.html,/Community garden/);
+    assert.match(report.sitePreview.html,/Rendered capture marker/); assert.match(report.sitePreview.html,/Controlled advertisement/);
+    assert.match(report.sitePreview.html,/:hover\{color:rgb\(255, 0, 0\)/);
+    assert.ok(!report.sitePreview.html.includes('controlled-form-value-marker'));
+    assert.match(report.sitePreview.html,/input[^>]* disabled/);
+    }
+    assert.doesNotMatch(report.sitePreview.html,/<(?:script|iframe|form|img|svg)\b|\b(?:href|src|onclick)=/i);
+    if (scenario.path === '/content') {
+      assert.match(report.sitePreview.html,/Garden accessibility guide/); assert.match(report.sitePreview.html,/<h4/);
+      assert.match(report.sitePreview.html,/<table/); assert.match(report.sitePreview.html,/scope="col"/);
+      assert.match(report.sitePreview.html,/colspan="2"/); assert.match(report.sitePreview.html,/box-sizing:border-box/);
+      assert.ok(!report.sitePreview.html.includes('hidden-content-marker'));
+    }
+    if (scenario.path === '/forms') {
+      assert.ok(report.findings.some((finding:{id:string})=>finding.id==='label'));
+      assert.match(report.sitePreview.html,/Static garden supplies advertisement/);
+      assert.ok(!report.sitePreview.html.includes('controlled-name-value'));
+      assert.ok(!report.sitePreview.html.includes('hidden-style-marker'));
+    }
+    assert.ok(report.sitePreview.limitations.length>0);
+    }
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+  const session = await openLocalDockerSession();
+  try {
+    for (const args of [['ps','--all','--quiet'],['network','ls','--quiet'],['volume','ls','--quiet']]) {
+      assert.equal((await session.command([...args,'--filter','label=kindpath.scanner=public'])).trim(),'');
+    }
+  } finally { await session.dispose(); }
+});
+
+}

@@ -13,6 +13,9 @@ export interface Finding {
 }
 export interface Report {
   mode: 'demo' | 'fixture' | 'public';
+  requestedUrl?: string;
+  scanId?: string;
+  sitePreview?: SitePreview;
   url: string;
   generatedAt: string;
   manualChecks: string[];
@@ -27,4 +30,15 @@ export interface FixturePreview {
   title: string;
   capturedAt: string;
   html: string;
+}
+
+export interface SitePreview {
+  mode: 'public';
+  scanId: string;
+  requestedUrl: string;
+  url: string;
+  title: string;
+  capturedAt: string;
+  html: string;
+  limitations: string[];
 }

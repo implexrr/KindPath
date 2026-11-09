@@ -16,3 +16,5 @@
 
 !codec/
 !codec/*.c
+
+!site-preview.mjs

@@ -1,3 +1,4 @@
+import { captureSiteSnapshot } from './site-preview.mjs';
 import net from 'node:net';
 import http from 'node:http';
 import { networkInterfaces } from 'node:os';
@@ -10,11 +11,14 @@ import { summarizeRules } from './public-report.mjs';
 const socketPath = '/run/kindpath/egress.sock';
 const allowed = JSON.parse(process.env.KINDPATH_ALLOWED_HOSTS ?? '[]');
 const target = process.argv[2];
+const capture = process.argv[3] === '--capture';
 const deadline = setTimeout(() => process.exit(2), 40_000);
 let browser;
 let relay;
 let rejectedNavigation = false;
+let pageChanged = false;
 try {
+  if (process.argv.length > 4 || (process.argv[3] && !capture) || (capture && target === 'verify-public-isolation')) throw new Error('Invalid worker task');
   if (process.getuid() === 0 || Object.values(networkInterfaces()).flat().some(a => a && !a.internal)) throw new Error('Isolation missing');
   // Wait briefly for the separate gateway to create its private socket.
   for (let i = 0; ; i++) {
@@ -69,13 +73,23 @@ try {
     });
     page.on('requestfailed', () => { failedRequests++; });
     page.on('response', response => { if (response.status() >= 400) failedRequests++; });
-    const response = await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 15_000 });
+    const response = await page.goto(target, { waitUntil: 'load', timeout: 15_000 });
     if (!response || !response.ok()) throw new Error('Navigation failed');
-    validateTarget(page.url(), allowed);
+    const scannedUrl = page.url();
+    page.on('framenavigated', frame => { if (frame === page.mainFrame()) pageChanged = true; });
+    validateTarget(scannedUrl, allowed);
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).options({ iframes: false }).analyze();
+    // Do not label findings from one document with another URL, including same-URL reloads.
+    if (pageChanged || page.url() !== scannedUrl || result.url !== scannedUrl) {
+      pageChanged = true; throw new Error('Page changed during scan');
+    }
+    const preview = capture ? await captureSiteSnapshot(page) : undefined;
+    if (pageChanged || page.url() !== scannedUrl || (preview && preview.url !== scannedUrl)) {
+      pageChanged = true; throw new Error('Page changed during capture');
+    }
     const violations = summarizeRules(result.violations);
     const incomplete = summarizeRules(result.incomplete);
-    process.stdout.write(JSON.stringify({ fixture: 'public', url: page.url(),
+    process.stdout.write(JSON.stringify({ fixture: 'public', url: scannedUrl, ...(preview ? {preview} : {}),
       coverage: { blockedRequests, failedRequests, omittedRules: violations.omittedRules + incomplete.omittedRules,
         omittedNodes: violations.omittedNodes + incomplete.omittedNodes },
       engine: result.testEngine.version, violations: violations.rules, incomplete: incomplete.rules,
@@ -83,7 +97,7 @@ try {
   }
 } catch (error) {
   const code = error instanceof Error && error.message.includes('ERR_CERT_AUTHORITY_INVALID') ? 'TLS_CERTIFICATE_REJECTED'
-    : rejectedNavigation ? 'DESTINATION_REJECTED' : 'SCAN_FAILED';
+    : pageChanged ? 'PAGE_CHANGED_DURING_SCAN' : rejectedNavigation ? 'DESTINATION_REJECTED' : 'SCAN_FAILED';
   process.stderr.write(`Isolated gateway scan failed: ${code}.\n`); process.exitCode = 1;
 }
 finally { if (browser) await browser.close(); if (relay) relay.close(); clearTimeout(deadline); }

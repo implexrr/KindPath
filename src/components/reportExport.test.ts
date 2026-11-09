@@ -44,3 +44,16 @@ test('demo and empty reports preserve source disclosures and safe filenames', ()
   assert.deepEqual(createReportExport(empty).report.findings, []);
   assert.deepEqual(createReportExport(empty).report.scanner?.incomplete, []);
 });
+
+test('public exports retain requested and final URLs without changing demo or fixture sources', () => {
+  const report: Report = { ...fixture(), mode: 'public', requestedUrl: 'https://example.com/start', url: 'https://example.com/final' };
+  const result = createReportExport(report);
+  assert.equal(result.source.label, 'Automated page scan');
+  assert.equal(result.source.page, report.url);
+  assert.equal(result.report.requestedUrl, report.requestedUrl);
+  assert.equal(result.report.url, report.url);
+  assert.match(result.source.description, /final scanned page/);
+  const builtIn = fixture(); builtIn.requestedUrl = 'incidental-test-marker';
+  assert.equal(createReportExport(builtIn).report.requestedUrl, undefined);
+  assert.match(reportFilename(report), /^kindpath-public-report-/);
+});

@@ -10,16 +10,25 @@ execFileSync('/usr/bin/openssl',['req','-x509','-newkey','rsa:2048','-nodes','-k
 const tls={key:await readFile(keyPath),cert:await readFile(certPath)};
 await unlink(keyPath);await unlink(certPath); // Test credentials never leave container memory/tmpfs.
 const html=(await readFile(new URL('../fixtures/barriers.html',import.meta.url),'utf8')).replace('</body>',`<script>
+document.head.insertAdjacentHTML('beforeend','<style>.capture-link{color:rgb(0,0,0)}.capture-link:hover{color:rgb(255,0,0)}</style>');
+document.body.insertAdjacentHTML('beforeend','<p>Rendered capture marker</p><a class="capture-link" href="/barriers">Captured hover link</a><aside>Controlled advertisement</aside><input type="password" value="controlled-form-value-marker">');
 for(const url of ['http://127.0.0.1:8888/private','http://10.0.0.1/private','http://unlisted.invalid/private','http://example.com:81/private'])fetch(url).catch(()=>{});
 fetch('/forbidden-method',{method:'POST'}).catch(()=>{});
 fetch('/subresource-redirect').catch(()=>{});
 </script></body>`);
+const contentPage=await readFile(new URL('../fixtures/content-page.html',import.meta.url),'utf8');
+const formPage=await readFile(new URL('../fixtures/form-page.html',import.meta.url),'utf8');
+const siteCss='*{box-sizing:border-box}body{font:18px Arial;color:#111;background:#fff;margin:0;padding:24px}.content-card{max-width:900px;padding:20px;border:1px solid #333}table{border-collapse:collapse}th,td{padding:8px;border:1px solid #333}.guide-link:hover{color:rgb(255,0,0)}.offscreen-panel{display:none}';
 function handle(req,res){
   const path=req.url.split('?')[0];
   process.stdout.write(JSON.stringify({method:req.method,path})+'\n');
+  if(path==='/site.css'){setTimeout(()=>{res.writeHead(200,{'Content-Type':'text/css'});res.end(siteCss);},150);return;}
+  if(path==='/content'||path==='/forms'){res.writeHead(200,{'Content-Type':'text/html'});res.end(path==='/content'?contentPage:formPage);return;}
+  if(path==='/missing'){res.writeHead(404,{'Content-Type':'text/plain'});res.end('Controlled missing page');return;}
   if(path==='/redirect'){res.writeHead(302,{Location:'/barriers'});res.end();return;}
   if(path==='/blocked-redirect'||path==='/subresource-redirect'){res.writeHead(302,{Location:'http://10.0.0.1/private'});res.end();return;}
-  res.writeHead(200,{'Content-Type':'text/html'});res.end(html);
+  const body = path === '/moving' ? html.replace('</body>', `<script>let observedAxe;Object.defineProperty(window,'axe',{configurable:true,get(){return observedAxe;},set(value){observedAxe=value;queueMicrotask(()=>history.replaceState(null,'','/moving?analysis=started'));}});</script></body>`) : html;
+  res.writeHead(200,{'Content-Type':'text/html'});res.end(body);
 }
 for(const port of [80,81])await new Promise((done,reject)=>http.createServer(handle).listen(port,'0.0.0.0',done).once('error',reject));
 await new Promise((done,reject)=>https.createServer(tls,handle).listen(443,'0.0.0.0',done).once('error',reject));
