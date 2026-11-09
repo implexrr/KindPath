@@ -34,6 +34,18 @@ All 249 prior Firefox matches marked as having available fixes in this database 
 
 Medium/low findings have not all been individually cleared. Public execution remains blocked pending review of the remaining browser/image concerns, a separate enabled-path security review and an explicitly approved live smoke test. No risk acceptance or activation switch was added.
 
+## Activation applicability review
+
+Reviewed again November 9, 2026 for the proposed single-page MVP validation. **Decision: no public activation in this branch.** The seven raw high matches remain recorded without suppression or blanket risk acceptance.
+
+The reviewed public execution path imports and launches Chromium in `public-worker.mjs`; it does not select a browser from request data. Firefox and WebKit are launched only by the controlled UI verification harness. Firefox findings therefore describe an installed verification engine, not the engine used to visit submitted pages. This narrows exposure; it does not establish that the shared image or Chromium is free of other vulnerabilities.
+
+A bounded inspection of the assessed arm64 image ran in the existing network-none, read-only, non-root sandbox. It found no Oracle-Java/OpenJDK/Citrix/Sage package entries under the checked package-name prefixes, no Java launcher/JVM/Citrix candidate paths, no named Citrix DLLs in the Firefox distribution, and no bundled Firefox XPI extensions among 53 inspected distribution entries. Alongside the fresh verification profiles and reviewed build inputs, this supports the three third-party-product mismatch classifications above. It is evidence about these products and paths, not an exhaustive filesystem or vulnerability audit.
+
+The two historical Firefox records remain unverified. Mozilla still lists the 159.0.1 fix, while the selected Playwright bundle still reports 159.0. The detailed Mozilla bug is access-restricted, and no verified vendor-backport evidence was obtained. No account access, independent Firefox substitution, manual browser build or additional service was introduced to work around that limitation. The targeted GStreamer library repair remains supported by the recorded build/tests/checksum evidence.
+
+These open questions require a separate activation decision before any live smoke. The proposed smoke and exact approval boundary are in [MVP-VALIDATION.md](MVP-VALIDATION.md). Until then, both public constants remain false; passing controlled tests or having example.com in the candidate allowlist is not permission to contact it.
+
 ## Functional and isolation verification
 
 Both image targets and the TypeScript/Vite application build passed. The existing 120 tests passed: 78 unit/API tests, 7 isolated fixture checks, 22 gateway unit checks, 10 controlled gateway/API checks, 2 kernel firewall checks and 1 integration suite covering Chromium 158.0.8127.18, Firefox 159.0 and WebKit 27.2. The worker's Node runtime is v26.13.0. Both npm audits returned zero known vulnerabilities. Owned test containers, socket volumes and networks were absent afterward.
