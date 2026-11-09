@@ -1,3 +1,5 @@
+import { fixtureTitle, isPreviewFixture } from '../../shared/fixtures.js';
+import type { PreviewFixtureId } from '../../shared/fixtures.js';
 import type { FixturePreview } from '../../shared/types.js';
 import { PREVIEW_GUARD } from '../../shared/previewPolicy.js';
 import { runIsolatedWorker } from './dockerWorker.js';
@@ -7,10 +9,10 @@ const attributes = new Set(['class','id','aria-label','aria-hidden']);
 const escape = (text: string) => text.replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]!);
 const invalid = () => { throw new Error('Invalid fixture snapshot.'); };
 
-export function mapFixturePreview(raw: unknown): FixturePreview {
-  if (!raw || typeof raw !== 'object') return invalid();
+export function mapFixturePreview(raw: unknown, fixture: PreviewFixtureId = 'garden'): FixturePreview {
+  if (!isPreviewFixture(fixture) || !raw || typeof raw !== 'object') return invalid();
   const snapshot = raw as { task?: unknown; styles?: unknown; nodes?: unknown };
-  if (snapshot.task !== 'preview-garden' || typeof snapshot.styles !== 'string' || snapshot.styles.length > 20000
+  if (snapshot.task !== `preview-${fixture}` || typeof snapshot.styles !== 'string' || snapshot.styles.length > 20000
     || /[<>]/.test(snapshot.styles) || !Array.isArray(snapshot.nodes)) return invalid();
   let count = 0;
   function render(value: unknown, depth = 0): string {
@@ -36,10 +38,10 @@ export function mapFixturePreview(raw: unknown): FixturePreview {
     return `<${tag}${serialized}${inactive}>${node.children.map(child => render(child, depth + 1)).join('')}</${tag}>`;
   }
   const body = snapshot.nodes.map(node => render(node)).join('');
-  const html = `${PREVIEW_GUARD}<title>Community garden fixture snapshot</title><style>${snapshot.styles}</style><body>${body}</body>`;
+  const html = `${PREVIEW_GUARD}<title>${escape(fixtureTitle(fixture))} fixture snapshot</title><style>${snapshot.styles}</style><body>${body}</body>`;
   if (html.length > 100000) return invalid();
-  return { mode: 'fixture', fixture: 'garden', title: 'Community garden', capturedAt: new Date().toISOString(), html };
+  return { mode: 'fixture', fixture, title: fixtureTitle(fixture), capturedAt: new Date().toISOString(), html };
 }
-export async function captureFixturePreview(signal?: AbortSignal) {
-  return mapFixturePreview(await runIsolatedWorker('preview-garden', signal));
+export async function captureFixturePreview(fixture: PreviewFixtureId = 'garden', signal?: AbortSignal) {
+  return mapFixturePreview(await runIsolatedWorker(`preview-${fixture}`, signal), fixture);
 }

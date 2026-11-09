@@ -98,7 +98,7 @@ test('local API rejects untrusted hostnames and browser origins before scanner w
 });
 
 test('preview endpoint accepts only its fixed fixture identifier and never a URL or HTML', async () => {
-  for (const body of [{}, { fixture: 'barriers' }, { fixture: '../garden' }, { url: 'https://example.com' },
+  for (const body of [{}, { fixture: 'unknown' }, { fixture: '../garden' }, { url: 'https://example.com' },
     { fixture: 'garden', url: 'https://example.com' }, { fixture: 'garden', html: '<script></script>' }]) {
     const response = await fetch(`${origin}/api/preview-fixture`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     assert.equal(response.status, 400);

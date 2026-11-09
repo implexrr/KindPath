@@ -23,3 +23,19 @@ test('unsupported markup, executable attributes, CSS breakouts, and excessive sn
     assert.throws(() => mapFixturePreview(raw), /Invalid fixture snapshot/);
   }
 });
+
+
+test('preview identity must match the explicitly requested built-in page', () => {
+  for (const fixture of ['barriers', 'clear', 'garden'] as const) {
+    const raw = { ...snapshot([element('p', {}, [{ text: fixture }])]), task: `preview-${fixture}` };
+    const mapped = mapFixturePreview(raw, fixture);
+    assert.equal(mapped.fixture, fixture);
+    assert.match(mapped.html, new RegExp(fixture));
+    for (const other of ['barriers', 'clear', 'garden'] as const) {
+      if (other !== fixture) assert.throws(() => mapFixturePreview(raw, other), /Invalid fixture snapshot/);
+    }
+  }
+  for (const value of ['../clear', 'constructor', '__proto__', 'https://example.com']) {
+    assert.throws(() => mapFixturePreview(snapshot([]), value as 'garden'), /Invalid fixture snapshot/);
+  }
+});

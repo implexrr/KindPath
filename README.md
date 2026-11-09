@@ -9,7 +9,7 @@ KindPath explores website accessibility through automated checks, actionable exa
 - Impact-first findings, severity counts/filtering, and repair guidance paired with each affected element.
 - Example accessibility findings with severity, impact, and suggested improvements.
 - Side-by-side previews with adjustable colour, contrast, blur, and peripheral field effects.
-- Backend-generated snapshots of a built-in display fixture, with CSS hover styles, disabled navigation/forms, and a static advertisement placeholder.
+- Matching snapshots for both scanning fixtures, plus a separate garden illustration for demo reports; navigation and forms stay disabled.
 - Manual review prompts alongside automated-testing guidance.
 - Responsive layouts and standalone design mockups.
 
@@ -17,7 +17,7 @@ KindPath explores website accessibility through automated checks, actionable exa
 
 **Public URL scanning is disabled.** The URL form returns illustrative demo findings and never fetches the submitted website. The separate isolated-fixture action runs real axe-core checks on a built-in example. It does not scan the submitted URL.
 
-The visual preview generates a snapshot of the built-in Community garden display fixture, independently of the report. It does not capture the submitted URL. Effects are illustrative approximations, not reproductions of an individual's vision or a medical condition.
+For fixture reports, the visual preview captures the same selected built-in page. Demo reports retain a separate Community garden illustration. Neither captures the submitted URL. Effects are illustrative approximations, not reproductions of an individual's vision or a medical condition.
 
 Automated checks and visual simulations cannot establish accessibility conformance. Keyboard, screen reader, and usability evaluation remain essential.
 
@@ -50,7 +50,7 @@ npm run test:scanner
 npm run test:firewall
 ```
 
-Run the app and choose **Run isolated fixture scan**. A missing engine or image produces an unavailable error; there is no fallback to Chromium on the host. The worker dependencies are locked separately in `scanner/package-lock.json` and are installed inside the image, not in your host browser environment.
+Run the app, select a **Built-in page** (Garden form with barriers or Labelled garden form), and choose **Run isolated fixture scan**. A missing engine or image produces an unavailable error; there is no fallback to Chromium on the host. The worker dependencies are locked separately in `scanner/package-lock.json` and are installed inside the image, not in your host browser environment.
 
 The worker runs with networking disabled, no host bind mounts or forwarded credentials, a read-only root filesystem, a non-root user, no container capabilities, Chromium sandboxing, and bounded memory/CPU/processes. Temporary browser files live in container memory. The backend verifies Docker's effective configuration before starting each worker, limits concurrency, and removes the container on completion or cancellation. Removal is retried and verified through Docker; unconfirmed cleanup returns SCANNER_CLEANUP_FAILED and blocks new workers until absence is confirmed. Leftover fixture or gateway containers, gateway socket volumes, and firewall networks, also block fixture scans after an API restart. Unknown resources are not automatically deleted. Only the fixed `barriers` and `clear` fixture IDs are accepted; URLs, file paths, arbitrary HTML, and extra fields are rejected.
 
@@ -83,6 +83,7 @@ The browser sends `POST /api/analyze` with a JSON URL payload. Vite proxies deve
 | `scanner/` | Narrow container build context, controlled fixtures, and worker-only dependencies |
 | `server/scanner.integration.ts` | Real isolated scans, kernel restrictions, and cancellation tests |
 | `shared/types.ts` | Shared report interfaces |
+| `shared/fixtures.ts` | Fixed fixture identifiers, display names, and identity validation |
 | `public/mockups/` | SVG design boards and gallery, available at `/mockups/index.html` |
 
 ## API
@@ -91,7 +92,7 @@ The browser sends `POST /api/analyze` with a JSON URL payload. Vite proxies deve
 - `GET /api/scanning-capabilities`: reports public scanning disabled and the candidate allowlist.
 - `POST /api/scan-public`: currently returns 503 with `PUBLIC_SCANNING_DISABLED`; no submitted URL is fetched.
 - `POST /api/analyze`: accepts `{ "url": "https://example.com" }` and returns sample findings and manual review prompts; no URL fetching.
-- `POST /api/preview-fixture`: accepts exactly `{ "fixture": "garden" }` and returns a rendered, static snapshot of the built-in display fixture. URL, HTML, path, and extra fields are rejected.
+- `POST /api/preview-fixture`: accepts exactly one `fixture` field: `barriers`, `clear`, or `garden`. Returns a rendered, static snapshot of that built-in page. URL, HTML, path, and extra fields are rejected.
 - `POST /api/scan-fixture`: accepts exactly `{ "fixture": "barriers" }` or `{ "fixture": "clear" }` and returns a real fixture report. Invalid input returns 400, a busy scanner returns 429, and an unavailable or failed worker, including unconfirmed cleanup, returns 503. A failed scan never produces a clean accessibility report.
 
 URLs must use HTTP or HTTPS, contain no embedded credentials, and be at most 2,048 characters. Invalid input returns a JSON error with an appropriate HTTP status.
@@ -160,9 +161,9 @@ Public target execution remains disabled pending review of those findings and a 
 
 ## Fixture snapshot preview
 
-After building the scanner image and starting the app, create a demo report or run an isolated fixture scan. Open **Visual preview**, then choose **Generate fixture snapshot**. The backend renders the fixed display fixture in its network-disabled Playwright worker and captures its supported page structure and inline CSS. The API validates that structure and serializes a bounded HTML document. It does not accept arbitrary HTML or URLs.
+After building the scanner image and starting the app, choose a **Built-in page**, then run an isolated fixture scan. Open **Visual preview**, then choose **Generate fixture snapshot**. The backend renders the same selected fixture in its network-disabled Playwright worker and captures its supported page structure and inline CSS. A demo report instead offers the separate Community garden display fixture, clearly labelled as an illustration. The API validates that structure and serializes a bounded HTML document. It does not accept arbitrary HTML or URLs.
 
-The comparison frames preserve CSS hover effects, including the garden call-to-action, and the static advertisement. Anchors have no destinations, form containers become layout groups, and inputs/buttons are disabled. Scripts and unsupported elements/attributes are excluded. Each iframe has an empty sandbox, no same-origin or script permission, and a restrictive content policy that blocks external resources and form submissions. Both panels use the same snapshot; effects apply only to the modified panel. Snapshots stay in browser memory across tab switches; **Refresh fixture snapshot** explicitly requests another capture.
+The comparison frames preserve supported CSS, including hover effects and the static advertisement in the garden illustration. Images become inert placeholders; image URLs and data are not included. Anchors have no destinations, form containers become layout groups, and inputs/buttons are disabled. Scripts and unsupported elements/attributes are excluded. Each iframe has an empty sandbox, no same-origin or script permission, and a restrictive content policy that blocks external resources and form submissions. Both panels use the same snapshot; effects apply only to the modified panel. Snapshots stay in browser memory across tab switches; **Refresh fixture snapshot** explicitly requests another capture.
 
 ### Vision controls
 
@@ -170,9 +171,9 @@ Colour, contrast reduction, blur, and peripheral restriction have independent 0â
 
 **Mild**, **Moderate**, and **Strong** set all four strengths to 25%, 50%, and 80% respectively, preserve the colour preset, and turn effects on. **Apply visual effects** pauses or restores rendering without losing settings; sliders remain adjustable while paused. **Reset effects** restores redâ€“green at 65% with the other strengths at zero and effects on. Setting all strengths to zero leaves both panels visually unchanged.
 
-Controls support native keyboard interaction and remain outside the modified frame. Adjustments reuse the existing snapshot without requesting a new capture. Settings survive report-tab switches and snapshot refreshes, and reset when the page reloads.
+Controls support native keyboard interaction and remain outside the modified frame. Adjustments reuse the existing snapshot without requesting a new capture. Settings survive report-tab switches and snapshot refreshes. Starting another analysis, changing the selected page, or reloading clears the report/preview workspace and resets those settings.
 
-Source labels and timestamps distinguish this fixture preview from the report. Failed capture attempts show a retryable error; an existing snapshot remains visible if a refresh fails. The capture and serializer support this fixed fixture only, not general public-site sanitization. Public URL capture and scanning remain disabled.
+Source labels identify the selected fixture in both findings and previews. Scanning and capture are separate requests against the same fixed page; the capture has its own timestamp. Failed capture attempts show a retryable error; an existing snapshot for that same page remains visible if a refresh fails. Changing the selection or starting a new analysis clears old findings, snapshots, and errors, and cancels pending requests. Late responses and mismatched fixture identities cannot populate the new workspace. Docker cleanup may briefly keep the scanner busy after cancellation; retry once cleanup finishes. The capture and serializer support only these fixed fixtures, not general public-site sanitization. Public URL capture and scanning remain disabled.
 
 ```sh
 npm run build
@@ -180,4 +181,4 @@ npm run scanner:build
 npm run test:preview # Isolated browser checks for reports and previews
 ```
 
-The browser check runs Chromium inside the existing isolated Docker image, with no host mounts or network access. Only public build assets and generated fixture responses are passed through standard input. It exercises report sorting/filtering, per-element guidance, manual-review and empty states, demo/fixture reports, loading/failure/retry, hover behavior, disabled navigation/forms, independent and combined visual effects, rendered-image changes, keyboard interaction, presets/pause/reset, refresh/tab persistence, and a 390px layout. Screenshots are written to the operating system's temporary directory. No browser is installed or launched on the host.
+The browser check runs Chromium inside the existing isolated Docker image, with no host mounts or network access. Only public build assets and generated fixture responses are passed through standard input. It exercises report sorting/filtering, per-element guidance, manual-review and empty states, demo/fixture reports, matching fixture previews, selection changes with delayed/mismatched responses, loading/failure/retry, hover behavior, disabled navigation/forms, independent and combined visual effects, rendered-image changes, keyboard interaction, presets/pause/reset, refresh/tab persistence, and a 390px layout. Screenshots are written to the operating system's temporary directory. No browser is installed or launched on the host.

@@ -1,3 +1,5 @@
+import type { PreviewFixtureId } from './fixtures';
+
 export interface FindingElement {
   targets: string[];
   guidance: string;
@@ -21,7 +23,7 @@ export interface Report {
 
 export interface FixturePreview {
   mode: 'fixture';
-  fixture: 'garden';
+  fixture: PreviewFixtureId;
   title: string;
   capturedAt: string;
   html: string;

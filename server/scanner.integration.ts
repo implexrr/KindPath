@@ -19,7 +19,7 @@ test('fixture API returns real axe results for the known barriers', async () => 
   const address = server.address();
   assert.ok(address && typeof address !== 'string');
   try {
-    const response = await fetch(`http://127.0.0.1:${address.port}/api/scan-fixture`, {
+    const response: Response = await fetch(`http://127.0.0.1:${address.port}/api/scan-fixture`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fixture: 'barriers' }),
     });
     assert.equal(response.status, 200);
@@ -63,7 +63,7 @@ test('preview API returns an inert snapshot captured from the rendered garden fi
   await new Promise<void>(resolve => server.once('listening', resolve));
   const address = server.address(); assert.ok(address && typeof address !== 'string');
   try {
-    const response = await fetch(`http://127.0.0.1:${address.port}/api/preview-fixture`, {
+    const response: Response = await fetch(`http://127.0.0.1:${address.port}/api/preview-fixture`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fixture: 'garden' }),
     });
     assert.equal(response.status, 200);
@@ -74,5 +74,27 @@ test('preview API returns an inert snapshot captured from the rendered garden fi
     assert.match(snapshot.html, /\.cta:hover/); assert.match(snapshot.html, /ADVERTISEMENT/);
     assert.match(snapshot.html, /<input[^>]* disabled>/);
     assert.equal(/<(script|form|iframe|object)\b|\bhref\s*=|\bonclick\s*=/i.test(snapshot.html), false);
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test('each scanning fixture has an inert preview of the same built-in page', async () => {
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>(resolve => server.once('listening', resolve));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  try {
+    for (const fixture of ['barriers', 'clear']) {
+      const response: Response = await fetch(`http://127.0.0.1:${address.port}/api/preview-fixture`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fixture }),
+      });
+      assert.equal(response.status, 200);
+      const snapshot = await response.json();
+      assert.equal(snapshot.fixture, fixture);
+      assert.match(snapshot.html, /Community garden/);
+      assert.equal(/<(script|form|iframe|object|img)\b|\b(href|src|onclick)\s*=/i.test(snapshot.html), false);
+      assert.match(snapshot.html, /<input[^>]*disabled/);
+      assert.match(snapshot.html, /<button[^>]*disabled/);
+      if (fixture === 'barriers') assert.match(snapshot.html, /kindpath-image-placeholder/);
+      else assert.match(snapshot.html, /Email address/);
+    }
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
