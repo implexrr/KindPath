@@ -91,6 +91,18 @@ export function createWorkerRunner(openSession: () => Promise<DockerSession>) {
   };
 }
 
+// Killing a create CLI does not cancel the daemon's in-flight creation. Wait for
+// its acknowledgement before cancellation can trigger owned-resource cleanup.
+export function settleResourceCreates(command: Command): Command {
+  return async (args, signal, timeout) => {
+    signal?.throwIfAborted();
+    const creates = args[0] === 'create' || (['volume', 'network'].includes(args[0]) && args[1] === 'create');
+    const output = await command(args, creates ? undefined : signal, timeout);
+    signal?.throwIfAborted();
+    return output;
+  };
+}
+
 export async function openLocalDockerSession(): Promise<DockerSession> {
   const docker = process.platform === 'darwin'
     ? '/Applications/Docker.app/Contents/Resources/bin/docker' : '/usr/bin/docker';
@@ -100,13 +112,13 @@ export async function openLocalDockerSession(): Promise<DockerSession> {
   const config = await mkdtemp(join(tmpdir(), 'kindpath-docker-'));
   const prefix = ['--config', config, '--host', `unix://${socket}`];
   return {
-    command: async (args, signal, timeout = 10_000) => {
+    command: settleResourceCreates(async (args, signal, timeout = 10_000) => {
       const { stdout } = await exec(docker, [...prefix, ...args], {
         env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' },
         timeout, maxBuffer: 1024 * 1024, signal,
       });
       return stdout;
-    },
+    }),
     dispose: () => rm(config, { recursive: true, force: true }),
   };
 }

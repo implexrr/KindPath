@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorkerRunner, ScannerError } from './dockerWorker.js';
+import { createWorkerRunner, ScannerError, settleResourceCreates } from './dockerWorker.js';
 
 // Simulates the daemon, including failures after a container has been created.
 function fakeDocker() {
@@ -165,4 +165,43 @@ test('fixture admission blocks orphaned firewall networks and unconfirmed networ
   await assert.rejects(docker.run('clear'), cleanupFailed);
   assert.equal(docker.calls.some(args => args[0] === 'create'), false);
   docker.networkQueryFails = false; await docker.run('clear');
+});
+
+
+test('cancelled resource creation settles before cleanup can confirm absence', async () => {
+  for (const args of [['create', '--name', 'owned-container'], ['network', 'create', 'owned-network'], ['volume', 'create', 'owned-volume']]) {
+    const abort = new AbortController();
+    let finish: () => void = () => {};
+    let present = false, settled = false;
+    const raw = async (_args: string[], signal?: AbortSignal, timeout?: number) => {
+      assert.equal(timeout, 3000, 'Creation keeps its bounded command timeout');
+      await new Promise<void>((resolve, reject) => {
+        finish = () => { present = true; resolve(); };
+        signal?.addEventListener('abort', () => reject(new Error('CLI aborted before daemon acknowledgement')), {once:true});
+      });
+      return 'owned-resource';
+    };
+    const command = settleResourceCreates(raw);
+    const pending = command(args, abort.signal, 3000).finally(() => { settled = true; });
+    const rejection = assert.rejects(pending, error => error === abort.signal.reason);
+    abort.abort();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(settled, false, 'Cleanup cannot race a still-pending daemon create');
+    finish();
+    await rejection;
+    assert.equal(present, true, 'The owned resource exists before cancellation is delivered to cleanup');
+  }
+});
+test('already cancelled Docker work never dispatches and attached runs remain abortable', async () => {
+  const abort = new AbortController(); abort.abort();
+  let calls = 0;
+  const command = settleResourceCreates(async () => { calls++; return ''; });
+  await assert.rejects(command(['create'], abort.signal)); assert.equal(calls, 0);
+  const attached = new AbortController();
+  const running = settleResourceCreates(async (_args, signal) => {
+    assert.equal(signal, attached.signal);
+    return new Promise<string>((_resolve, reject) => signal!.addEventListener('abort', () => reject(signal!.reason), {once:true}));
+  })(['start', '--attach', 'owned-container'], attached.signal);
+  const rejected = assert.rejects(running, error => error === attached.signal.reason);
+  attached.abort(); await rejected;
 });
