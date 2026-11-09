@@ -230,7 +230,7 @@ A [twenty-site local validation](scanner/WEBSITE-PREVIEW-VALIDATION.md) complete
 
 ## Preview quality feedback
 
-The prepared public-preview view uses a text-based hint derived from accepted snapshot nodes on the backend. With no non-whitespace text, it shows **Website preview unavailable** and hides the empty panels and effect controls. Findings, JSON exports and print remain available. Fewer than 100 non-whitespace text units produces a caution while keeping the preview usable: a page can legitimately be short. Missing or malformed hint data is shown as unknown, without rejecting an otherwise matching report.
+The prepared public-preview view uses a text-based hint derived from accepted snapshot nodes on the backend. With no non-whitespace text, it shows **Website preview unavailable** and hides the empty panels and effect controls. Findings, JSON exports and print remain available. A count of 1–99 non-whitespace text units produces a caution while keeping the preview and its controls available: a page can legitimately be short. Missing or malformed hint data is shown as unknown, without rejecting an otherwise matching report.
 
 The count measures captured text, not rendered visibility, layout fidelity or accessibility. More text does not establish a useful preview; content may be clipped, off-screen or omitted. No iframe access or permission change, extra scan, live retry or capture-budget increase is involved. Demo and fixture previews are unchanged. Public scanning and capture remain disabled; checks use controlled fixtures only.
 
