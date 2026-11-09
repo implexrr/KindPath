@@ -40,6 +40,7 @@ export interface FixturePreview {
 }
 
 export interface SitePreview {
+  capturedTextCharacters?: number;
   mode: 'public';
   scanId: string;
   requestedUrl: string;

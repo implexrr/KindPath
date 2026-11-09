@@ -31,7 +31,7 @@ export function mapSitePreview(raw: unknown, identity: {scanId:string;requestedU
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(identity.scanId) || snapshot.url !== url || typeof snapshot.capturedAt !== 'string'
     || snapshot.capturedAt.length > 30 || !Number.isFinite(Date.parse(snapshot.capturedAt)) || !Array.isArray(snapshot.nodes)) return invalid();
   for (const key of ['omittedSubtrees','omittedText','omittedStyles']) if (!Number.isSafeInteger(snapshot[key]) || Number(snapshot[key]) < 0 || Number(snapshot[key]) > 1000000) return invalid();
-  let count = 0, css = '', textLength = 0;
+  let count = 0, css = '', textLength = 0, capturedTextCharacters = 0;
   function declarations(value: unknown) {
     const entries = Object.entries(record(value));
     if (entries.length > styles.size) return invalid();
@@ -46,6 +46,7 @@ export function mapSitePreview(raw: unknown, identity: {scanId:string;requestedU
     if (typeof node.text === 'string') {
       textLength += node.text.length;
       if (Object.keys(node).length !== 1 || node.text.length > 4000 || textLength > 10000) return invalid();
+      capturedTextCharacters += node.text.replace(/\s/g, '').length;
       return escape(node.text);
     }
     if (Object.keys(node).sort().join(',') !== 'attributes,children,hover,style,tag' || typeof node.tag !== 'string' || !tags.has(node.tag) || !Array.isArray(node.children)) return invalid();
@@ -72,7 +73,7 @@ export function mapSitePreview(raw: unknown, identity: {scanId:string;requestedU
   const title = new URL(url).hostname;
   const html = `${PREVIEW_GUARD}<title>${escape(title)} page snapshot</title><style>body{margin:0;font-family:Arial,sans-serif}${css}</style><body>${body}</body>`;
   if (html.length > 100000) return invalid();
-  return {mode:'public',...identity,requestedUrl,url,title,capturedAt:snapshot.capturedAt,html,limitations:[
+  return {mode:'public',...identity,requestedUrl,url,title,capturedAt:snapshot.capturedAt,capturedTextCharacters,html,limitations:[
     'A limited visual approximation captured after automated analysis in the same browser visit; dynamic content may differ.',
     'Scripts, embedded frames, images, media, custom fonts, form values and unsupported structure/styles are omitted. Only simple readable link/button hover rules are retained.',
     `At least ${snapshot.omittedSubtrees} subtrees, ${snapshot.omittedText} text characters and ${snapshot.omittedStyles} style declarations were omitted.`,

@@ -46,3 +46,11 @@ test('common article and table structure keeps safe semantics and bounded layout
   for(const bad of [element('td',[],{},{},{colspan:'0'}),element('td',[],{},{},{rowspan:'101'}),
     element('th',[],{},{},{scope:'script'}),element('div',[],{},{},{colspan:'1'})])assert.throws(()=>mapSitePreview(raw([bad]),identity));
 });
+
+test('snapshot text count is derived from accepted text, excluding whitespace, markup and attributes',()=>{
+  const result=mapSitePreview(raw([element('p',[{text:'  Tom & Ada\n'},{text:'<test>'}])]),identity);
+  assert.equal(result.capturedTextCharacters,13);
+  const empty=mapSitePreview({...raw([element('input',[],{},{},{'aria-label':'Not visible text'}),{text:' \n\t '}]),capturedTextCharacters:999},identity);
+  assert.equal(empty.capturedTextCharacters,0,'Do not trust a worker-supplied quality count');
+  assert.equal(mapSitePreview(raw([{text:'x'.repeat(4000)},{text:'x'.repeat(4000)},{text:'x'.repeat(2000)}]),identity).capturedTextCharacters,10000);
+});
