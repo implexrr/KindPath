@@ -5,6 +5,7 @@ export function normalizeWebsiteEntry(value: string): string {
   const input = value.trim();
   if (!input || /\s/.test(input) || /^[/?#]/.test(input)) throw fail();
   const explicit = /^https?:\/\//i.test(input);
+  if (explicit && !/^https?:\/\/[^/?#]/i.test(input)) throw fail();
   // A hostname followed by a numeric port is not a URI scheme.
   const hostPort = /^[^/:?#@]+\.[^/:?#@]+:\d+(?:[/?#]|$)/.test(input);
   if (!explicit && /^[a-z][a-z0-9+.-]*:/i.test(input) && !hostPort) throw fail();

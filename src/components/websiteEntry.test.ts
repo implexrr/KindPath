@@ -25,3 +25,9 @@ test('normalization does not bypass the existing public syntax policy',()=>{
   }
   assert.equal(websiteUrl(normalizeWebsiteEntry('example.com/path')).href,'https://example.com/path');
 });
+
+test('explicit HTTP schemes require a hostname immediately after two slashes',()=>{
+  for(const value of ['https:///example.com','http:////example.com','HTTPS:////example.com/path']) {
+    assert.throws(()=>normalizeWebsiteEntry(value),value);
+  }
+});

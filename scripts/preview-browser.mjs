@@ -151,7 +151,7 @@ try {
   await page.getByRole('region',{name:'Example issues to explore',exact:true}).waitFor();
   assert.deepEqual(demoRequests.slice(-2),[{url:'https://example.com/'},{url:'https://example.com/'}]);
   assert.equal(publicCalls,0,'Disabled mode must not submit a public scan');
-  for(const entry of ['javascript:alert(1)','https:/example.com','user@example.com','https://user:pass@example.com']) {
+  for(const entry of ['javascript:alert(1)','https:/example.com','https:///example.com','user@example.com','https://user:pass@example.com']) {
     const before=apiRequests;await websiteEntry.fill(entry);await websiteEntry.press('Enter');
     await page.getByRole('alert').waitFor();assert.equal(apiRequests,before);
     assert.equal(await page.locator('.results').count(),0);

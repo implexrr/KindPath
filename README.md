@@ -18,7 +18,7 @@ KindPath explores website accessibility through automated checks, actionable exa
 
 **Public URL scanning is disabled.** The URL form returns illustrative demo findings and never fetches the submitted website. The separate isolated-fixture action runs real axe-core checks on a built-in example. It does not scan the submitted URL.
 
-The website field accepts addresses such as `example.com` or `example.com/path?query=value`; HTTPS is added when the scheme is omitted. An explicit HTTP or HTTPS scheme is retained. Submission displays the normalized address and uses it for retries. Unsupported schemes, embedded credentials and malformed entries produce an error without a request. This form convenience does not activate scanning or change the backend's public-target policy; direct API callers must still supply a complete URL.
+The website field accepts addresses such as `example.com` or `example.com/path?query=value`; HTTPS is added when the scheme is omitted. An explicit HTTP or HTTPS scheme is retained. Submission displays the normalized address and uses it for retries. Unsupported schemes, embedded credentials and malformed entries produce an error without a request. This form convenience does not activate scanning or change the backend's public-target policy; direct API callers do not receive hostname-only normalization.
 
 For fixture reports, the visual preview captures the same selected built-in page. Demo reports retain a separate Community garden illustration. Neither captures the submitted URL. Effects are illustrative approximations, not reproductions of an individual's vision or a medical condition.
 
