@@ -120,7 +120,7 @@ try {
     await route.fulfill(asset ? { body: asset.body, contentType: asset.type } : { status: 404, body: '' });
   });
   await page.goto('http://kindpath-ui.invalid/');
-  await page.getByRole('button', { name: 'Run isolated fixture scan' }).click();
+  await page.getByRole('button', { name: 'Scan built-in page' }).click();
   // First exercise the actual bounded report returned by the fixture scanner.
   const violations = page.getByRole('region', { name: 'Confirmed automated violations', exact: true });
   await violations.waitFor();
@@ -247,7 +247,7 @@ try {
   activeReport = { ...data.report, generatedAt: '2026-11-08T00:00:00.000Z', findings:
     ['Minor', 'Unknown', 'Moderate', 'Critical', 'Serious'].map(makeFinding),
     scanner: { ...data.report.scanner, incomplete: [{ ...makeFinding('Serious', 8), title: 'Controlled inconclusive check', elements: [] }] }, limitations: ['Controlled coverage limitation'] };
-  await page.getByRole('button', { name: 'Run isolated fixture scan' }).click();
+  await page.getByRole('button', { name: 'Scan built-in page' }).click();
   const filter = page.getByLabel('Filter violations by severity', { exact: true });
   await violations.getByRole('heading', { name: 'Critical controlled rule', exact: true }).waitFor();
   assert.deepEqual(await violations.getByRole('heading', { level: 4 }).allTextContents(),
@@ -291,7 +291,7 @@ try {
   // A new report resets filters; a severity with no matches differs from an empty report.
   await filter.selectOption('Minor');
   activeReport = { ...activeReport, generatedAt: '2026-11-08T00:00:01.000Z', findings: [makeFinding('Serious', 0)] };
-  await page.getByRole('button', { name: 'Run isolated fixture scan' }).click();
+  await page.getByRole('button', { name: 'Scan built-in page' }).click();
   await page.getByRole('heading', { name: 'Serious controlled rule', exact: true }).waitFor();
   assert.equal(await page.evaluate(async url => { try { await fetch(url); return false; } catch { return true; } }, exportedUrl), true, 'The old export Blob URL must be revoked');
   assert.equal(await filter.inputValue(), 'All');
@@ -300,7 +300,7 @@ try {
   assert.equal(await reviews.locator('article').count(), 1);
   await page.getByLabel('Built-in page', { exact: true }).selectOption('clear');
   activeReport = { ...data.clearReport, generatedAt: '2026-11-08T00:00:02.000Z' };
-  await page.getByRole('button', { name: 'Run isolated fixture scan' }).click();
+  await page.getByRole('button', { name: 'Scan built-in page' }).click();
   await page.getByText('No automated violations were reported. This does not establish accessibility conformance; review the checks below and test manually.', { exact: true }).waitFor();
   assert.equal(await filter.inputValue(), 'All');
   if (!data.clearReport.scanner.incomplete.length) await page.getByText('No inconclusive checks were returned. Keyboard, screen reader, and usability review are still needed.', { exact: true }).waitFor();
@@ -315,7 +315,7 @@ try {
   assert.equal(await examples.locator('article').first().locator('.element-summary').textContent(), data.demoReport.findings[0].elements[0].guidance);
   // Match real scanning fixtures to their own previews and discard old work on selection changes.
   const fixtureChoice = page.getByLabel('Built-in page', { exact: true });
-  const scanButton = page.getByRole('button', { name: 'Run isolated fixture scan', exact: true });
+  const scanButton = page.getByRole('button', { name: 'Scan built-in page', exact: true });
   const results = page.locator('.results');
   await fixtureChoice.selectOption('barriers');
   assert.equal(await results.count(), 0);
@@ -423,7 +423,7 @@ try {
   for (const [status, code] of [[429, 'SCANNER_BUSY'], [503, 'SCAN_FAILED']]) {
     publicStatus = status; publicResponse = { error: 'Controlled unavailable scan', code };
     await publicButton.click();
-    await page.getByRole('alert').filter({ hasText: 'Controlled unavailable scan' }).waitFor();
+    await page.getByRole('alert').filter({ hasText: status === 429 ? 'Another scan is still finishing' : 'The scan could not finish' }).waitFor();
     assert.equal(await page.locator('.results').count(), 0);
   }
   publicStatus = 200; publicResponse = publicReport;
@@ -438,7 +438,7 @@ try {
   await page.getByLabel('Built-in page').selectOption('clear');
   activeReport = data.clearReport;
   delayPublic = false; releasePublic();
-  await page.getByRole('button', { name: 'Run isolated fixture scan' }).click();
+  await page.getByRole('button', { name: 'Scan built-in page' }).click();
   await page.getByText('Scanned fixture: Labelled garden form', { exact: true }).waitFor();
   assert.equal(await page.locator('.results').getByText('Scanned page: ' + publicReport.url, { exact: true }).count(), 0);
   // The capture-enabled test response still never fetches an external page or enables the real API.
@@ -484,6 +484,23 @@ try {
     await page.getByRole('alert').filter({hasText:'snapshot did not match'}).waitFor();
     assert.equal(await page.locator('iframe').count(),0); assert.equal(await page.locator('.results').count(),0);
   }
+  // Cancellation and retry preserve the selected action and reject late responses.
+  publicCapabilities=false; captureCapabilities=false;
+  await page.reload();
+  activeReport=data.clearReport; delayScan=true; scanHeld=false;
+  const heldCancellation=page.waitForRequest(request=>request.url().endsWith('/api/scan-fixture'));
+  await page.getByRole('button',{name:'Scan built-in page',exact:true}).click(); await heldCancellation;
+  assert.equal(await page.getByLabel('Your website URL').isDisabled(),true);
+  await page.getByRole('button',{name:'Cancel request',exact:true}).click();
+  await page.getByRole('status').filter({hasText:'Request cancelled'}).waitFor();
+  assert.equal(await page.locator('.results').count(),0);
+  delayScan=false; activeReport=data.report; releaseScan();
+  await page.getByRole('button',{name:'Try again',exact:true}).click();
+  await page.getByText('Scanned fixture: Garden form with barriers',{exact:true}).waitFor();
+  assert.equal(await page.getByText('Scanned fixture: Labelled garden form',{exact:true}).count(),0);
+  // Editing a URL clears the prior report instead of showing it under a new address.
+  await page.getByLabel('Your website URL').fill('https://example.com/new-request');
+  assert.equal(await page.locator('.results').count(),0);
   assert.deepEqual(unexpected, []);
   process.stdout.write(JSON.stringify({ passed: true, engine, version: browser.version(), desktop, mobile, findingsDesktop, findingsMobile, matchingDesktop, matchingMobile, fixturePdf, demoPdf }));
 } finally { await browser.close(); }
