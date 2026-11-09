@@ -32,7 +32,7 @@ export function classifyFailure(error, stage, signal) {
   else if (error?.name === 'AbortError') code = 'CANCELLED';
   else if (['ENOTFOUND','EAI_AGAIN','ETIMEDOUT','ECONNRESET','ECONNREFUSED'].includes(error?.code)) code = error.code;
   else if (typeof error?.message === 'string') {
-    const token = error.message.match(/net::(ERR_[A-Z0-9_]+)\b/)?.[1];
+    const token = error.message.match(/^(?:page\.goto:\s*)?net::(ERR_[A-Z0-9_]+)\b/)?.[1];
     if (token === 'ERR_CERT_AUTHORITY_INVALID') code = 'TLS_CERTIFICATE_REJECTED';
     else if (networkCodes.includes(token)) code = token;
   }

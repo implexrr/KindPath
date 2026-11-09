@@ -121,11 +121,11 @@ try {
       passes: result.passes.length, inapplicable: result.inapplicable.length }));
   }
 } catch (error) {
-  const code = error instanceof Error && error.message.includes('ERR_CERT_AUTHORITY_INVALID') ? 'TLS_CERTIFICATE_REJECTED'
-    : pageChanged ? 'PAGE_CHANGED_DURING_SCAN' : rejectedNavigation ? 'DESTINATION_REJECTED' : 'SCAN_FAILED';
   const diagnostic = missingResponse ? {stage,code:'NO_RESPONSE'} : rejectedStatus !== undefined ? {stage:'page-loading',code:'HTTP_STATUS',httpStatus:rejectedStatus}
     : pageChanged ? {stage,code:'PAGE_CHANGED_DURING_SCAN'}
     : classifyFailure(error,stage);
+  const code = diagnostic?.code === 'TLS_CERTIFICATE_REJECTED' ? 'TLS_CERTIFICATE_REJECTED'
+    : pageChanged ? 'PAGE_CHANGED_DURING_SCAN' : rejectedNavigation ? 'DESTINATION_REJECTED' : 'SCAN_FAILED';
   emitDiagnostic(diagnostic);
   process.stderr.write(`Isolated gateway scan failed: ${code}.\n`); process.exitCode = 1;
 }

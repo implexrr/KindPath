@@ -17,7 +17,7 @@ test('raw errors, URLs, credentials, HTML and unknown network codes cannot be co
   const result=classifyFailure(error,'worker-execution');assert.deepEqual(result,{stage:'worker-execution',code:'FAILED'});
   assert.ok(!JSON.stringify(result).includes(secret));
  }
- assert.deepEqual(classifyFailure({message:'goto: net::ERR_HTTP2_PROTOCOL_ERROR at https://secret.invalid/'},'page-loading'),{stage:'page-loading',code:'ERR_HTTP2_PROTOCOL_ERROR'});
+ assert.deepEqual(classifyFailure({message:'page.goto: net::ERR_HTTP2_PROTOCOL_ERROR at https://secret.invalid/'},'page-loading'),{stage:'page-loading',code:'ERR_HTTP2_PROTOCOL_ERROR'});
 });
 test('worker stderr requires exactly one complete valid diagnostic marker',()=>{
  const line=DIAGNOSTIC_PREFIX+'{"stage":"page-loading","code":"TIMEOUT"}';
@@ -75,4 +75,13 @@ test('unclassified worker failures are not guessed to be invalid output',async()
    assert.ok(error instanceof ScannerError);assert.deepEqual(error.diagnostic,expected);return true;
   });
  }
+});
+
+test('network codes inside URLs, command errors and appended logs are not diagnoses',()=>{
+ for(const message of [
+  'Command failed: docker create worker https://example.com/net::ERR_CERT_AUTHORITY_INVALID',
+  'Could not open https://example.com/net::ERR_HTTP2_PROTOCOL_ERROR',
+  'Unclassified failure\nprivate log mentions net::ERR_CONNECTION_RESET',
+ ])assert.deepEqual(classifyFailure(new Error(message),'worker-setup'),{stage:'worker-setup',code:'FAILED'});
+ assert.deepEqual(classifyFailure(new Error('page.goto: net::ERR_CONNECTION_RESET at https://example.com/'),'page-loading'),{stage:'page-loading',code:'ERR_CONNECTION_RESET'});
 });
