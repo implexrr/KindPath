@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto';
 import type { Command } from './dockerWorker.js';
 import type { Resources } from './resources.js';
 import { IMAGE } from './containerPolicy.js';
+import { validateDestinationPlan } from './destinationSnapshot.js';
+import type { DestinationPlan } from './destinationSnapshot.js';
 import { PUBLIC_LABEL } from './publicPolicy.js';
 
 export const FIREWALL_IMAGE = 'kindpath-firewall:local';
 export const FIXTURE_IP = '198.18.0.2';
-export type Namespace = { id: string; network: string; addresses: string[]; hash?: string };
+export type Namespace = { id: string; network: string; addresses: string[]; hash?: string; egress?: string };
 export const memoryTmpfs = '/tmp:rw,nosuid,nodev,noexec,size=16777216';
 
 export function firewallArguments(name: string, network: string, role: 'holder' | 'admin' | 'probe' | 'origin', args: string[]) {
@@ -17,11 +19,11 @@ export function firewallArguments(name: string, network: string, role: 'holder' 
     '--security-opt=no-new-privileges:true', '--ipc=private', '--memory=128m', '--cpus=0.5', '--pids-limit=64',
     `--tmpfs=${memoryTmpfs}`, '--init', '--entrypoint=node', role === 'origin' ? IMAGE : FIREWALL_IMAGE, ...args];
 }
-export function assertFirewallContainer(value: unknown, network: string, admin: boolean) {
+export function assertFirewallContainer(value: unknown, network: string, admin: boolean, running = false) {
   const fail = () => { throw new Error('Firewall container isolation mismatch'); };
   if (!Array.isArray(value) || value.length !== 1 || (admin && !/^container:[a-f0-9]{64}$/.test(network))) return fail();
   const c = value[0]; const h = c?.HostConfig;
-  if (!h || c.State?.Running !== false || c.Config?.User !== (admin ? '0:0' : '1000:1000')
+  if (!h || c.State?.Running !== running || c.Config?.User !== (admin ? '0:0' : '1000:1000')
     || h.NetworkMode !== network || h.Privileged !== false || h.ReadonlyRootfs !== true || h.AutoRemove !== true
     || !h.CapDrop?.includes('ALL') || JSON.stringify((h.CapAdd ?? []).map((cap: string) => cap.replace(/^CAP_/, ''))) !== JSON.stringify(admin ? ['NET_ADMIN'] : [])
     || !h.SecurityOpt?.some((s: string) => ['no-new-privileges', 'no-new-privileges:true'].includes(s))
@@ -66,4 +68,40 @@ export async function firewallControl(command: Command, resources: Resources, ns
     || (task === 'verify' && proof.policyHash !== ns.hash)) throw new Error('Invalid firewall verification');
   ns.hash = proof.policyHash;
   return proof as { policyHash: string; droppedPackets: number };
+}
+
+
+async function assertNamespaceNetworks(command: Command, ns: Namespace, networks: string[], signal: AbortSignal) {
+  const info = JSON.parse(await command(['inspect', ns.id], signal));
+  assertFirewallContainer(info, ns.network, false, true);
+  const c = info[0];
+  if (c.Id !== ns.id || c.Config.Labels?.['kindpath.scanner'] !== 'public'
+    || JSON.stringify(Object.keys(c.NetworkSettings?.Networks ?? {}).sort()) !== JSON.stringify([...networks].sort())) throw new Error('Unexpected namespace attachments');
+  if (networks.length === 2 && c.NetworkSettings.Networks[networks[1]]?.GwPriority !== 1) throw new Error('Unexpected egress gateway priority');
+}
+
+// Networking is attached only to an owned namespace with an already verified, nonempty public-IP policy.
+export async function attachEgressNetwork(command: Command, resources: Resources, ns: Namespace, value: DestinationPlan, signal: AbortSignal) {
+  const plan = validateDestinationPlan(value);
+  if (!/^[a-f0-9]{64}$/.test(ns.id) || !/^[a-f0-9]{64}$/.test(ns.hash ?? '') || ns.egress
+    || !resources.networks.includes(ns.network) || JSON.stringify(ns.addresses) !== JSON.stringify(plan.addresses)) throw new Error('Unprepared egress namespace');
+  signal.throwIfAborted();
+  await assertNamespaceNetworks(command, ns, [ns.network], signal);
+  await firewallControl(command, resources, ns, 'verify', signal);
+  const network = `kindpath-egress-${randomUUID()}`;
+  resources.networks.push(network); // Partial network creation/attachment must still be cleaned up.
+  await command(['network', 'create', '--driver=bridge', '--ipv6=false', '--label', PUBLIC_LABEL,
+    '--opt=com.docker.network.bridge.gateway_mode_ipv4=nat',
+    '--opt=com.docker.network.bridge.enable_ip_masquerade=true', network], signal);
+  const info = JSON.parse(await command(['network', 'inspect', network], signal));
+  const n = info?.[0];
+  if (!Array.isArray(info) || info.length !== 1 || n.Name !== network || n.Driver !== 'bridge' || n.Internal !== false
+    || n.EnableIPv6 !== false || n.Ingress === true || n.Labels?.['kindpath.scanner'] !== 'public'
+    || n.Options?.['com.docker.network.bridge.gateway_mode_ipv4'] !== 'nat'
+    || n.Options?.['com.docker.network.bridge.enable_ip_masquerade'] !== 'true') throw new Error('Unsafe egress network');
+  await command(['network', 'connect', '--gw-priority=1', network, ns.id], signal);
+  await assertNamespaceNetworks(command, ns, [ns.network, network], signal);
+  await firewallControl(command, resources, ns, 'verify', signal);
+  ns.egress = network;
+  return network;
 }
