@@ -200,7 +200,7 @@ The controlled tasks are fixed internal selectors, not new API actions. `/api/sc
 
 ## Single-page MVP validation
 
-The [validation record](scanner/MVP-VALIDATION.md) documents one earlier, explicitly approved example.com scan and subsequent offline UI verification. Both gates were restored afterward. The subsequent [report-only validation](scanner/REAL-WEBSITE-VALIDATION.md) exercised Google, GitHub, Martin Fowler, Design Gurus and Instagram once each: three reports displayed, while GitHub and Design Gurus failed with undiagnosed `SCAN_FAILED` responses. This establishes limited live compatibility, not support for every site. Further live requests and continuing activation require separate approval. No hosting is configured.
+The [validation record](scanner/MVP-VALIDATION.md) documents one earlier, explicitly approved example.com scan and subsequent offline UI verification. Both gates were restored afterward. The subsequent [report-only validation](scanner/REAL-WEBSITE-VALIDATION.md) exercised Google, GitHub, Martin Fowler, Design Gurus and Instagram once each: three reports displayed, while GitHub and Design Gurus failed with undiagnosed `SCAN_FAILED` responses. A later [six-attempt report verification](scanner/REPORT-VERIFICATION.md) returned reports for GitHub and Design Gurus three times each, with significant resource omissions. This establishes limited live compatibility, not support for every site. Further live requests and continuing activation require separate approval. No hosting is configured.
 
 ## Gated URL-to-report path
 
@@ -214,7 +214,7 @@ Checks cover the HTTP contract, disabled defaults, rejected targets/answers, sha
 
 ## Safe scan failure diagnostics
 
-A failed scan can return an optional allowlisted stage/code and, for a rejected main-page response, its HTTP status. Raw internal errors and sensitive details are excluded; the interface retains its existing error message. [Diagnostic retries](scanner/SCAN-FAILURE-DIAGNOSTICS.md) recorded navigation-guard rejection during accessibility analysis for GitHub and Design Gurus. A controlled same-URL History API false positive is fixed, while real reloads and changed documents remain rejected. Those sites have not been live-tested after the fix; further live execution requires approval.
+A failed scan can return an optional allowlisted stage/code and, for a rejected main-page response, its HTTP status. Raw internal errors and sensitive details are excluded; the interface retains its existing error message. [Diagnostic retries](scanner/SCAN-FAILURE-DIAGNOSTICS.md) recorded navigation-guard rejection during accessibility analysis for GitHub and Design Gurus. A controlled same-URL History API false positive is fixed, while real reloads and changed documents remain rejected. A subsequent [report verification](scanner/REPORT-VERIFICATION.md) returned and displayed reports on all three approved retries per site, including matching JSON exports. Resource omissions limit those results, and the original failure causes remain unknown. Both public features are disabled; further live execution requires approval.
 
 ## Same-visit website snapshots (disabled)
 

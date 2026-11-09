@@ -21,13 +21,13 @@ Exactly one anonymous retry per URL ran through the default local API and networ
 | `https://github.com/` | 503 / `SCAN_FAILED` | `accessibility-analysis / PAGE_CHANGED_DURING_SCAN` | None |
 | `https://designgurus.io/` | 503 / `SCAN_FAILED` | `accessibility-analysis / PAGE_CHANGED_DURING_SCAN` | None |
 
-Both retries reached accessibility analysis, where the main-page stability guard rejected the operation. The diagnostics do not establish what triggered the navigation event or establish the causes of the older five-site validation's failures. No raw page or navigation-event details were retained from the two retries to make that attribution. Both errors appeared correctly in the interface without a partial report; cleanup was verified before each response was accepted. No additional live attempts ran.
+Both retries reached accessibility analysis, where the main-page stability guard rejected the operation. The diagnostics do not establish what triggered the navigation event or establish the causes of the older five-site validation's failures. No raw page or navigation-event details were retained from the two retries to make that attribution. Both errors appeared correctly in the interface without a partial report; cleanup was verified before each response was accepted. No additional live attempts ran during that diagnostic batch.
 
 ## Verified controlled fix
 
 A synthetic page repeating its current URL through `history.replaceState` reproduced a false rejection: the old guard returned `PAGE_CHANGED_DURING_SCAN` although that update did not replace the document. After the fix, that controlled case produces a report. Main-document requests, URL changes and document-identity changes still invalidate a scan; a real same-URL reload still fails, as do the existing changed-URL tests. The same document checks apply around optional capture.
 
-This is a verified compatibility fix, not proof that either live site used that History API operation. The two sites have not been retried after the fix; post-fix live compatibility remains unverified. Further live attempts require approval. The current [image assessment](IMAGE-ASSESSMENT.md) describes the final post-fix builds, not the earlier retry images.
+This is a verified compatibility fix, not proof that either live site used that History API operation. The subsequent [report verification](REPORT-VERIFICATION.md) returned and displayed reports on three approved post-fix attempts per site, with matching JSON exports and resource omissions. This establishes limited observed compatibility, without attributing the earlier failures or proving which change caused success. Both public features remain disabled; further live attempts require approval. The current [image assessment](IMAGE-ASSESSMENT.md) describes the final post-fix builds, not the earlier retry images.
 
 ## Checks and limits
 
