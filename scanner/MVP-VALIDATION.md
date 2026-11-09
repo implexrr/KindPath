@@ -1,6 +1,6 @@
 # Single-page MVP validation
 
-**Status: preparation only; public scanning and capture are disabled.** This plan neither enables execution nor authorizes a live request. The current [image assessment](IMAGE-ASSESSMENT.md) records unresolved concerns; the activation decision remains no-go in this branch.
+**Status: preparation only; public scanning and capture are disabled.** This plan neither enables execution nor authorizes a live request. The current [image assessment](IMAGE-ASSESSMENT.md) separates the Chromium runtime from QA findings. A passing runtime image threshold does not authorize activation; the separate enabled-path review and explicit approval remain pending.
 
 The acceptance goal is KindPath's existing flow: submit one page, receive actionable automated findings, and compare a matching inert snapshot with adjustable vision effects. No accounts, database, crawl, new domains, extra condition models or deployment are part of this validation.
 
@@ -31,7 +31,7 @@ There is no environment toggle, HTTP override or alternative live-test runner. D
 
 ## Proposed smoke after explicit approval
 
-1. Confirm the approved source revision, matching assessed local images, and absence of leftover owned scanner containers, socket volumes and networks. Leave unrelated resources alone. Start the existing local development app; verify its capabilities agree with the reviewed temporary policy change.
+1. Confirm the approved source revision, matching assessed scanner/QA/firewall images and their intended roles, and absence of leftover owned scanner containers, socket volumes and networks. Leave unrelated resources alone. Start the existing local development app; verify its capabilities agree with the reviewed temporary policy change.
 2. Enter the exact approved URL and use **Scan allowlisted website** once. Do not use **Try an example** or **Scan built-in page** as substitutes. Record whether it succeeds or fails within the existing limits; do not bypass certificate failures, blocked DNS or resource policies.
 3. On success, verify `mode: public`, the normalized requested URL and allowed final URL, actionable findings or an honest empty state, manual-review guidance and stated resource omissions. No exact violation count is prescribed for a public page, and no automated result establishes conformance.
 4. Open **Visual preview**. Confirm the two panels use the same scan-bound website snapshot, not the separate garden illustration. Inspect source labels, recognizable static text and supported layout. Treat the result as a structural approximation, not a pixel-perfect copy; do not make a second public visit or open the source on the host browser for comparison. Images, scripts, embedded ads, frames, custom fonts, form values and unsupported structure/styles remain omitted. Static ad text is only expected if present; example.com need not contain an advertisement.
