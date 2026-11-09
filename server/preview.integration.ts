@@ -50,6 +50,9 @@ test('fixture reports and previews support actionable findings, keyboard control
       child.stdin!.end(JSON.stringify({ snapshot, barriersSnapshot, clearSnapshot, report, clearReport, demoReport, assets }));
     });
     const result = JSON.parse(stdout); assert.equal(result.passed, true);
+    for (const kind of ['fixture', 'demo']) {
+      await writeFile(join(tmpdir(), `kindpath-report-export-${kind}.pdf`), Buffer.from(result[`${kind}Pdf`], 'base64'));
+    }
     for (const size of ['desktop', 'mobile', 'findingsDesktop', 'findingsMobile', 'matchingDesktop', 'matchingMobile']) {
       await writeFile(join(tmpdir(), `kindpath-static-preview-${size}.png`), Buffer.from(result[size], 'base64'));
     }
