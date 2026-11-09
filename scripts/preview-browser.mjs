@@ -237,6 +237,8 @@ try {
   for (const item of await page.getByRole('list', { name: 'Violation counts by severity' }).getByRole('listitem').all()) {
     assert.equal(await item.locator('strong').textContent(), '1');
   }
+  // Report completion schedules focus in requestAnimationFrame; observe it before sending keys.
+  await page.waitForFunction(() => document.activeElement?.matches('.results'));
   await filter.focus(); await filter.press('Home'); await filter.press('ArrowDown');
   assert.equal(await filter.inputValue(), 'Critical');
   assert.equal(await violations.locator('article').count(), 1);
@@ -366,6 +368,7 @@ try {
   await page.getByText('Scanned fixture: Garden form with barriers', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Just exploring? Try an example', exact: true }).click();
   await page.getByRole('region', { name: 'Example issues to explore', exact: true }).waitFor();
+  await page.waitForFunction(() => document.activeElement?.matches('.results'));
   await assertDownload(data.demoReport);
   const demoPdf = await printablePdf(data.demoReport);
   assert.deepEqual(unexpected, []);

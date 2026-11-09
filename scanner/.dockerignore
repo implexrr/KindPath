@@ -13,3 +13,6 @@
 !firewall/
 !firewall/*.mjs
 !preview.mjs
+
+!codec/
+!codec/*.c
