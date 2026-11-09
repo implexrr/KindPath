@@ -228,6 +228,10 @@ A failed scan can return an optional allowlisted stage/code and, for a rejected 
 
 A [twenty-site local validation](scanner/WEBSITE-PREVIEW-VALIDATION.md) completed one explicitly approved anonymous scan-and-capture attempt per homepage. Sixteen returned reports and snapshots with matching identities; four failed without partial results. The returned captures passed isolation, effect-control and report/export checks, but six contained no rendered text and others were sparse. These results validate observed boundaries and flow, not broadly useful preview fidelity. Both public features were restored to disabled; further live execution requires approval.
 
+## Preview content retention
+
+The capture skips short, collapsible formatting whitespace beside normal-flow blocks so indentation does not crowd later text out of the existing node budget. Inline separators, preformatted whitespace, nonbreaking spaces and spacing beside out-of-flow elements are preserved. A [controlled regression](scanner/CONTENT-RETENTION.md) now retains a later heading; a larger fixture still truncates at the existing limit. No resource budget or allowed content was expanded, and no live-site improvement is claimed. Public scanning and capture remain disabled.
+
 ## Preview quality feedback
 
 The prepared public-preview view uses a text-based hint derived from accepted snapshot nodes on the backend. With no non-whitespace text, it shows **Website preview unavailable** and hides the empty panels and effect controls. Findings, JSON exports and print remain available. A count of 1–99 non-whitespace text units produces a caution while keeping the preview and its controls available: a page can legitimately be short. Missing or malformed hint data is shown as unknown, without rejecting an otherwise matching report.
