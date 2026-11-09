@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { fixtureTitle, isFixture } from '../shared/fixtures';
 import type { FixtureId } from '../shared/fixtures';
@@ -32,6 +32,12 @@ export function App() {
   const [error, setError] = useState('');
   const [view, setView] = useState<'findings' | 'preview'>('findings');
   const results = useRef<HTMLElement>(null);
+  // Focus only after React has committed the new report and its result element exists.
+  useLayoutEffect(() => {
+    if (!report) return;
+    results.current?.focus();
+    results.current?.scrollIntoView({ behavior: 'instant', block: 'start' });
+  }, [report]);
 
   const analysisRequest = useRef<AbortController | null>(null);
   useEffect(() => () => analysisRequest.current?.abort(), []);
@@ -67,9 +73,6 @@ export function App() {
       }
       if (abort.signal.aborted || analysisRequest.current !== abort) return;
       setReport(data); setView('findings');
-      requestAnimationFrame(() => {
-        if (!abort.signal.aborted) { results.current?.focus(); results.current?.scrollIntoView({ behavior: 'instant', block: 'start' }); }
-      });
     } catch (cause) {
       if (!abort.signal.aborted && analysisRequest.current === abort) setError(cause instanceof Error && cause.name !== 'TimeoutError' ? cause.message : 'The request timed out. Try again.');
     } finally {
