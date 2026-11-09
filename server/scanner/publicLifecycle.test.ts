@@ -49,7 +49,10 @@ function daemon() {
     set startFails(value: boolean) { startFails = value; },
   };
 }
-const failed = (error: unknown) => error instanceof ScannerError && error.code === 'SCANNER_CLEANUP_FAILED';
+const failed = (error: unknown) => {
+  if (!(error instanceof ScannerError) || error.code !== 'SCANNER_CLEANUP_FAILED') return false;
+  assert.deepEqual(error.diagnostic,{stage:'cleanup',code:'UNCONFIRMED'});return true;
+};
 for (const kind of ['volume', 'network'] as const) {
   test(`unconfirmed ${kind} removal suppresses results and blocks work until recovery`, async () => {
     const docker = daemon(); docker.removalFails = kind;

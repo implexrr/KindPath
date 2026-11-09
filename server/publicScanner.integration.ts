@@ -115,6 +115,7 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
     if (scenario.path === '/missing') {
       assert.equal(response.status,503); const failure=await response.json();
       assert.equal(failure.code,'SCAN_FAILED'); assert.equal(failure.sitePreview,undefined);
+      assert.deepEqual(failure.diagnostic,{stage:'page-loading',code:'HTTP_STATUS',httpStatus:404});
     } else {
     assert.equal(response.status, 200);
     const report = await response.json();

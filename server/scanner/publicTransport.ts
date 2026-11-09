@@ -1,3 +1,4 @@
+import { atScanStage } from './diagnostics.js';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { IMAGE } from './containerPolicy.js';
@@ -68,10 +69,12 @@ export async function scanInNamespace(command: Command, resources: Resources, ns
     let ready!: () => void, unavailable!: (error: unknown) => void;
     const started = new Promise<void>((resolve,reject) => {ready=resolve;unavailable=reject;});
     const approve = createDestinationApprover(plan, approvals.planTarget, async addresses => {
-      await firewallControl(command,resources,ns,'verify',operation);
-      ns.addresses = addresses;
-      await firewallControl(command,resources,ns,'replace',operation);
-      await firewallControl(command,resources,ns,'verify',operation);
+      await atScanStage('network-setup',async () => {
+        await firewallControl(command,resources,ns,'verify',operation);
+        ns.addresses = addresses;
+        await firewallControl(command,resources,ns,'replace',operation);
+        await firewallControl(command,resources,ns,'verify',operation);
+      },operation);
     }, operation);
     const handler = createGatewayApprovalHandler(approve,ready);
     const channel = approvals.exchange(['start','--attach','--interactive',names.gateway],async message => {
@@ -84,18 +87,18 @@ export async function scanInNamespace(command: Command, resources: Resources, ns
     let raw: string;
     try {
       await started;
-      raw = await command(['start','--attach',names.browser],operation,45000);
+      raw = await atScanStage('worker-execution',() => command(['start','--attach',names.browser],operation,45000),operation);
     } finally {
       stopping = true; stop.abort(); await channel;
       if (failure) throw failure;
     }
     // A page can finish while a late resource approval is still settling. Drain
     // that work before verifying the final hash, then begin owned cleanup.
-    await firewallControl(command,resources,ns,'verify',signal);
-    return JSON.parse(raw);
+    await atScanStage('network-setup',() => firewallControl(command,resources,ns,'verify',signal),signal);
+    return atScanStage('worker-result',async () => JSON.parse(raw),signal);
   }
   await command(['start', names.gateway], signal);
-  const raw = await command(['start', '--attach', names.browser], signal, 45_000);
+  const raw = await atScanStage('worker-execution',() => command(['start', '--attach', names.browser], signal, 45_000),signal);
   await firewallControl(command, resources, ns, 'verify', signal);
   return JSON.parse(raw);
 }

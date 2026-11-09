@@ -31,3 +31,43 @@ test('cancellation and timeout are distinguished only from explicit signals or e
  assert.deepEqual(classifyFailure({},'dns',timed.signal),{stage:'dns',code:'TIMEOUT'});
  assert.deepEqual(classifyFailure(new Error('timed out maybe'),'dns'),{stage:'dns',code:'FAILED'});
 });
+
+test('worker diagnostics survive cleanup and public error mapping without exposing stderr',async()=>{
+ const {createResourceRunner}=await import('./resources.js');
+ const {createPublicSiteScanner}=await import('./publicScanner.js');
+ const {createPublicRouter}=await import('../routes/scanPublic.js');
+ const {default:express}=await import('express');
+ let disposed=false;
+ const worker=createResourceRunner(async()=>{throw Object.assign(new Error('PRIVATE_RAW_ERROR'),{stderr:'PRIVATE_HEADER\n'+DIAGNOSTIC_PREFIX+'{"stage":"accessibility-analysis","code":"TIMEOUT"}\n'});},async()=>({command:async()=>'',dispose:async()=>{disposed=true;}}));
+ const scan=createPublicSiteScanner({enabled:()=>true,worker});
+ const app=express();app.use(express.json());app.use('/api',createPublicRouter({enabled:()=>true,scan}));
+ const server=app.listen(0,'127.0.0.1');await new Promise<void>(resolve=>server.once('listening',resolve));
+ try{
+  const address=server.address();assert.ok(address&&typeof address!=='string');
+  const response=await fetch(`http://127.0.0.1:${address.port}/api/scan-public`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'https://example.com/'})});
+  const value=await response.json();assert.equal(response.status,503);assert.equal(value.code,'SCAN_FAILED');
+  assert.deepEqual(value.diagnostic,{stage:'accessibility-analysis',code:'TIMEOUT'});assert.ok(disposed);
+  assert.ok(!JSON.stringify(value).includes('PRIVATE_'));assert.equal(value.findings,undefined);
+ }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+test('known DNS failures and network setup failures retain only their observed stage/code',async()=>{
+ const {createPublicUrlWorkerRunner}=await import('./publicUrlWorker.js');
+ const {ScannerError}=await import('./dockerWorker.js');
+ const run=createPublicUrlWorkerRunner({enabled:()=>true,openSession:async()=>({command:async()=>'',dispose:async()=>{}}),planTarget:async()=>{throw Object.assign(new Error('private DNS details'),{code:'ENOTFOUND'});}});
+ await assert.rejects(run('https://example.com/'),error=>{
+  assert.ok(error instanceof ScannerError);assert.deepEqual(error.diagnostic,{stage:'dns',code:'ENOTFOUND'});assert.ok(!error.message.includes('private'));return true;
+ });
+});
+
+test('unclassified worker failures are not guessed to be invalid output',async()=>{
+ const {createPublicSiteScanner}=await import('./publicScanner.js');
+ const {ScannerError}=await import('./dockerWorker.js');
+ for(const [worker,expected] of [
+  [async()=>{throw new Error('private failure before output');},{stage:'worker-execution',code:'FAILED'}],
+  [async()=>({private:'malformed result'}),{stage:'worker-result',code:'INVALID_OUTPUT'}],
+ ] as const){
+  await assert.rejects(createPublicSiteScanner({enabled:()=>true,worker})('https://example.com/'),error=>{
+   assert.ok(error instanceof ScannerError);assert.deepEqual(error.diagnostic,expected);return true;
+  });
+ }
+});

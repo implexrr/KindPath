@@ -1,3 +1,5 @@
+import { readDiagnostic } from '../../scanner/gateway/diagnostics.mjs';
+import type { ScanDiagnostic } from '../../scanner/gateway/diagnostics.mjs';
 import { exchangeDockerJson } from './dockerExchange.js';
 import type { Exchange } from './dockerExchange.js';
 import { execFile } from 'node:child_process';
@@ -17,7 +19,10 @@ export type Command = (args: string[], signal?: AbortSignal, timeout?: number) =
 export interface DockerSession { command: Command; exchange?: Exchange; dispose: () => Promise<void> }
 
 export class ScannerError extends Error {
-  constructor(public code: 'SCANNER_BUSY' | 'SCANNER_UNAVAILABLE' | 'SCAN_FAILED' | 'SCANNER_CLEANUP_FAILED', message: string) { super(message); }
+  readonly diagnostic?: ScanDiagnostic;
+  constructor(public code: 'SCANNER_BUSY' | 'SCANNER_UNAVAILABLE' | 'SCAN_FAILED' | 'SCANNER_CLEANUP_FAILED', message: string, diagnostic?: unknown) {
+    super(message); this.diagnostic=readDiagnostic(diagnostic);
+  }
 }
 function cleanupError(): ScannerError {
   return new ScannerError('SCANNER_CLEANUP_FAILED', 'Scanner cleanup could not be confirmed. No report was produced. Restore Docker Desktop and retry; new workers remain blocked until cleanup is verified.');

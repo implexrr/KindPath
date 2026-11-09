@@ -1,3 +1,4 @@
+import { readDiagnostic } from '../../scanner/gateway/diagnostics.mjs';
 import { Router } from 'express';
 import { PUBLIC_SCANNING_ENABLED, PUBLIC_CAPTURE_ENABLED, validatePublicUrl } from '../scanner/publicPolicy.js';
 import { scanPublicSite } from '../scanner/publicScanner.js';
@@ -25,7 +26,10 @@ export function createPublicRouter({ enabled = (): boolean => PUBLIC_SCANNING_EN
     try { res.json(await scan(req.body.url, abort.signal)); }
     catch (error) {
       if (res.destroyed) return;
-      if (error instanceof ScannerError) res.status(error.code === 'SCANNER_BUSY' ? 429 : 503).json({ error: error.message, code: error.code });
+      if (error instanceof ScannerError) {
+        const diagnostic=readDiagnostic(error.diagnostic);
+        res.status(error.code === 'SCANNER_BUSY' ? 429 : 503).json({ error: error.message, code: error.code, ...(diagnostic ? {diagnostic} : {}) });
+      }
       else next(error);
     }
   });

@@ -1,3 +1,4 @@
+import { atScanStage } from './diagnostics.js';
 import { createDestinationPlan, validateDestinationPlan } from './destinationSnapshot.js';
 import type { DestinationPlan } from './destinationSnapshot.js';
 import { openLocalDockerSession, ScannerError } from './dockerWorker.js';
@@ -28,13 +29,19 @@ export function createPublicUrlWorkerRunner({
   const run = createResourceRunner(async (command, resources, target, signal, session) => {
     signal.throwIfAborted();
     // DNS and the entire Docker operation share admission, cancellation and the 60-second deadline.
-    const plan = validateDestinationPlan(await planTarget(target, signal));
-    if (plan.target !== target) throw new Error('Destination plan did not match the requested URL');
+    const plan = await atScanStage('dns',async () => {
+      const value=validateDestinationPlan(await planTarget(target,signal));
+      if(value.target!==target)throw new Error('Destination plan did not match the requested URL');
+      return value;
+    },signal);
     signal.throwIfAborted();
-    const ns = await prepareNetwork(command, resources, signal);
-    await preparePublicEgress(command, resources, ns, plan, signal);
+    const ns = await atScanStage('network-setup', async () => {
+      const value=await prepareNetwork(command,resources,signal);
+      await preparePublicEgress(command,resources,value,plan,signal);
+      return value;
+    },signal);
     if (!session.exchange) throw new Error('Owned gateway channel unavailable');
-    return scanInNamespace(command, resources, ns, plan, signal, captureEnabled(), {exchange:session.exchange,planTarget});
+    return atScanStage('worker-setup',() => scanInNamespace(command, resources, ns, plan, signal, captureEnabled(), {exchange:session.exchange!,planTarget}),signal);
   }, openSession);
   return async (value: unknown, signal?: AbortSignal): Promise<unknown> => {
     // Independent of the HTTP gate: direct use of the default URL runner is also disabled.

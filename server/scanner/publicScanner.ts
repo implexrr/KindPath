@@ -1,3 +1,4 @@
+import { readDiagnostic, classifyFailure } from '../../scanner/gateway/diagnostics.mjs';
 import { randomUUID } from 'node:crypto';
 import { mapSitePreview } from './sitePreview.js';
 import { PUBLIC_SCANNING_ENABLED, PUBLIC_CAPTURE_ENABLED, validatePublicUrl } from './publicPolicy.js';
@@ -34,9 +35,11 @@ export function createPublicSiteScanner({ enabled = () => PUBLIC_SCANNING_ENABLE
     const target = validatePublicUrl(value);
     signal?.throwIfAborted();
     const capture = captureEnabled();
+    let stage: 'worker-execution'|'worker-result' = 'worker-execution';
     try {
       const raw = await worker(target, signal);
       signal?.throwIfAborted();
+      stage = 'worker-result';
       const report = mapPublicReport(raw, target);
       const preview = (raw as {preview?: unknown}).preview;
       if (!capture && preview !== undefined) throw new Error('Capture is disabled');
@@ -44,8 +47,10 @@ export function createPublicSiteScanner({ enabled = () => PUBLIC_SCANNING_ENABLE
       return {...report,scanId,...(capture ? {sitePreview:mapSitePreview(preview,{scanId,requestedUrl:target,url:report.url})} : {})};
     } catch (error) {
       if (error instanceof ScannerError && error.code !== 'SCAN_FAILED') throw error;
-      // Never expose DNS, browser, Docker or untrusted worker diagnostics to the caller.
-      throw new ScannerError('SCAN_FAILED', 'The website scan failed or timed out. No report was produced.');
+      // Never expose raw DNS, browser, Docker or worker error text to the caller.
+      throw new ScannerError('SCAN_FAILED', 'The website scan failed or timed out. No report was produced.',
+        readDiagnostic(error instanceof ScannerError ? error.diagnostic : undefined)
+          ?? (stage==='worker-result' ? {stage,code:'INVALID_OUTPUT'} : classifyFailure(error,stage,signal)));
     }
   };
 }

@@ -49,7 +49,7 @@ export async function createDestinationPlan(target: string, resolver: Resolver =
   try {
     const answers = await Promise.race([resolver(new URL(url).hostname, { all: true, family: 4, verbatim: true }),
       new Promise<never>((_, reject) => {
-        onAbort = () => reject(new Error('Destination DNS lookup cancelled or timed out'));
+        onAbort = () => reject(deadline.reason);
         if (deadline.aborted) onAbort(); else deadline.addEventListener('abort', onAbort, { once: true });
       })]);
     deadline.throwIfAborted();
