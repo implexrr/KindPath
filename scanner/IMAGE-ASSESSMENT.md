@@ -6,10 +6,14 @@ Assessed November 9, 2026. **Public capture and scanning remain disabled. The wo
 
 The free, local [Anchore Grype](https://github.com/anchore/grype) v0.121.2 scanner inspected the squashed filesystems of both arm64 images. Its release archive was verified against the published SHA-256 and GitHub asset digest. Image/package inventories were not sent to a cloud scanning service. Only public tool releases and the vulnerability database were downloaded. There was no subscription, trial or paid operation.
 
-- Worker: `sha256:d328ffb1639e0758199361abcb47a476680e2b970e13f54c0daa3f66463f526c`
-- Firewall helper: `sha256:ed7936dcb3be22ca4f6e77959fefee4003ee43c59f7ab1771229650a20f9b1e8`
+- Worker arm64 configuration digest (Grype `imageID`): `sha256:d328ffb1639e0758199361abcb47a476680e2b970e13f54c0daa3f66463f526c`
+- Firewall helper arm64 configuration digest (Grype `imageID`): `sha256:ed7936dcb3be22ca4f6e77959fefee4003ee43c59f7ab1771229650a20f9b1e8`
+- Worker OCI index/repository digest: `sha256:88f0a58076a0a91d53b1d550165770cbffa151e13fd8dd93a3a8b50718d3105c`.
+- Firewall helper OCI index/repository digest: `sha256:ff2712902b06eee7043b4217e37077b806c28fd5507386136d89b95023ce2fec`.
 - Database schema: `v6.1.10`; built `2026-11-08T06:19:57Z`, validated by Grype.
 - Database archive SHA-256: `dcca24722e16c2bcf4a542a3f7fdd2147baf9215c17b973f5a7d4243fbddacea`.
+
+Docker’s local image store reports the OCI index digest as its image ID. Grype reports the selected platform’s configuration digest separately; compare repository digests when binding its report to these local tags.
 
 Scan options were `--scope squashed -o json --fail-on high`, with application update checks and database auto-update disabled after downloading and validating the database. Local raw JSON reports were retained outside the repository. Counts below are advisory/package matches, not independently confirmed exploitable defects or unique CVEs. They are not directly comparable with the previous Docker Scout counts.
 
