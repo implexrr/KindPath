@@ -1,6 +1,6 @@
 # Single-page MVP validation
 
-**Status: one approved local scan completed; public scanning and capture are disabled again.** The completion record below separates the live API result from subsequent offline UI verification. The recorded live request used the earlier hostname-restricted build; the newly prepared multi-host path has controlled validation only. This document does not authorize another live request. The current [image assessment](IMAGE-ASSESSMENT.md) separates the Chromium runtime from QA findings; a passing runtime image threshold does not authorize activation.
+**Status: one approved local scan completed; public scanning and capture are disabled again.** The completion record below separates the live API result from subsequent offline UI verification. The recorded live request used the earlier hostname-restricted build. The later [report-only multi-host validation](REAL-WEBSITE-VALIDATION.md) records five attempts, three displayed reports and two unresolved failures; it did not validate live website capture. This document does not authorize another live request. The current [image assessment](IMAGE-ASSESSMENT.md) separates the Chromium runtime from QA findings; a passing runtime image threshold does not authorize activation.
 
 The acceptance goal is KindPath's existing flow: submit one page, receive actionable automated findings, and compare a matching inert snapshot with adjustable vision effects. No accounts, database, crawl, new domains, extra condition models or deployment are part of this validation.
 
