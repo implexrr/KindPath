@@ -13,7 +13,7 @@ import { openLocalDockerSession, removeAndConfirm } from './scanner/dockerWorker
 import { assertContainerIsolation, containerArguments, IMAGE } from './scanner/containerPolicy.js';
 
 // Fulfill the app's requests from the built assets and real fixture responses, entirely inside network none.
-test('fixture reports and previews support actionable findings, keyboard controls, isolation, and mobile layout', { timeout: 90000 }, async () => {
+test('reports, exports and isolated previews work in Chromium, Firefox and WebKit', { timeout: 180000 }, async () => {
   const snapshot = await captureFixturePreview();
   const barriersSnapshot = await captureFixturePreview('barriers');
   const clearSnapshot = await captureFixturePreview('clear');
@@ -29,35 +29,38 @@ test('fixture reports and previews support actionable findings, keyboard control
     assets[`/assets/${name}`] = { body: await readFile(join(root, 'dist/assets', name), 'utf8'), type: name.endsWith('.js') ? 'text/javascript' : 'text/css' };
   }
   const script = await readFile(join(root, 'scripts/preview-browser.mjs'), 'utf8');
-  const session = await openLocalDockerSession();
-  const config = await mkdtemp(join(tmpdir(), 'kindpath-preview-ui-'));
-  const name = `kindpath-preview-ui-${randomUUID()}`;
-  try {
-    const args = containerArguments(name, join(root, 'scanner/seccomp.json'), 'verify-isolation');
-    args[args.indexOf('--label') + 1] = 'kindpath.preview=qa';
-    args.splice(1, 0, '--interactive');
-    args.splice(args.indexOf(IMAGE), 0, '--entrypoint=node');
-    args.splice(args.length - 1, 1, '--input-type=module', '-e', script);
-    await session.command(args);
-    assertContainerIsolation(JSON.parse(await session.command(['inspect', name])));
-    const docker = process.platform === 'darwin' ? '/Applications/Docker.app/Contents/Resources/bin/docker' : '/usr/bin/docker';
-    const socket = process.platform === 'darwin' ? join(homedir(), '.docker/run/docker.sock') : '/var/run/docker.sock';
-    const stdout = await new Promise<string>((resolve, reject) => {
-      const child = execFile(docker, ['--config', config, '--host', `unix://${socket}`, 'start', '--attach', '--interactive', name],
-        { env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' }, timeout: 60000, maxBuffer: 5 * 1024 * 1024 },
-        (error, output) => error ? reject(error) : resolve(output));
-      child.stdin!.on('error', () => {});
-      child.stdin!.end(JSON.stringify({ snapshot, barriersSnapshot, clearSnapshot, report, clearReport, demoReport, assets }));
-    });
-    const result = JSON.parse(stdout); assert.equal(result.passed, true);
-    for (const kind of ['fixture', 'demo']) {
-      await writeFile(join(tmpdir(), `kindpath-report-export-${kind}.pdf`), Buffer.from(result[`${kind}Pdf`], 'base64'));
+  for (const browser of ['chromium', 'firefox', 'webkit']) {
+    const session = await openLocalDockerSession();
+    const config = await mkdtemp(join(tmpdir(), 'kindpath-preview-ui-'));
+    const name = `kindpath-preview-ui-${browser}-${randomUUID()}`;
+    try {
+      const args = containerArguments(name, join(root, 'scanner/seccomp.json'), 'verify-isolation');
+      args[args.indexOf('--label') + 1] = 'kindpath.preview=qa';
+      args.splice(1, 0, '--interactive');
+      args.splice(args.indexOf(IMAGE), 0, '--entrypoint=node');
+      args.splice(args.length - 1, 1, '--input-type=module', '-e', script);
+      await session.command(args);
+      assertContainerIsolation(JSON.parse(await session.command(['inspect', name])));
+      const docker = process.platform === 'darwin' ? '/Applications/Docker.app/Contents/Resources/bin/docker' : '/usr/bin/docker';
+      const socket = process.platform === 'darwin' ? join(homedir(), '.docker/run/docker.sock') : '/var/run/docker.sock';
+      const stdout = await new Promise<string>((resolve, reject) => {
+        const child = execFile(docker, ['--config', config, '--host', `unix://${socket}`, 'start', '--attach', '--interactive', name],
+          { env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' }, timeout: 60000, maxBuffer: 5 * 1024 * 1024 },
+          (error, output) => error ? reject(error) : resolve(output));
+        child.stdin!.on('error', () => {});
+        child.stdin!.end(JSON.stringify({ browser, snapshot, barriersSnapshot, clearSnapshot, report, clearReport, demoReport, assets }));
+      });
+      const result = JSON.parse(stdout); assert.equal(result.passed, true); assert.equal(result.engine, browser);
+      console.info(`${browser} ${result.version}: controlled browser checks passed`);
+      for (const kind of browser === 'chromium' ? ['fixture', 'demo'] : []) {
+        await writeFile(join(tmpdir(), `kindpath-report-export-${kind}.pdf`), Buffer.from(result[`${kind}Pdf`], 'base64'));
+      }
+      for (const size of ['desktop', 'mobile', 'findingsDesktop', 'findingsMobile', 'matchingDesktop', 'matchingMobile']) {
+        await writeFile(join(tmpdir(), `kindpath-${browser}-static-preview-${size}.png`), Buffer.from(result[size], 'base64'));
+      }
+    } finally {
+      try { await removeAndConfirm(session.command, name); }
+      finally { await session.dispose(); await rm(config, { recursive: true, force: true }); }
     }
-    for (const size of ['desktop', 'mobile', 'findingsDesktop', 'findingsMobile', 'matchingDesktop', 'matchingMobile']) {
-      await writeFile(join(tmpdir(), `kindpath-static-preview-${size}.png`), Buffer.from(result[size], 'base64'));
-    }
-  } finally {
-    try { await removeAndConfirm(session.command, name); }
-    finally { await session.dispose(); await rm(config, { recursive: true, force: true }); }
   }
 });

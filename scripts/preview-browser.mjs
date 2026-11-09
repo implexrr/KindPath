@@ -1,10 +1,13 @@
-// Executed inside the existing network-disabled Chromium container; receives only public build assets and fixture data.
+// Executed inside the existing network-disabled browser container; receives only public build assets and fixture data.
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { chromium, firefox, webkit } from 'playwright';
 const chunks = [];
 for await (const chunk of process.stdin) chunks.push(chunk);
 const data = JSON.parse(Buffer.concat(chunks).toString());
-const browser = await chromium.launch({ headless: true, chromiumSandbox: true });
+const engine = data.browser ?? 'chromium';
+const browserType = new Map([['chromium', chromium], ['firefox', firefox], ['webkit', webkit]]).get(engine);
+assert.ok(browserType, 'Choose a fixed browser engine');
+const browser = await browserType.launch({ headless: true, ...(engine === 'chromium' ? { chromiumSandbox: true } : {}) });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: true });
   page.setDefaultTimeout(10000);
@@ -47,11 +50,17 @@ try {
       for (const element of finding.elements) assert.ok((await printed.textContent()).includes(element.guidance));
     }
     assert.ok((await printed.textContent()).includes(expected.generatedAt));
-    const pdf = await page.pdf({ format: 'A4', printBackground: false });
-    assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+    const pdf = engine === 'chromium' ? await page.pdf({ format: 'A4', printBackground: false, tagged: true, outline: true }) : null;
+    if (pdf) {
+      assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+      const syntax = pdf.toString('latin1');
+      for (const pattern of [/\/StructTreeRoot\b/, /\/Marked true/, /\/Lang \(en\)/, /\/S \/H1\b/, /\/S \/H2\b/, /\/S \/L\b/, /\/Outlines\b/]) {
+        assert.match(syntax, pattern, 'Chromium print samples must retain English language, structural tags and a document outline');
+      }
+    }
     await page.emulateMedia({ media: 'screen' });
     assert.equal(await printed.isVisible(), false);
-    return pdf.toString('base64');
+    return pdf?.toString('base64') ?? null;
   }
   let delayScan = false, releaseScan, scanHeld = false;
   let delayPreview = false, releasePreview, previewHeld = false;
@@ -60,6 +69,8 @@ try {
   const snapshots = new Map([['garden', data.snapshot], ['barriers', data.barriersSnapshot], ['clear', data.clearSnapshot]]);
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
+    // WebKit routes revoked Blob fetches through this handler; let the browser resolve its own local Blob store.
+    if (url.protocol === 'blob:' && url.origin === 'http://kindpath-ui.invalid') { await route.continue(); return; }
     if (url.pathname.startsWith('/api/')) apiRequests++;
     if (url.hostname !== 'kindpath-ui.invalid') { unexpected.push(url.hostname); await route.abort(); return; }
     if (url.pathname === '/api/scanning-capabilities') { await route.fulfill({ json: { publicScanningEnabled: false, allowedHosts: ['example.com'] } }); return; }
@@ -358,5 +369,5 @@ try {
   await assertDownload(data.demoReport);
   const demoPdf = await printablePdf(data.demoReport);
   assert.deepEqual(unexpected, []);
-  process.stdout.write(JSON.stringify({ passed: true, desktop, mobile, findingsDesktop, findingsMobile, matchingDesktop, matchingMobile, fixturePdf, demoPdf }));
+  process.stdout.write(JSON.stringify({ passed: true, engine, version: browser.version(), desktop, mobile, findingsDesktop, findingsMobile, matchingDesktop, matchingMobile, fixturePdf, demoPdf }));
 } finally { await browser.close(); }
