@@ -251,7 +251,9 @@ try {
   await page.getByRole('button', { name: 'Scan built-in page' }).click();
   const filter = page.getByLabel('Filter violations by severity', { exact: true });
   await violations.getByRole('heading', { name: 'Critical controlled rule', exact: true }).waitFor();
-  assert.deepEqual(await violations.getByRole('heading', { level: 4 }).allTextContents(),
+  // Keep named role queries in Playwright's utility world: Firefox 159 crashes when
+  // aria-labelledby reflection crosses worlds (microsoft/playwright#43967).
+  assert.deepEqual(await Promise.all((await violations.getByRole('heading', { level: 4 }).all()).map(heading => heading.textContent())),
     ['Critical', 'Serious', 'Moderate', 'Minor', 'Unknown'].map(level => `${level} controlled rule`));
   const reviews = page.getByRole('region', { name: 'Checks needing manual review (1)', exact: true });
   await reviews.getByText('Controlled inconclusive check', { exact: true }).waitFor();
@@ -279,7 +281,7 @@ try {
   assert.equal(await violations.locator('article').count(), 5);
   const firstCard = violations.locator('article').first();
   await firstCard.locator('summary').press('Enter');
-  assert.deepEqual(await firstCard.locator('.element-target code').allTextContents(), ['#first', '#second → #nested']);
+  assert.deepEqual(await Promise.all((await firstCard.locator('.element-target code').all()).map(target => target.textContent())), ['#first', '#second → #nested']);
   assert.equal(await firstCard.locator('.element-summary').nth(1).textContent(), '<img src=x onerror=alert(1)>\nRepair the second element');
   assert.equal(await firstCard.locator('img').count(), 0, 'Guidance must be displayed as text');
   await reviews.locator('summary').click();
