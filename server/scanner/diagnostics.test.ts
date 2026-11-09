@@ -50,13 +50,18 @@ test('worker diagnostics survive cleanup and public error mapping without exposi
   assert.ok(!JSON.stringify(value).includes('PRIVATE_'));assert.equal(value.findings,undefined);
  }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
-test('known DNS failures and network setup failures retain only their observed stage/code',async()=>{
+test('DNS, setup and unclassified operation failures retain only their observed stage/code',async()=>{
  const {createPublicUrlWorkerRunner}=await import('./publicUrlWorker.js');
  const {ScannerError}=await import('./dockerWorker.js');
  const run=createPublicUrlWorkerRunner({enabled:()=>true,openSession:async()=>({command:async()=>'',dispose:async()=>{}}),planTarget:async()=>{throw Object.assign(new Error('private DNS details'),{code:'ENOTFOUND'});}});
  await assert.rejects(run('https://example.com/'),error=>{
   assert.ok(error instanceof ScannerError);assert.deepEqual(error.diagnostic,{stage:'dns',code:'ENOTFOUND'});assert.ok(!error.message.includes('private'));return true;
  });
+ const {createResourceRunner}=await import('./resources.js');
+ const operation=createResourceRunner(async()=>{throw new Error('private operation error');},async()=>({command:async()=>'',dispose:async()=>{}}));
+ await assert.rejects(operation('controlled'),error=>{assert.ok(error instanceof ScannerError);assert.deepEqual(error.diagnostic,{stage:'worker-execution',code:'FAILED'});return true;});
+ const unavailable=createResourceRunner(async()=>assert.fail('Setup failed'),async()=>{throw Object.assign(new Error('private connection details'),{code:'ECONNREFUSED'});});
+ await assert.rejects(unavailable('controlled'),error=>{assert.ok(error instanceof ScannerError);assert.deepEqual(error.diagnostic,{stage:'network-setup',code:'ECONNREFUSED'});return true;});
 });
 
 test('unclassified worker failures are not guessed to be invalid output',async()=>{

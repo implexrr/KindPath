@@ -40,8 +40,10 @@ export function createPublicUrlWorkerRunner({
       await preparePublicEgress(command,resources,value,plan,signal);
       return value;
     },signal);
-    if (!session.exchange) throw new Error('Owned gateway channel unavailable');
-    return atScanStage('worker-setup',() => scanInNamespace(command, resources, ns, plan, signal, captureEnabled(), {exchange:session.exchange!,planTarget}),signal);
+    return atScanStage('worker-setup',async () => {
+      if (!session.exchange) throw new Error('Owned gateway channel unavailable');
+      return scanInNamespace(command, resources, ns, plan, signal, captureEnabled(), {exchange:session.exchange,planTarget});
+    },signal);
   }, openSession);
   return async (value: unknown, signal?: AbortSignal): Promise<unknown> => {
     // Independent of the HTTP gate: direct use of the default URL runner is also disabled.

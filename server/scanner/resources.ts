@@ -38,6 +38,7 @@ export function createResourceRunner(
     const deadline = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(60_000)]);
     let session: DockerSession | undefined;
     let owned: Resources | undefined;
+    let stage: 'network-setup'|'worker-execution' = 'network-setup';
     try {
       session = await openSession();
       if (pending) { await cleanResources(session.command, pending); pending = undefined; }
@@ -49,10 +50,11 @@ export function createResourceRunner(
       ]) if ((await session.command(args, deadline)).trim()) throw failure();
       owned = { containers: [], volumes: [], networks: [] };
       pending = owned;
+      stage='worker-execution';
       return await operation(session.command, owned, task, deadline, session);
     } catch (error) {
       if (error instanceof ScannerError) throw error;
-      throw new ScannerError('SCAN_FAILED', 'The isolated firewall operation failed. No report was produced.', classifyFailure(error,'network-setup',deadline));
+      throw new ScannerError('SCAN_FAILED', 'The isolated firewall operation failed. No report was produced.', classifyFailure(error,stage,deadline));
     } finally {
       try { if (owned && session) { await cleanResources(session.command, owned); pending = undefined; } }
       finally { try { await session?.dispose(); } finally { release(); } }
