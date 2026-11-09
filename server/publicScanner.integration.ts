@@ -158,13 +158,15 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
 
 }
 
-for (const privateRedirect of [false,true]) {
- test(`public website controller ${privateRedirect?'rejects a DNS-private redirect':'pins cross-host redirects and resources'} without public access`,{timeout:90000},async()=>{
+for (const scenario of ['multi-host','private-redirect','late-policy-failure']) {
+ const privateRedirect=scenario==='private-redirect', failLate=scenario==='late-policy-failure';
+ test(`public website controller handles controlled ${scenario} without public access`,{timeout:90000},async()=>{
   const {createPublicUrlWorkerRunner}=await import('./scanner/publicUrlWorker.js');
   const {createPublicSiteScanner}=await import('./scanner/publicScanner.js');
   const {createDestinationPlan}=await import('./scanner/destinationSnapshot.js');
   const {prepareNamespace,createFirewallContainer}=await import('./scanner/firewallDocker.js');
   const calls=new Map<string,number>();
+  let browserCompleted=false,injectedFailure=false;
   let releaseLate!:()=>void;const lateDns=new Promise<void>(resolve=>releaseLate=resolve);
   const capturedCommands:string[][]=[];
   const worker=createPublicUrlWorkerRunner({enabled:()=>true,captureEnabled:()=>true,
@@ -178,8 +180,10 @@ for (const privateRedirect of [false,true]) {
    openSession:async()=>{
     const session=await openLocalDockerSession();
     return {...session,command:async(...args:Parameters<typeof session.command>)=>{
-      capturedCommands.push(args[0]);const result=await session.command(...args);
-      if(args[0][0]==='start'&&args[0].some(arg=>arg.startsWith('kindpath-public-browser-')))releaseLate();
+      capturedCommands.push(args[0]);
+      if(failLate&&browserCompleted&&args[0].includes('replace')){injectedFailure=true;throw new Error('Controlled late firewall failure');}
+      const result=await session.command(...args);
+      if(args[0][0]==='start'&&args[0].some(arg=>arg.startsWith('kindpath-public-browser-'))){browserCompleted=true;releaseLate();}
       return result;
     }};
    },
@@ -194,7 +198,7 @@ for (const privateRedirect of [false,true]) {
   });
   const scan=createPublicSiteScanner({enabled:()=>true,captureEnabled:()=>true,worker});
   const target='http://example.com/'+(privateRedirect?'private-redirect':'redirect');
-  if(privateRedirect)await assert.rejects(scan(target),error=>error instanceof ScannerError&&error.code==='SCAN_FAILED');
+  if(privateRedirect||failLate)await assert.rejects(scan(target),error=>error instanceof ScannerError&&error.code==='SCAN_FAILED');
   else {
    const report=await scan(target);
    assert.equal(report.mode,'public');assert.equal(report.requestedUrl,target);assert.equal(report.url,'http://example.org/page');
@@ -206,6 +210,7 @@ for (const privateRedirect of [false,true]) {
    assert.ok(report.limitations.some(text=>text.includes('requests failed')));
   }
   if(!privateRedirect)assert.ok(capturedCommands.some(args=>args.includes('replace')),'Additional public host must require a verified firewall update');
+  if(failLate)assert.equal(injectedFailure,true,'The late policy failure must be exercised after browser completion');
   assert.equal(calls.get('blocked.example.org'),1);
   const session=await openLocalDockerSession();
   try {

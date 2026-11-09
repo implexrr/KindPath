@@ -74,7 +74,11 @@ export async function scanInNamespace(command: Command, resources: Resources, ns
       await firewallControl(command,resources,ns,'verify',operation);
     }, operation);
     const handler = createGatewayApprovalHandler(approve,ready);
-    const channel = approvals.exchange(['start','--attach','--interactive',names.gateway],handler,channelSignal)
+    const channel = approvals.exchange(['start','--attach','--interactive',names.gateway],async message => {
+      try { return await handler(message); }
+      // Intentional channel shutdown must not hide a real late policy failure.
+      catch (error) { failure=error; failed.abort(); throw error; }
+    },channelSignal)
       .then(() => {throw new Error('Gateway channel ended before cleanup');})
       .catch(error => {if (!stopping) {failure=error;unavailable(error);failed.abort();}});
     let raw: string;
