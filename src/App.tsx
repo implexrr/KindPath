@@ -4,6 +4,7 @@ import { websiteUrl } from '../scanner/gateway/url.mjs';
 import { fixtureTitle, isFixture } from '../shared/fixtures';
 import type { FixtureId } from '../shared/fixtures';
 import type { Report } from '../shared/types';
+import { normalizeWebsiteEntry } from './components/websiteEntry';
 import { scanErrorMessage } from './components/scanFeedback';
 import { WebsiteForm } from './components/WebsiteForm';
 import { ReportExports } from './components/ReportExports';
@@ -72,6 +73,12 @@ export function App() {
     setLastAttempt({value,mode});
     const fixture = mode === 'fixture';
     try {
+      if (!fixture) {
+        value = normalizeWebsiteEntry(value);
+        if (mode === 'public') value = websiteUrl(value).href;
+        setUrl(value);
+        setLastAttempt({value,mode});
+      }
       const response = await fetch(mode === 'fixture' ? '/api/scan-fixture' : mode === 'public' ? '/api/scan-public' : '/api/analyze', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fixture ? { fixture: value } : { url: value }),
         signal: AbortSignal.any([abort.signal, AbortSignal.timeout(mode === 'demo' ? 10000 : 90000)]),
