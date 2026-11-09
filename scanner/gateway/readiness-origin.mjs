@@ -26,7 +26,7 @@ function handle(req,res){
   if(path==='/site.css'){setTimeout(()=>{res.writeHead(200,{'Content-Type':'text/css'});res.end(siteCss);},150);return;}
   if(path==='/content'||path==='/forms'){res.writeHead(200,{'Content-Type':'text/html'});res.end(path==='/content'?contentPage:formPage);return;}
   if(path==='/indented-content'||path==='/indented-budget'){
-    const count=path==='/indented-content'?100:300;
+    const count=path==='/indented-content'?96:300;
     const blocks=Array.from({length:count},(_,index)=>`<p>Controlled paragraph ${index}</p>`).join('\n');
     res.writeHead(200,{'Content-Type':'text/html'});res.end(retentionPage.replace('<!-- retention-blocks -->',blocks));return;
   }

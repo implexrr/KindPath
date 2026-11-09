@@ -230,7 +230,7 @@ A [twenty-site local validation](scanner/WEBSITE-PREVIEW-VALIDATION.md) complete
 
 ## Preview content retention
 
-The capture skips short, collapsible formatting whitespace beside normal-flow blocks so indentation does not crowd later text out of the existing node budget. Inline separators, preformatted whitespace, nonbreaking spaces and spacing beside out-of-flow elements are preserved. A [controlled regression](scanner/CONTENT-RETENTION.md) now retains a later heading; a larger fixture still truncates at the existing limit. No resource budget or allowed content was expanded, and no live-site improvement is claimed. Public scanning and capture remain disabled.
+The capture skips short, collapsible formatting whitespace beside supported block elements that pass the existing visibility checks so indentation does not crowd later text out of the existing node budget. Spacing near omitted or hidden content, inline separators, preformatted whitespace, nonbreaking spaces and spacing beside out-of-flow elements are preserved. A [controlled regression](scanner/CONTENT-RETENTION.md) now retains a later heading; a larger fixture still truncates at the existing limit. No resource budget or allowed content was expanded, and no live-site improvement is claimed. Public scanning and capture remain disabled.
 
 ## Preview quality feedback
 

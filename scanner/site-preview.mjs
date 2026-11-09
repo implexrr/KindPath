@@ -55,10 +55,14 @@ export async function captureSiteSnapshot(page) {
       }
       return result;
     }
+    // These tags remain block-level if the output style budget is exhausted.
+    // Omitted/hidden nodes and styled inline tags cannot justify removing a separator.
+    const blockTags = new Set(['header','nav','main','section','article','aside','footer','div','p','h1','h2','h3','h4','h5','h6','blockquote','figure','figcaption','dl','dt','dd','table','hr','ul','ol','li','form']);
     function blockInFlow(node) {
-      if (!(node instanceof HTMLElement)) return false;
+      if (!(node instanceof HTMLElement) || !blockTags.has(node.localName) || node.hidden) return false;
       const computed = getComputedStyle(node);
       return ['block','flow-root','list-item','flex','grid','table'].includes(computed.display)
+        && !['hidden','collapse'].includes(computed.visibility)
         && !['absolute','fixed'].includes(computed.position) && computed.getPropertyValue('float') === 'none';
     }
     function formattingSpace(node, text) {

@@ -154,8 +154,10 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
       assert.match(html,/Box-left<\/span> <span\b[^>]*>Box-right/);
       assert.match(html,/Pre-left<\/p>\n<p\b[^>]*>Pre-right/);
       assert.match(html,/Nonbreaking-left<\/p>\u00a0<p\b[^>]*>Nonbreaking-right/);
+      assert.match(html,/Omitted-left<\/span> <span\b[^>]*>Omitted-right/);
+      assert.match(html,/Hidden-left<\/span> <span\b[^>]*>Hidden-right/);
       assert.match(html,/Floating-left<\/span> <span\b[^>]*>Floating-right/);
-      assert.doesNotMatch(html,/controlled-retention-value|controlled-hidden-retention-marker/);
+      assert.doesNotMatch(html,/controlled-retention-value|controlled-hidden-retention-marker|controlled-omitted-retention-marker|controlled-hidden-gap-marker/);
       assert.match(html,/input[^>]* disabled/);
       if(scenario.path==='/indented-content')assert.match(html,/Retained end-of-page marker/);
       else {
