@@ -224,6 +224,10 @@ Public report responses and JSON exports include an optional `coverage` object c
 
 A failed scan can return an optional allowlisted stage/code and, for a rejected main-page response, its HTTP status. Raw internal errors and sensitive details are excluded; the interface retains its existing error message. [Diagnostic retries](scanner/SCAN-FAILURE-DIAGNOSTICS.md) recorded navigation-guard rejection during accessibility analysis for GitHub and Design Gurus. A controlled same-URL History API false positive is fixed, while real reloads and changed documents remain rejected. A subsequent [report verification](scanner/REPORT-VERIFICATION.md) returned and displayed reports on all three approved retries per site, including matching JSON exports. Resource omissions limit those results, and the original failure causes remain unknown. Both public features are disabled; further live execution requires approval.
 
+## Real website preview validation
+
+A [twenty-site local validation](scanner/WEBSITE-PREVIEW-VALIDATION.md) completed one explicitly approved anonymous scan-and-capture attempt per homepage. Sixteen returned reports and snapshots with matching identities; four failed without partial results. The returned captures passed isolation, effect-control and report/export checks, but six contained no rendered text and others were sparse. These results validate observed boundaries and flow, not broadly useful preview fidelity. Both public features were restored to disabled; further live execution requires approval.
+
 ## Same-visit website snapshots (disabled)
 
 `PUBLIC_CAPTURE_ENABLED` and `PUBLIC_SCANNING_ENABLED` are both `false`. Capabilities report `publicCaptureEnabled: false`; no request field or environment variable enables capture. The prepared capture is an optional part of the existing scan operation, not a separate URL-fetching endpoint. Ordinary scans do not collect snapshot data.

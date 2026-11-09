@@ -4,6 +4,10 @@
 
 The acceptance goal is KindPath's existing flow: submit one page, receive actionable automated findings, and compare a matching inert snapshot with adjustable vision effects. No accounts, database, crawl, new domains, extra condition models or deployment are part of this validation.
 
+## Subsequent expanded-path validation
+
+A later explicitly approved [twenty-site preview batch](WEBSITE-PREVIEW-VALIDATION.md) exercised the current public-target path through uninterrupted live UI sessions: sixteen reports/snapshots returned and passed identity, isolation, controls and export checks; four scans failed without partial output. Six snapshots contained no rendered text and others were sparse. That evidence supplements this historical restricted-build result; it does not repair missing evidence from the original session or establish useful fidelity across sites. Both public features remain disabled. The table below describes this original one-attempt record.
+
 ## Evidence and remaining limits
 
 | Area | Verified evidence | Still unverified |
