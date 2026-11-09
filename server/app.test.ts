@@ -73,14 +73,14 @@ test('fixture endpoint rejects URLs, paths, and extra fields before starting a w
   }
 });
 
-test('public scanning endpoint stays disabled and reports its candidate allowlist', async () => {
+test('public scanning endpoint stays disabled and reports its prepared URL policy', async () => {
   const response = await fetch(`${origin}/api/scan-public`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:'https://example.com/'})});
   assert.equal(response.status,503);
   assert.equal((await response.json()).code,'PUBLIC_SCANNING_DISABLED');
   const capabilities=await (await fetch(`${origin}/api/scanning-capabilities`)).json();
   assert.equal(capabilities.publicScanningEnabled,false);
   assert.equal(capabilities.publicCaptureEnabled,false);
-  assert.deepEqual(capabilities.allowedHosts,['example.com']);
+  assert.equal(capabilities.urlPolicy,'public-http-https');
 });
 
 test('local API rejects untrusted hostnames and browser origins before scanner work', async () => {

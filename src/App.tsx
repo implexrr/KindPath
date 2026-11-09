@@ -20,15 +20,14 @@ export function App() {
   const [selectedFixture, setSelectedFixture] = useState<FixtureId>('barriers');
   const [publicEnabled, setPublicEnabled] = useState(false);
   const [publicCaptureEnabled,setPublicCaptureEnabled] = useState(false);
-  const [allowedHosts, setAllowedHosts] = useState<string[]>([]);
   useEffect(() => {
     const abort = new AbortController();
     fetch('/api/scanning-capabilities', { signal: abort.signal }).then(response => {
       if (!response.ok) throw new Error('Capabilities unavailable');
       return response.json();
     }).then(data => {
-      if (Array.isArray(data.allowedHosts) && data.allowedHosts.every((host: unknown) => typeof host === 'string')) {
-        setAllowedHosts(data.allowedHosts); setPublicEnabled(data.publicScanningEnabled === true);
+      if (data.urlPolicy === 'public-http-https') {
+        setPublicEnabled(data.publicScanningEnabled === true);
         setPublicCaptureEnabled(data.publicScanningEnabled === true && data.publicCaptureEnabled === true);
       }
     }).catch(() => {}); // Fail closed; the server gate remains authoritative.
@@ -115,7 +114,7 @@ export function App() {
       <section className="hero"><div className="hero-copy"><div className="eyebrow"><span className="tiny-sun" aria-hidden="true">✳</span> A MORE INCLUSIVE INTERNET STARTS HERE</div><h1>A clearer web.<br/><em>For everyone.</em></h1><p>See your website from a different perspective.<br className="desktop-break"/> Find accessibility barriers, understand their impact,<br className="desktop-break"/> and take the next step toward a more welcoming web.</p>
       <WebsiteForm activity={busy ? lastAttempt?.mode === 'demo' ? 'Preparing an example report…' : 'Checking the page and preparing your report…' : cancelled ? 'Request cancelled. You can try again shortly.' : report ? 'Report ready.' : ''}
         onCancel={cancel} cancelled={cancelled} canRetry={!busy && !!lastAttempt && (!!error || cancelled)}
-        onRetry={() => { if (lastAttempt) void analyze(lastAttempt.value,lastAttempt.mode); }} publicScanningEnabled={publicEnabled} allowedHosts={allowedHosts} url={url} busy={busy} error={error} onUrlChange={changeUrl} onSubmit={submit}
+        onRetry={() => { if (lastAttempt) void analyze(lastAttempt.value,lastAttempt.mode); }} publicScanningEnabled={publicEnabled} url={url} busy={busy} error={error} onUrlChange={changeUrl} onSubmit={submit}
         onExample={() => { setUrl('https://example.com'); void analyze('https://example.com', 'demo'); }}
         fixture={selectedFixture} onFixtureChange={changeFixture} onFixtureScan={() => { void analyze(selectedFixture, 'fixture'); }}/></div>
       <div className="hero-visual" aria-label="Illustration: a fictional website seen through different visual filters"><div className="visual-top"><span><i/> A DIFFERENT PERSPECTIVE</span><span>↗</span></div><div className="hero-sample"><SampleSite/><div className="comparison-slice" aria-hidden="true"/></div><div className="visual-bottom"><span>Same website. Different experience.</span><span className="visual-toggle" aria-hidden="true">●</span></div><div className="floating-note"><span aria-hidden="true">◉</span> Design with more people in mind.</div></div></section>

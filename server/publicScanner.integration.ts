@@ -157,3 +157,59 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
 });
 
 }
+
+for (const privateRedirect of [false,true]) {
+ test(`public website controller ${privateRedirect?'rejects a DNS-private redirect':'pins cross-host redirects and resources'} without public access`,{timeout:90000},async()=>{
+  const {createPublicUrlWorkerRunner}=await import('./scanner/publicUrlWorker.js');
+  const {createPublicSiteScanner}=await import('./scanner/publicScanner.js');
+  const {createDestinationPlan}=await import('./scanner/destinationSnapshot.js');
+  const {prepareNamespace,createFirewallContainer}=await import('./scanner/firewallDocker.js');
+  const calls=new Map<string,number>();
+  let releaseLate!:()=>void;const lateDns=new Promise<void>(resolve=>releaseLate=resolve);
+  const capturedCommands:string[][]=[];
+  const worker=createPublicUrlWorkerRunner({enabled:()=>true,captureEnabled:()=>true,
+   planTarget:(url,signal)=>createDestinationPlan(url,async host=>{
+    calls.set(host,(calls.get(host)??0)+1);
+    if(host==='late.example.net')await lateDns;
+    // Rebinding or DNS-private resource answers must never create a connection.
+    const address=host==='blocked.example.org'||host==='rebind.example.net'&&calls.get(host)!==1?'127.0.0.1':host==='example.com'?'93.184.216.34':'93.184.216.36';
+    return [{address,family:4}];
+   },signal),
+   openSession:async()=>{
+    const session=await openLocalDockerSession();
+    return {...session,command:async(...args:Parameters<typeof session.command>)=>{
+      capturedCommands.push(args[0]);const result=await session.command(...args);
+      if(args[0][0]==='start'&&args[0].some(arg=>arg.startsWith('kindpath-public-browser-')))releaseLate();
+      return result;
+    }};
+   },
+   prepareNetwork:async(command,resources,signal)=>{
+    const ns=await prepareNamespace(command,resources,signal,'pinned');
+    for(const address of ['93.184.216.34','93.184.216.36']){
+     const origin=await createFirewallContainer(command,resources,ns.network,'origin',['gateway/public-origin.mjs'],signal,address);
+     await command(['start',origin.name],signal);
+    }
+    return ns;
+   },
+  });
+  const scan=createPublicSiteScanner({enabled:()=>true,captureEnabled:()=>true,worker});
+  const target='http://example.com/'+(privateRedirect?'private-redirect':'redirect');
+  if(privateRedirect)await assert.rejects(scan(target),error=>error instanceof ScannerError&&error.code==='SCAN_FAILED');
+  else {
+   const report=await scan(target);
+   assert.equal(report.mode,'public');assert.equal(report.requestedUrl,target);assert.equal(report.url,'http://example.org/page');
+   assert.equal(report.sitePreview?.scanId,report.scanId);assert.equal(report.sitePreview?.url,report.url);
+   assert.match(report.sitePreview!.html,/Multi-host rendered marker/);assert.match(report.sitePreview!.html,/Static website advertisement/);
+   assert.match(report.sitePreview!.html,/color:rgb\(0, 128, 0\)/);assert.match(report.sitePreview!.html,/:hover\{color:rgb\(255, 0, 0\)/);
+   assert.doesNotMatch(report.sitePreview!.html,/<(?:script|iframe|form|img|svg)\b|\b(?:href|src|onclick)=|synthetic-form-value/i);
+   for(const host of ['example.com','example.org','static.example.net','rebind.example.net','blocked.example.org','late.example.net'])assert.equal(calls.get(host),1,host);
+   assert.ok(report.limitations.some(text=>text.includes('requests failed')));
+  }
+  if(!privateRedirect)assert.ok(capturedCommands.some(args=>args.includes('replace')),'Additional public host must require a verified firewall update');
+  assert.equal(calls.get('blocked.example.org'),1);
+  const session=await openLocalDockerSession();
+  try {
+   for(const args of [['ps','--all','--quiet'],['network','ls','--quiet'],['volume','ls','--quiet']])assert.equal((await session.command([...args,'--filter','label=kindpath.scanner=public'])).trim(),'');
+  } finally {await session.dispose();}
+ });
+}

@@ -1,19 +1,10 @@
+import { websiteUrl } from '../../scanner/gateway/url.mjs';
 // Enabling the route is a separate reviewed change, after the gateway security tests.
 export const PUBLIC_SCANNING_ENABLED = false;
 export const PUBLIC_CAPTURE_ENABLED = false;
-export const ALLOWED_PUBLIC_HOSTS = ['example.com'] as const;
 export const PUBLIC_LABEL = 'kindpath.scanner=public';
 
-export function validatePublicUrl(value: unknown): string {
-  if (typeof value !== 'string' || value.length > 2048 || /[\s\x00-\x1f\x7f]/.test(value)) throw new Error('Use an allowlisted HTTP/HTTPS URL.');
-  const url = new URL(value);
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash
-    || !(ALLOWED_PUBLIC_HOSTS as readonly string[]).includes(url.hostname)
-    || (url.port && Number(url.port) !== (url.protocol === 'https:' ? 443 : 80))) {
-    throw new Error('Use an allowlisted HTTP/HTTPS URL on its standard port, without credentials or fragments.');
-  }
-  return url.href;
-}
+export const validatePublicUrl = (value: unknown): string => websiteUrl(value).href;
 
 export function assertPublicIsolation(value: unknown, role: 'browser' | 'gateway', volume: string, namespace?: string): void {
   const fail = () => { throw new Error('Public worker isolation verification failed.'); };

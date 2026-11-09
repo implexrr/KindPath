@@ -86,7 +86,7 @@ try {
     if (url.protocol === 'blob:' && url.origin === 'http://kindpath-ui.invalid') { await route.continue(); return; }
     if (url.pathname.startsWith('/api/')) apiRequests++;
     if (url.hostname !== 'kindpath-ui.invalid') { unexpected.push(url.hostname); await route.abort(); return; }
-    if (url.pathname === '/api/scanning-capabilities') { await route.fulfill({ json: { publicScanningEnabled: publicCapabilities, publicCaptureEnabled: captureCapabilities, allowedHosts: ['example.com'] } }); return; }
+    if (url.pathname === '/api/scanning-capabilities') { await route.fulfill({ json: { publicScanningEnabled: publicCapabilities, publicCaptureEnabled: captureCapabilities, urlPolicy: 'public-http-https' } }); return; }
     if (url.pathname === '/api/analyze') { await route.fulfill({ json: data.demoReport }); return; }
     if (url.pathname === '/api/scan-public') {
       publicCalls++;
@@ -397,7 +397,7 @@ try {
   // Mock capability/HTTP responses inside network-none only. The actual app/API gates stay disabled.
   publicCapabilities = true;
   await page.reload();
-  const publicButton = page.getByRole('button', { name: 'Scan allowlisted website', exact: true });
+  const publicButton = page.getByRole('button', { name: 'Scan website', exact: true });
   await publicButton.waitFor();
   await page.getByLabel('Your website URL').fill(publicReport.requestedUrl);
   await publicButton.click();

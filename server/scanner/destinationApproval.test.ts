@@ -12,8 +12,7 @@ test('public URL syntax accepts unrelated domains and rejects local names and nu
     'http://example.org./','http://example.org:8080/','https://user:pass@example.org/','https://example.org/#fragment',
     'https://bad_label.org/','https://example.org/\n']) assert.throws(() => websiteUrl(url), url);
 });
-// New hosts are exercised through a public-shaped plan supplied locally; no real DNS.
-// General URL policy is switched on when the broker is integrated.
+// New hosts use public-shaped plans supplied locally; no real DNS.
 test('destination approval caches the initial snapshot without another lookup or install', async () => {
   const approve = createDestinationApprover(await plan('https://example.com/'), async () => assert.fail('DNS repeated'), async () => assert.fail('Firewall repeated'), AbortSignal.timeout(1000));
   assert.deepEqual(await approve('example.com'),['93.184.216.34']);
@@ -45,4 +44,15 @@ test('private/mismatched plans and failed firewall verification cannot grant des
   let calls=0;
   const approve=createDestinationApprover(await plan('https://example.com/'),async target=>{calls++;return hostPlan(target);},async()=>{throw new Error('Unverified firewall');},AbortSignal.timeout(1000));
   await assert.rejects(approve('example.org'));await assert.rejects(approve('www.example.org'));assert.equal(calls,1);
+});
+
+test('the total address budget rejects an additional host before changing the firewall', async () => {
+  let installs=0;
+  const approve=createDestinationApprover(await plan('https://example.com/'),async target=>{
+    const n=Number(new URL(target).hostname.split('.')[0].slice(1));
+    const addresses=Array.from({length:16},(_,i)=>`93.184.${220+n}.${i+1}`).sort();
+    return {target,addresses,destinations:{[new URL(target).hostname]:addresses}};
+  },async()=>{installs++;},AbortSignal.timeout(1000));
+  for(let i=0;i<3;i++)assert.equal((await approve(`a${i}.example.org`))?.length,16);
+  assert.equal(await approve('a3.example.org'),null);assert.equal(installs,3);
 });

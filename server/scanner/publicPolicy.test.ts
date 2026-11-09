@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { PUBLIC_SCANNING_ENABLED, validatePublicUrl, assertPublicIsolation } from './publicPolicy.js';
 import { scanPublicSite, mapPublicReport } from './publicScanner.js';
 
-test('public scanning remains disabled even for the candidate allowlisted target', async () => {
+test('public scanning remains disabled for otherwise eligible public targets', async () => {
   assert.equal(PUBLIC_SCANNING_ENABLED,false);
   await assert.rejects(scanPublicSite('https://example.com/'), /disabled/);
 });
-test('host preflight permits only the configured public domain and standard ports', () => {
+test('host preflight permits public website hostnames and standard ports', () => {
   assert.equal(validatePublicUrl('https://example.com/'),'https://example.com/');
+  assert.equal(validatePublicUrl('https://www.wikipedia.org/wiki/Accessibility'),'https://www.wikipedia.org/wiki/Accessibility');
   for (const url of ['file:///etc/passwd','http://127.0.0.1/','https://example.com:8080/','https://user:pass@example.com/','https://example.com.attacker.invalid/']) assert.throws(()=>validatePublicUrl(url));
 });
 test('the browser can mount only the private, read-only socket volume', () => {
@@ -21,7 +22,7 @@ test('the browser can mount only the private, read-only socket volume', () => {
   ]) {const copy=structuredClone(c);mutate(copy);assert.throws(()=>assertPublicIsolation([copy],'browser','owned-volume'));}
 });
 
-test('public reports require valid coverage and a final allowlisted URL', () => {
+test('public reports require valid coverage and a final eligible public URL', () => {
   const raw={fixture:'public',url:'https://example.com/',engine:'test',violations:[],incomplete:[],passes:1,inapplicable:0,coverage:{blockedRequests:2,failedRequests:1,omittedRules:0,omittedNodes:0}};
   const report=mapPublicReport(raw);
   assert.equal(report.mode,'public');

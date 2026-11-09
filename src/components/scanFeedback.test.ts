@@ -5,7 +5,7 @@ test('scan failures give bounded guidance without exposing internal diagnostics'
   assert.match(scanErrorMessage({code:'SCANNER_BUSY',error:'private diagnostic'},429),/finishing/);
   assert.match(scanErrorMessage({code:'SCANNER_CLEANUP_FAILED'},503),/safely/);
   assert.match(scanErrorMessage({code:'PUBLIC_SCANNING_DISABLED'},503),/built-in page/);
-  assert.equal(scanErrorMessage({error:'Use an allowlisted URL.'},400),'Use an allowlisted URL.');
+  assert.equal(scanErrorMessage({error:'Use a public HTTP/HTTPS URL.'},400),'Use a public HTTP/HTTPS URL.');
   for(const value of [{code:'constructor',error:'private diagnostic'}, {code:'__proto__'}, {error:'private diagnostic'}, null]) {
     assert.equal(scanErrorMessage(value,503),'The request could not finish. No report was created. Try again.');
   }

@@ -25,7 +25,7 @@ export function createPublicUrlWorkerRunner({
   openSession = openLocalDockerSession,
   prepareNetwork = prepareNamespace,
 }: Dependencies = {}) {
-  const run = createResourceRunner(async (command, resources, target, signal) => {
+  const run = createResourceRunner(async (command, resources, target, signal, session) => {
     signal.throwIfAborted();
     // DNS and the entire Docker operation share admission, cancellation and the 60-second deadline.
     const plan = validateDestinationPlan(await planTarget(target, signal));
@@ -33,7 +33,8 @@ export function createPublicUrlWorkerRunner({
     signal.throwIfAborted();
     const ns = await prepareNetwork(command, resources, signal);
     await preparePublicEgress(command, resources, ns, plan, signal);
-    return scanInNamespace(command, resources, ns, plan, signal, captureEnabled());
+    if (!session.exchange) throw new Error('Owned gateway channel unavailable');
+    return scanInNamespace(command, resources, ns, plan, signal, captureEnabled(), {exchange:session.exchange,planTarget});
   }, openSession);
   return async (value: unknown, signal?: AbortSignal): Promise<unknown> => {
     // Independent of the HTTP gate: direct use of the default URL runner is also disabled.

@@ -16,7 +16,7 @@ export function mapPublicReport(raw: unknown, requestedUrl?: string) {
     || !Number.isSafeInteger(coverage.omittedNodes) || Number(coverage.omittedNodes) < 0) throw new Error('Invalid scan coverage.');
   return { ...report, mode: 'public' as const, url: finalUrl, ...(requestedUrl ? { requestedUrl: validatePublicUrl(requestedUrl) } : {}), limitations: [
     'Only the initial top-level page at the default viewport was scanned; embedded frames and interactive states are excluded.',
-    `${coverage.blockedRequests} requests were blocked by policy and ${coverage.failedRequests} requests failed. Missing resources can change the result.`,
+    `${coverage.blockedRequests} requests were blocked by policy and ${coverage.failedRequests} requests failed (including gateway denials). Missing resources can change the result.`,
     ...(Number(coverage.omittedRules) || Number(coverage.omittedNodes) ? [
       `Result limits omitted ${coverage.omittedRules} rules and ${coverage.omittedNodes} affected elements. The displayed list is partial.`,
     ] : []),
