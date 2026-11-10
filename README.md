@@ -230,6 +230,8 @@ The worker uses a separate Chromium DevTools interception session to check main-
 
 Redirect failures retain HTTP 503 / `SCAN_FAILED` with a bounded diagnostic and a fixed explanation for invalid destinations, host changes, path/query changes, downgrades, repeated navigation URLs or the navigation limit. No raw redirect destination or native error is included in those explanations. Unconfirmed resource cleanup still takes precedence over the redirect failure. Successful reports retain both `requestedUrl` and `url`. Both public capabilities remain disabled; these changes have controlled-fixture validation only.
 
+The [three approved report-only validation attempts](scanner/REDIRECT-VALIDATION.md) each returned a report that displayed correctly and matched its JSON download: Example Domain, an HTTP GitHub input with an HTTPS final URL, and Martin Fowler. GitHub had substantial resource omissions; these results do not establish complete page coverage, conformance or general compatibility. No preview was captured. Both public capabilities were restored to disabled, so ordinary URL entry still returns labelled demo data until activation is separately approved.
+
 ## Scan coverage feedback
 
 Prepared public reports show a coverage notice above the findings and exports. It distinguishes blocked/failed requests from rules or affected elements omitted by result limits; blocked and failed request counts may overlap. Missing resources can change findings, and a zero-count notice does not promise complete coverage or accessibility conformance. Missing or malformed coverage data is shown as unavailable. Demo and fixture reports do not receive this public-coverage notice.
