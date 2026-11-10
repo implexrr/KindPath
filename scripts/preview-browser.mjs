@@ -672,9 +672,26 @@ try {
         await feedback.getByRole('heading',{name:'Limited preview detail',exact:true}).waitFor();
         assert.match(await feedback.textContent(),/page may simply be short/);
         qualitySparse=(await page.locator('.preview-workspace').screenshot()).toString('base64');
-      }else if(kind==='text')assert.equal(await feedback.count(),0,'Previous empty/sparse feedback must disappear');
+      }else if(kind==='text'||kind==='retained')assert.equal(await feedback.count(),0,'Previous empty/sparse feedback must disappear');
       else await feedback.getByRole('heading',{name:'Preview detail could not be assessed',exact:true}).waitFor();
-      if(kind!=='sparse')await page.frameLocator('iframe').first().locator('body').filter({hasText:'Captured page content.'}).waitFor();
+      if(kind!=='sparse')await page.frameLocator('iframe').first().locator('body').filter({hasText:kind==='retained'?'Retained visible guide':'Captured page content.'}).waitFor();
+      if(kind==='retained') {
+        for(const frame of page.frames().slice(1)) {
+          assert.equal(await frame.locator('body').evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(16, 24, 40)');
+          assert.equal(await frame.locator('body').evaluate(node=>getComputedStyle(node).color),'rgb(248, 250, 252)');
+          assert.equal(await frame.locator('body').evaluate(node=>getComputedStyle(node).padding),'24px');
+          assert.equal(await frame.locator('body').evaluate(node=>getComputedStyle(node).fontSize),'24px');
+          assert.equal(await frame.locator('pre code').textContent(),'if (water < 2) {\n  water += 1;\n}');
+          assert.equal(await frame.locator('b').textContent(),'Important text');assert.equal(await frame.locator('i').textContent(),'Emphasis');
+          assert.equal(await frame.locator('time').textContent(),'10 November');assert.equal(await frame.locator('[href],script,form,iframe,img').count(),0);
+        }
+        const presetGroup=page.getByRole('group',{name:'Vision presets',exact:true});
+        await presetGroup.getByRole('button',{name:'Original',exact:true}).press('Enter');
+        await presetGroup.getByRole('button',{name:'Blurred vision',exact:true}).press('Enter');
+        assert.equal(await page.locator('iframe').nth(1).evaluate(node=>node.style.filter),'blur(2px)');
+        assert.equal(await page.locator('iframe').first().evaluate(node=>node.style.filter),'');
+        assert.equal(publicCalls,scansBefore);
+      }
     }
     await page.getByRole('button',{name:/Accessibility findings/}).click();
     assert.equal(await page.getByRole('region',{name:'Confirmed automated violations',exact:true}).locator('article').count(),publicReport.findings.length);

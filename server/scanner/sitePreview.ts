@@ -76,7 +76,7 @@ export function mapSitePreview(raw: unknown, identity: {scanId:string;requestedU
   if (html.length > 100000) return invalid();
   return {mode:'public',...identity,requestedUrl,url,title,capturedAt:snapshot.capturedAt,capturedTextCharacters,html,limitations:[
     'A limited visual approximation captured after automated analysis in the same browser visit; dynamic content may differ.',
-    'Scripts, embedded frames, images, media, custom fonts, form values, shadow-tree content and unsupported structure/styles are omitted. Component wrappers are normalized to inert HTML. Only simple readable link/button hover rules are retained.',
+    'Scripts, embedded frames, images, media, custom fonts, form values, shadow-tree content and unsupported structure/styles are omitted. Some page structure is simplified. Only simple readable link/button hover rules are retained.',
     `At least ${snapshot.omittedSubtrees} subtrees, ${snapshot.omittedText} text characters and ${snapshot.omittedStyles} style declarations were omitted.`,
   ]};
 }

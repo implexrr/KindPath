@@ -32,6 +32,13 @@ test('reports, exports and isolated previews work in Chromium, Firefox and WebKi
     text:[{text:'Captured page content. '.repeat(12)}]}).map(([key,nodes])=>[key,mapSitePreview({
       url:sitePreview.url,capturedAt:new Date().toISOString(),omittedSubtrees:0,omittedText:0,omittedStyles:0,nodes,
     },{scanId:sitePreview.scanId,requestedUrl:sitePreview.requestedUrl,url:sitePreview.url})]));
+  const textElement=(tag:string,children:unknown[])=>({tag,attributes:{},style:{},hover:{},children});
+  qualityPreviews.retained=mapSitePreview({url:sitePreview.url,capturedAt:new Date().toISOString(),omittedSubtrees:0,omittedText:0,omittedStyles:0,
+    bodyStyle:{'background-color':'rgb(16, 24, 40)',color:'rgb(248, 250, 252)','font-size':'24px',padding:'24px'},nodes:[
+      textElement('div',[textElement('h1',[{text:'Retained visible guide'}]),textElement('p',[{text:'A recognizable controlled page with retained text. '.repeat(4)}]),
+        textElement('b',[{text:'Important text'}]),textElement('i',[{text:'Emphasis'}]),textElement('time',[{text:'10 November'}]),
+        textElement('pre',[textElement('code',[{text:'if (water < 2) {\n  water += 1;\n}'}])]),textElement('a',[{text:'Inert retained link'}])])],
+    },{scanId:sitePreview.scanId,requestedUrl:sitePreview.requestedUrl,url:sitePreview.url});
   const root = fileURLToPath(new URL('../', import.meta.url));
   const assets: Record<string, { body: string; type: string }> = {
     '/': { body: await readFile(join(root, 'dist/index.html'), 'utf8'), type: 'text/html' },
