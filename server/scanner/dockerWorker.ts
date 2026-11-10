@@ -4,6 +4,7 @@ import { exchangeDockerJson } from './dockerExchange.js';
 import type { Exchange } from './dockerExchange.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { setTimeout as pause } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 import { homedir, tmpdir } from 'node:os';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
@@ -36,6 +37,14 @@ export async function removeAndConfirm(command: Command, name: string): Promise<
       const remaining = await command(['ps', '--all', '--quiet', '--filter', `name=^/${name}$`], undefined, 3000);
       if (!remaining.trim()) return;
     } catch { /* An unavailable daemon cannot confirm containment cleanup. */ }
+  }
+  // Docker may still be completing --rm when rm --force reports removal in
+  // progress. Wait only for authoritative absence; never accept an rm error.
+  for (let poll = 0; poll < 10; poll++) {
+    await pause(100);
+    try {
+      if (!(await command(['ps', '--all', '--quiet', '--filter', `name=^/${name}$`], undefined, 300)).trim()) return;
+    } catch { /* A failed query still cannot prove cleanup. */ }
   }
   throw cleanupError();
 }
