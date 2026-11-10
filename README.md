@@ -4,11 +4,11 @@ KindPath is being built to accept a website URL, return a single-page accessibil
 
 ## MVP scope and remaining work
 
-The scope is the exact submitted page, without crawling linked pages. JSON is sufficient for the report. The preview should offer several simple visual-impairment preset buttons; effects are illustrative approximations.
+The scope is the exact submitted page, without crawling linked pages. JSON is sufficient for the report. The preview offers simple visual-impairment preset buttons; effects are illustrative approximations.
 
 **Redirect policy:** main-page redirects may only add/remove a single leading `www.` relative to the submitted hostname, upgrade HTTP to HTTPS, or both, while preserving path and query. Reject other host/subdomain changes, path/query changes, HTTPS downgrades and loops with an explanation. Every destination must independently pass existing URL, public DNS/address, destination-pinning and verified-firewall checks before connecting, plus TLS validation for HTTPS; existing redirect/request/time limits remain. Reports retain both submitted and final URLs. The Chromium worker checks each main-document request before connection; the backend and UI also validate the final URL relationship. Loading page resources remains subject to network security controls and is separate from crawling.
 
-The JSON report path and adjustable visual effects already exist. Remaining work centers on separately approved live validation of the URL-to-report flow under this rule, useful real-page previews, and simple preset buttons. Existing report filters and print export are available but do not require further expansion. Public scanning and capture remain disabled pending separate activation approval.
+The JSON report path and adjustable visual effects already exist. Remaining work centers on useful real-page previews and a separate decision about public activation. The URL-to-report flow has bounded live validation recorded below. Existing report filters and print export are available but do not require further expansion. Public scanning and capture remain disabled pending separate activation approval.
 
 ## Features
 
@@ -279,6 +279,8 @@ After building the scanner image and starting the app, choose a **Built-in page*
 The comparison frames preserve supported CSS, including hover effects and the static advertisement in the garden illustration. Images become inert placeholders; image URLs and data are not included. Anchors have no destinations, form containers become layout groups, and inputs/buttons are disabled. Scripts and unsupported elements/attributes are excluded. Each iframe has an empty sandbox, no same-origin or script permission, and a restrictive content policy that blocks external resources and form submissions. Both panels use the same snapshot; effects apply only to the modified panel. Snapshots stay in browser memory across tab switches; **Refresh fixture snapshot** explicitly requests another capture.
 
 ### Vision controls
+
+**Original**, **Red–green colour vision**, **Blue–yellow colour vision**, **Blurred vision**, and **Reduced peripheral vision** provide one-click starting points. Original clears all strengths; the colour presets use 65% colour with other effects off, blur uses 50% blur only, and peripheral restriction uses 65% peripheral only. Selecting a preset turns effects on and replaces the current strengths. The selected button follows the applied settings; paused or custom combinations have no active vision preset. Controls remain available for further adjustment.
 
 Colour, contrast reduction, blur, and peripheral restriction have independent 0–100% sliders and can be combined. Colour presets offer illustrative red–green, blue–yellow, and grayscale mixes. These are display effects, not calibrated medical simulations; the percentages do not measure vision loss.
 
