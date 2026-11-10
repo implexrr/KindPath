@@ -23,6 +23,7 @@ export interface Report {
   requestedUrl?: string;
   scanId?: string;
   sitePreview?: SitePreview;
+  previewUnavailable?: boolean;
   url: string;
   generatedAt: string;
   manualChecks: string[];
@@ -40,6 +41,10 @@ export interface FixturePreview {
 }
 
 export interface SitePreview {
+  kind?: 'image';
+  width?: number;
+  height?: number;
+  truncated?: boolean;
   // Non-whitespace UTF-16 units in accepted text nodes; not a visibility or fidelity measure.
   capturedTextCharacters?: number;
   mode: 'public';

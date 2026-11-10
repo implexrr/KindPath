@@ -85,3 +85,27 @@ test('network codes inside URLs, command errors and appended logs are not diagno
  ])assert.deepEqual(classifyFailure(new Error(message),'worker-setup'),{stage:'worker-setup',code:'FAILED'});
  assert.deepEqual(classifyFailure(new Error('page.goto: net::ERR_CONNECTION_RESET at https://example.com/'),'page-loading'),{stage:'page-loading',code:'ERR_CONNECTION_RESET'});
 });
+
+test('redirect explanations survive verified cleanup but never override a cleanup failure', async () => {
+ const {createResourceRunner}=await import('./resources.js');
+ const {createPublicSiteScanner}=await import('./publicScanner.js');
+ const {ScannerError}=await import('./dockerWorker.js');
+ for (const cleanupFails of [false,true]) for (const diagnostic of [{stage:'page-loading',code:'REDIRECT_PATH_CHANGED'},{stage:'page-loading',code:'HTTP_STATUS',httpStatus:403}]) {
+  let removed=false;
+  const worker=createResourceRunner(async(_command,resources)=>{
+   resources.containers.push('controlled-owned-container');
+   throw Object.assign(new Error('PRIVATE_SENTINEL'),{stderr:DIAGNOSTIC_PREFIX+JSON.stringify(diagnostic)+'\n'});
+  },async()=>({dispose:async()=>{},command:async(args:string[])=>{
+   if(args[0]==='rm')removed=true;
+   if(cleanupFails && args.includes('name=^/controlled-owned-container$'))throw new Error('PRIVATE_DAEMON_FAILURE');
+   return '';
+  }}));
+  await assert.rejects(createPublicSiteScanner({enabled:()=>true,worker})('https://example.com/'),error=>{
+   assert.ok(error instanceof ScannerError); assert.ok(removed);
+   assert.equal(error.code,cleanupFails?'SCANNER_CLEANUP_FAILED':'SCAN_FAILED');
+   assert.deepEqual(error.diagnostic,cleanupFails?{stage:'cleanup',code:'UNCONFIRMED'}:diagnostic);
+   if(!cleanupFails)assert.match(error.message,diagnostic.code==='HTTP_STATUS'?/refused.*HTTP 403/:/different path or query/);
+   assert.doesNotMatch(error.message,/PRIVATE/); return true;
+  });
+ }
+});

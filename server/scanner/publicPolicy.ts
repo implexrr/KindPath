@@ -1,7 +1,13 @@
 import { websiteUrl } from '../../scanner/gateway/url.mjs';
-// Enabling the route is a separate reviewed change, after the gateway security tests.
-export const PUBLIC_SCANNING_ENABLED = false;
-export const PUBLIC_CAPTURE_ENABLED = false;
+// Local scanning is enabled by default. Tests and troubleshooting can disable it.
+function localFlag(name: 'KINDPATH_PUBLIC_SCANNING' | 'KINDPATH_PUBLIC_CAPTURE'): boolean {
+  const value=process.env[name];
+  if(value===undefined||value==='true')return true;
+  if(value==='false')return false;
+  throw new Error(`${name} must be true or false.`);
+}
+export const PUBLIC_SCANNING_ENABLED = localFlag('KINDPATH_PUBLIC_SCANNING');
+export const PUBLIC_CAPTURE_ENABLED = localFlag('KINDPATH_PUBLIC_CAPTURE');
 export const PUBLIC_LABEL = 'kindpath.scanner=public';
 
 export const validatePublicUrl = (value: unknown): string => websiteUrl(value).href;

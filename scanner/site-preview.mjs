@@ -1,7 +1,7 @@
 // A bounded visual approximation. No source HTML, stylesheet text, image URLs or form values leave the worker.
 export async function captureSiteSnapshot(page) {
   const snapshot = await page.evaluate(() => {
-    const tags = new Set(['header','nav','main','section','article','aside','footer','div','span','p','h1','h2','h3','h4','h5','h6','blockquote','figure','figcaption','dl','dt','dd','table','caption','thead','tbody','tfoot','tr','th','td','hr','a','form','input','button','label','strong','em','small','br','ul','ol','li']);
+    const tags = new Set(['header','nav','main','section','article','aside','footer','div','span','p','h1','h2','h3','h4','h5','h6','blockquote','figure','figcaption','dl','dt','dd','table','caption','thead','tbody','tfoot','tr','th','td','hr','a','form','input','button','label','strong','em','small','b','i','pre','code','time','br','ul','ol','li']);
     const length = /^(?:auto|none|normal|-?(?:\d{1,5})(?:\.\d{1,4})?px)(?: (?:auto|-?\d{1,5}(?:\.\d{1,4})?px)){0,3}$/;
     const color = /^(?:transparent|[a-z]{1,24}|#[a-fA-F0-9]{3,8}|rgba?\([0-9.,% ]{1,80}\))$/;
     const rules = new Map([
@@ -46,23 +46,24 @@ export async function captureSiteSnapshot(page) {
       } catch { /* Cross-origin stylesheet rules are intentionally not read. */ }
       if (checkedRules > 500) break;
     }
-    function children(parent, depth) {
+    function children(parent, depth, renderedOnly = false) {
       const result = [];
       for (let i = 0; i < parent.childNodes.length; i++) {
         if (nodes >= 250 || visited >= 1000) { omittedSubtrees += parent.childNodes.length-i; break; }
-        const child = capture(parent.childNodes[i],depth);
+        const child = capture(parent.childNodes[i],depth,renderedOnly);
         if (child) result.push(child);
       }
       return result;
     }
     // These tags remain block-level if the output style budget is exhausted.
     // Omitted/hidden nodes and styled inline tags cannot justify removing a separator.
-    const blockTags = new Set(['header','nav','main','section','article','aside','footer','div','p','h1','h2','h3','h4','h5','h6','blockquote','figure','figcaption','dl','dt','dd','table','hr','ul','ol','li','form']);
+    const blockTags = new Set(['header','nav','main','section','article','aside','footer','div','p','h1','h2','h3','h4','h5','h6','blockquote','figure','figcaption','dl','dt','dd','table','pre','hr','ul','ol','li','form']);
     function blockInFlow(node) {
       if (!(node instanceof HTMLElement) || !blockTags.has(node.localName) || node.hidden) return false;
       const computed = getComputedStyle(node);
       return ['block','flow-root','list-item','flex','grid','table'].includes(computed.display)
         && !['hidden','collapse'].includes(computed.visibility)
+        && node.getClientRects().length > 0
         && !['absolute','fixed'].includes(computed.position) && computed.getPropertyValue('float') === 'none';
     }
     function formattingSpace(node, text) {
@@ -73,20 +74,29 @@ export async function captureSiteSnapshot(page) {
       const before = node.previousSibling, after = node.nextSibling;
       return !!(before || after) && (!before || blockInFlow(before)) && (!after || blockInFlow(after));
     }
-    function capture(node, depth) {
+    function capture(node, depth, renderedOnly = false) {
       visited++;
       if (depth > 15) { omittedSubtrees++; return null; }
       if (node.nodeType === Node.TEXT_NODE) {
         const text = node.textContent ?? '';
         if (formattingSpace(node, text)) return null;
+        if (renderedOnly && text.trim()) {
+          const range = document.createRange(); range.selectNodeContents(node);
+          if (!range.getClientRects().length) { omittedText += text.length; return null; }
+        }
         const value = text.slice(0,Math.min(textLeft,4000));
         omittedText += text.length-value.length; textLeft -= value.length;
         if (!value) return null;
         nodes++; return {text:value};
       }
-      if (!(node instanceof HTMLElement) || (!tags.has(node.localName) && !(node instanceof HTMLImageElement))) { omittedSubtrees++; return null; }
+      if (!(node instanceof HTMLElement)) { omittedSubtrees++; return null; }
+      // Component hosts become ordinary inert wrappers. Walk light DOM only;
+      // layout checks exclude unassigned content hidden by open or closed roots.
+      const component = !tags.has(node.localName) && node.localName.includes('-');
+      if (!tags.has(node.localName) && !(node instanceof HTMLImageElement) && !component) { omittedSubtrees++; return null; }
       const computed=getComputedStyle(node);
       if (node.hidden || computed.display === 'none' || ['hidden','collapse'].includes(computed.visibility)) { omittedSubtrees++; return null; }
+      if ((renderedOnly || component) && computed.display !== 'contents' && !node.getClientRects().length) { omittedSubtrees++; return null; }
       if (node instanceof HTMLImageElement) return capture(document.createTextNode('[Image omitted]'),depth);
       nodes++;
       const attributes = {};
@@ -107,9 +117,14 @@ export async function captureSiteSnapshot(page) {
           try { if (node.matches(selector)) Object.assign(highlighted,styles(declaration)); } catch {}
         }
       }
-      return {tag:node.localName,attributes,style:normal,hover:highlighted,children:children(node,depth+1)};
+      // A div inside p implicitly closes the paragraph when serialized HTML is parsed.
+      // Use a span in that context; validated display styling still preserves its box.
+      const tag = component ? (computed.display.startsWith('inline') || computed.display === 'contents' || node.closest('p') ? 'span' : 'div') : node.localName;
+      return {tag,attributes,style:normal,hover:highlighted,children:children(node,depth+1,renderedOnly || component)};
     }
-    return {url:location.href,nodes:children(document.body,0),omittedSubtrees,omittedText,omittedStyles};
+    // Preserve canvas text contrast and spacing before spending the shared style budget on descendants.
+    const bodyStyle = styles(getComputedStyle(document.body));
+    return {url:location.href,bodyStyle,nodes:children(document.body,0),omittedSubtrees,omittedText,omittedStyles};
   });
   return {...snapshot,capturedAt:new Date().toISOString()};
 }

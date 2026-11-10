@@ -34,7 +34,7 @@ RUN node node_modules/playwright/cli.js install-deps chromium \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 FROM chromium-runtime AS worker
-COPY worker.mjs preview.mjs site-preview.mjs public-worker.mjs public-report.mjs public-report.test.mjs ./
+COPY worker.mjs preview.mjs site-preview.mjs page-image.mjs jpeg.mjs public-worker.mjs public-report.mjs public-report.test.mjs ./
 COPY gateway/ ./gateway/
 COPY firewall/ ./firewall/
 COPY fixtures/ ./fixtures/
@@ -50,12 +50,11 @@ RUN sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.s
         libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev curl ca-certificates patch
 WORKDIR /build
 RUN apt-get source gst-plugins-bad1.0=1.24.2-1ubuntu4
+# Vendor the exact verified upstream patches so CI does not depend on GitHub downloads.
+COPY codec/gstreamer-h265-prerequisite.patch /build/prerequisite.patch
+COPY codec/gstreamer-h265-fix.patch /build/fix.patch
 # The older source lacks one context-only comment; restore it before applying the unmodified fix.
-RUN curl --fail --location --proto '=https' --tlsv1.2 \
-        https://github.com/GStreamer/gstreamer/commit/e4351ef03f1331410b0c1216a6178d885f37e495.patch -o prerequisite.patch \
-    && echo '67657bfba83291e4be2b7acbe0f481858270f26570a45fea7a2de78aaf432164  prerequisite.patch' | sha256sum -c -
-RUN curl --fail --location --proto '=https' --tlsv1.2 \
-        https://github.com/GStreamer/gstreamer/commit/ed4c2ce380f7168bd4a3423f4398eb341cb931c7.patch -o fix.patch \
+RUN echo '67657bfba83291e4be2b7acbe0f481858270f26570a45fea7a2de78aaf432164  prerequisite.patch' | sha256sum -c - \
     && echo '1893a2d4dfdb1f57915616cd759415d5f403b62545ee2f79377813684b7bf7f7  fix.patch' | sha256sum -c - \
     && cd gst-plugins-bad1.0-1.24.2 \
     && sed -i '/^      } else if (sps->num_short_term_ref_pic_sets > 1) {$/a\        /*  7.4.7.1 short_term_ref_pic_set_idx */' gst-libs/gst/codecparsers/gsth265parser.c \
@@ -100,7 +99,7 @@ WORKDIR /opt/kindpath-worker
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force \
     && rm -rf /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx /root/.npm
-COPY worker.mjs preview.mjs site-preview.mjs public-worker.mjs public-report.mjs public-report.test.mjs ./
+COPY worker.mjs preview.mjs site-preview.mjs page-image.mjs jpeg.mjs public-worker.mjs public-report.mjs public-report.test.mjs ./
 COPY gateway/ ./gateway/
 COPY firewall/ ./firewall/
 COPY fixtures/ ./fixtures/

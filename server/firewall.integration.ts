@@ -10,6 +10,30 @@ test('kernel firewall blocks direct TCP, UDP, and IPv6 connections while allowin
   assert.equal(result.isolation, 'passed'); assert.equal(result.allowedConnections, 2);
   assert.equal(result.blockedConnections, 5); assert.ok(result.droppedPackets >= 5);
 });
+test('controlled readiness probe waits for delayed TLS and UDP listeners', {timeout:60000}, async () => {
+  const {createResourceRunner}=await import('./scanner/resources.js');
+  const {prepareNamespace,createFirewallContainer}=await import('./scanner/firewallDocker.js');
+  const run=createResourceRunner(async(command,resources,_task,signal)=>{
+    const ns=await prepareNamespace(command,resources,signal,true);
+    // Only internal synthetic origins: HTTP is ready before the other canaries.
+    const originCode=`
+      const http=require('node:http'),net=require('node:net'),dgram=require('node:dgram');
+      http.createServer((_req,res)=>res.end('<html>Controlled readiness</html>')).listen(80,'0.0.0.0');
+      net.createServer(s=>s.end()).listen(81,'0.0.0.0');
+      setTimeout(()=>net.createServer(s=>s.end()).listen(443,'0.0.0.0'),1500);
+      setTimeout(()=>{const s=dgram.createSocket('udp4');s.on('message',(_m,p)=>s.send('kindpath-dns-fixture',p.port,p.address));s.bind(53,'0.0.0.0');},3000);
+    `;
+    for(const ip of ['198.18.0.2','198.18.0.4']){
+      const origin=await createFirewallContainer(command,resources,ns.network,'origin',['-e',originCode],signal,ip);
+      await command(['start',origin.name],signal);
+    }
+    const probe=await createFirewallContainer(command,resources,`container:${ns.id}`,'probe',['firewall/probe.mjs','before'],signal);
+    const result=JSON.parse(await command(['start','--attach',probe.name],signal,20000));
+    assert.equal(result.phase,'before');assert.equal(result.allowedConnections,2);
+    assert.equal(result.forbiddenConnections,5);assert.equal(result.cannotAlterRules,true);
+  });
+  await run('delayed-controlled-readiness');
+});
 test('all owned firewall containers, volumes, and networks are absent after fixture verification', async () => {
   const session = await openLocalDockerSession();
   try {
@@ -28,6 +52,10 @@ test('atomic destination updates require the prior policy proof and preserve den
       const origin=await createFirewallContainer(command,resources,ns.network,'origin',['gateway/readiness-origin.mjs'],signal,ip);
       await command(['start',origin.name],signal);
     }
+    // Establish availability before interpreting a failed connection as filtering.
+    const readiness=await createFirewallContainer(command,resources,`container:${ns.id}`,'probe',['firewall/probe.mjs','before','pinned'],signal);
+    const available=JSON.parse(await command(['start','--attach',readiness.name],signal,20000));
+    assert.equal(available.phase,'before');assert.equal(available.allowedConnections,2);assert.equal(available.forbiddenConnections,5);
     ns.addresses=['93.184.216.34'];await firewallControl(command,resources,ns,'setup',signal);
     const before=ns.hash;
     const probe=async()=>{

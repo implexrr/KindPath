@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultVisionSettings, applyIntensity, snapshotFilter, peripheralMask, colourMatrix, clampStrength } from './visualEffects.js';
+import { defaultVisionSettings, applyVisionPreset, activeVisionPreset, applyIntensity, snapshotFilter, peripheralMask, colourMatrix, clampStrength } from './visualEffects.js';
 
 test('colour presets preserve identity at zero, white at full strength, and grayscale channel equality', () => {
   const identity = [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0];
@@ -30,4 +30,33 @@ test('intensity presets enable all sliders without changing the colour choice or
   assert.deepEqual(Object.values(preset.strengths), [80,80,80,80]);
   assert.equal(initial.strengths.blur, 0); assert.equal(initial.enabled, false);
   initial.strengths.blur = 99; assert.equal(defaultVisionSettings().strengths.blur, 0);
+});
+
+test('vision presets replace mixed effects and return independent editable settings', () => {
+  const combined = applyIntensity(defaultVisionSettings(), 'strong');
+  combined.enabled = false;
+  const blur = applyVisionPreset('blurred');
+  assert.equal(blur.enabled, true);
+  assert.equal(snapshotFilter(blur, 'colour'), 'blur(2px)');
+  assert.equal(peripheralMask(blur), undefined);
+  assert.equal(combined.enabled, false);
+  assert.equal(combined.strengths.colour, 80);
+  const original = applyVisionPreset('original');
+  assert.equal(snapshotFilter(original, 'colour'), undefined);
+  assert.equal(peripheralMask(original), undefined);
+  blur.strengths.colour = 100;
+  assert.equal(applyVisionPreset('blurred').strengths.colour, 0);
+  assert.equal(applyVisionPreset('blue-yellow').colourPreset, 'blue-yellow');
+  assert.equal(snapshotFilter(applyVisionPreset('peripheral'), 'colour'), undefined);
+  assert.equal(peripheralMask(applyVisionPreset('peripheral'))?.opacity, 0.65);
+});
+test('active preset follows visible settings, custom adjustments and pause state', () => {
+  assert.equal(activeVisionPreset(defaultVisionSettings()), 'red-green');
+  const blue = applyVisionPreset('blue-yellow');
+  assert.equal(activeVisionPreset(blue), 'blue-yellow');
+  assert.equal(activeVisionPreset({...blue,enabled:false}), undefined);
+  assert.equal(activeVisionPreset({...blue,strengths:{...blue.strengths,blur:1}}), undefined);
+  assert.equal(activeVisionPreset(applyIntensity(blue, 'mild')), undefined);
+  assert.equal(activeVisionPreset({...applyVisionPreset('blurred'),colourPreset:'grayscale'}), 'blurred');
+  assert.equal(activeVisionPreset({...applyVisionPreset('original'),colourPreset:'blue-yellow'}), 'original');
 });

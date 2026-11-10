@@ -9,17 +9,40 @@ const browserType = new Map([['chromium', chromium], ['firefox', firefox], ['web
 assert.ok(browserType, 'Choose a fixed browser engine');
 const browser = await browserType.launch({ headless: true, ...(engine === 'chromium' ? { chromiumSandbox: true } : {}) });
 try {
+  if (engine === 'chromium') {
+    const { installNavigationGuard } = await import('./gateway/navigation-guard.mjs');
+    for (const analyzing of [false, true]) {
+      const guardPage = await browser.newPage({serviceWorkers:'block'});
+      const session = await guardPage.context().newCDPSession(guardPage);
+      let scanning = false;
+      await guardPage.route('**/*', route => route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>Guard lifecycle</title><h1>Controlled page</h1>'}));
+      // Use a real CDP session while retaining a handle for deliberate detachment.
+      const guard = await installNavigationGuard({
+        context: () => ({newCDPSession: async () => session}),
+        close: () => guardPage.close(),
+      }, 'https://example.com/', {isScanning:()=>scanning,onPageChange:()=>assert.fail('Unexpected document change')});
+      if (analyzing) {
+        await guardPage.goto('https://example.com/');
+        assert.equal(guard.failed,false); scanning = true;
+      }
+      const closed = guardPage.waitForEvent('close');
+      await session.detach(); await closed;
+      assert.equal(guard.failed,true,'Lost navigation interception must fail closed');
+      assert.equal(guardPage.isClosed(),true);
+    }
+  }
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: true });
   page.setDefaultTimeout(10000);
   let previews = 0; const unexpected = [];
   let activeReport = data.report;
   let apiRequests = 0;
   let publicCapabilities = false, publicCalls = 0, captureCapabilities = false;
-  const publicReport = { ...data.report, mode: 'public', requestedUrl: 'https://example.com/start', url: 'https://example.org/final',
+  const publicReport = { ...data.report, mode: 'public', scanId:data.sitePreview.scanId, requestedUrl: 'https://example.com/start', url: 'https://www.example.com/en/start?locale=en',
     coverage: {blockedRequests:2,failedRequests:3,omittedRules:1,omittedNodes:4},
     scanner: { ...data.report.scanner, fixture: 'public' }, limitations: ['Controlled URL-report UI response; no public site fetched.'] };
   let publicResponse = publicReport, publicStatus = 200;
   let demoFailure = false; const demoRequests = [];
+  let delayCapabilities=false,capabilitiesHeld=false,releaseCapabilities;
   let delayPublic = false, releasePublic, publicHeld = false, notifyPublic;
   async function assertDownload(expected, coverage = expected.mode === 'public' ? expected.coverage : undefined) {
     const requestsBefore = apiRequests;
@@ -96,7 +119,7 @@ try {
     if (url.protocol === 'blob:' && url.origin === 'http://kindpath-ui.invalid') { await route.continue(); return; }
     if (url.pathname.startsWith('/api/')) apiRequests++;
     if (url.hostname !== 'kindpath-ui.invalid') { unexpected.push(url.hostname); await route.abort(); return; }
-    if (url.pathname === '/api/scanning-capabilities') { await route.fulfill({ json: { publicScanningEnabled: publicCapabilities, publicCaptureEnabled: captureCapabilities, urlPolicy: 'public-http-https' } }); return; }
+    if (url.pathname === '/api/scanning-capabilities') { if(delayCapabilities){capabilitiesHeld=true;await new Promise(resolve=>releaseCapabilities=resolve);} await route.fulfill({ json: { publicScanningEnabled: publicCapabilities, publicCaptureEnabled: captureCapabilities, urlPolicy: 'public-http-https' } }); return; }
     if (url.pathname === '/api/analyze') {
       demoRequests.push(route.request().postDataJSON());
       await route.fulfill(demoFailure?{status:503,json:{error:'Controlled failure'}}:{json:data.demoReport});return;
@@ -140,7 +163,7 @@ try {
   assert.match(await websiteEntry.getAttribute('aria-describedby'),/website-entry-note/);
   await page.getByText('Enter a website address. HTTPS is added if you leave it out.',{exact:true}).waitFor();
   demoFailure=true;
-  await websiteEntry.fill('  Example.com  ');await websiteEntry.press('Enter');
+  await websiteEntry.fill('  Example.com  ');await page.getByRole('button',{name:'Just exploring? Try an example',exact:true}).click();
   await page.getByRole('alert').waitFor();
   assert.equal(await websiteEntry.inputValue(),'https://example.com/');
   assert.deepEqual(demoRequests.at(-1),{url:'https://example.com/'});
@@ -151,13 +174,17 @@ try {
   await page.getByRole('region',{name:'Example issues to explore',exact:true}).waitFor();
   assert.deepEqual(demoRequests.slice(-2),[{url:'https://example.com/'},{url:'https://example.com/'}]);
   assert.equal(publicCalls,0,'Disabled mode must not submit a public scan');
+  const demosBeforeDisabled=demoRequests.length;
+  await websiteEntry.fill('example.com');await websiteEntry.press('Enter');
+  await page.getByRole('alert').filter({hasText:'Website scanning is unavailable'}).waitFor();
+  assert.equal(demoRequests.length,demosBeforeDisabled,'Normal URL submission must never become demo findings');
   for(const entry of ['javascript:alert(1)','https:/example.com','https:///example.com','user@example.com','https://user:pass@example.com']) {
     const before=apiRequests;await websiteEntry.fill(entry);await websiteEntry.press('Enter');
     await page.getByRole('alert').waitFor();assert.equal(apiRequests,before);
     assert.equal(await page.locator('.results').count(),0);
   }
   await websiteEntry.fill('');
-  await page.getByRole('button',{name:'Explore accessibility',exact:true}).click();
+  await page.getByRole('button',{name:'Scan website',exact:true}).click();
   assert.equal(await websiteEntry.evaluate(node=>node.validity.valueMissing),true);
   await page.getByRole('button', { name: 'Scan built-in page' }).click();
   // First exercise the actual bounded report returned by the fixture scanner.
@@ -203,6 +230,46 @@ try {
   assert.equal(await slider('Colour strength').inputValue(), '65');
   for (const name of names.slice(1)) assert.equal(await slider(name).inputValue(), '0');
   const matrix = page.locator('feColorMatrix');
+  const presets = page.getByRole('group', {name:'Vision presets',exact:true});
+  const selectedPreset = () => presets.getByRole('button', {pressed:true});
+  const presetCases = [
+    ['Original',[0,0,0,0]], ['Red–green colour vision',[65,0,0,0]],
+    ['Blue–yellow colour vision',[65,0,0,0]], ['Blurred vision',[0,0,50,0]],
+    ['Reduced peripheral vision',[0,0,0,65]],
+  ];
+  assert.equal(await presets.getByRole('button').count(),5);
+  assert.equal(await selectedPreset().innerText(),'Red–green colour vision');
+  const callsBeforePresets = apiRequests;
+  const frameAddressesBeforePresets = page.frames().map(frame=>frame.url());
+  for (const [name,strengths] of presetCases) {
+    const button = presets.getByRole('button',{name,exact:true});
+    await button.focus(); await button.press('Enter');
+    assert.equal(await button.evaluate(element=>element===document.activeElement),true);
+    assert.equal(await selectedPreset().count(),1);assert.equal(await selectedPreset().innerText(),name);
+    for (let index=0;index<names.length;index++)assert.equal(await slider(names[index]).inputValue(),String(strengths[index]));
+    assert.equal(await page.locator('iframe').first().evaluate(element=>element.style.filter),'');
+    if(name==='Original') {
+      assert.equal(await modified.evaluate(element=>element.style.filter),'');assert.equal(await page.locator('.field-mask').count(),0);
+    } else if(name==='Blurred vision') {
+      assert.equal(await modified.evaluate(element=>element.style.filter),'blur(2px)');assert.equal(await page.locator('.field-mask').count(),0);
+    } else if(name==='Reduced peripheral vision') {
+      assert.equal(await modified.evaluate(element=>element.style.filter),'');assert.equal(await page.locator('.field-mask').evaluate(element=>element.style.opacity),'0.65');
+    } else {
+      assert.match(await modified.evaluate(element=>element.style.filter),/url\(/);
+      assert.equal(await page.getByLabel('Colour preset',{exact:true}).inputValue(),name.startsWith('Red')?'red-green':'blue-yellow');
+    }
+  }
+  await page.getByRole('button',{name:'Apply visual effects',exact:true}).press('Space');
+  assert.equal(await selectedPreset().count(),0);assert.equal(await page.locator('.field-mask').count(),0);
+  await presets.getByRole('button',{name:'Blurred vision',exact:true}).press('Space');
+  assert.equal(await selectedPreset().innerText(),'Blurred vision');assert.equal(await modified.evaluate(element=>element.style.filter),'blur(2px)');
+  await slider('Blur strength').press('ArrowRight');
+  assert.equal(await selectedPreset().count(),0);
+  await page.getByText('Custom visual settings are applied to the modified snapshot only.',{exact:true}).waitFor();
+  assert.equal(apiRequests,callsBeforePresets,'Preset changes must not fetch or recapture a page');
+  assert.deepEqual(page.frames().map(frame=>frame.url()),frameAddressesBeforePresets);
+  await page.getByRole('button',{name:'Reset effects',exact:true}).press('Enter');
+  assert.equal(await selectedPreset().innerText(),'Red–green colour vision');
   const redGreen = await matrix.getAttribute('values');
   await page.getByLabel('Colour preset', { exact: true }).selectOption('blue-yellow');
   assert.notEqual(await matrix.getAttribute('values'), redGreen);
@@ -433,8 +500,15 @@ try {
   await assertDownload(data.demoReport);
   const demoPdf = await printablePdf(data.demoReport);
   // Mock capability/HTTP responses inside network-none only. The actual app/API gates stay disabled.
-  publicCapabilities = true;
+  publicCapabilities = true;delayCapabilities=true;
   await page.reload();
+  for(let tries=0;!capabilitiesHeld&&tries<100;tries++)await page.waitForTimeout(50);
+  assert.equal(capabilitiesHeld,true);
+  assert.equal(await page.getByRole('button',{name:'Checking scanner…',exact:true}).isDisabled(),true);
+  await websiteEntry.fill(publicReport.requestedUrl);await websiteEntry.press('Enter');
+  assert.equal(publicCalls,0,'A pending capability check must not submit a website scan');
+  assert.equal(await page.getByRole('alert').count(),0,'Loading capabilities must not report the scanner unavailable');
+  delayCapabilities=false;releaseCapabilities();
   const publicButton = page.getByRole('button', { name: 'Scan website', exact: true });
   await publicButton.waitFor();
   for(const entry of ['127.0.0.1','printer.local','example.com:8443','https://example.com/#section']) {
@@ -492,8 +566,17 @@ try {
   assert.equal(publicCalls, scansBeforeExample);
   assert.equal(await page.locator('.results .scan-coverage').count(),0,'Demo reports do not inherit public coverage');
   await page.getByLabel('Your website URL').fill(publicReport.requestedUrl);
+  for(const scanId of [undefined,'old']){
+    publicResponse={...publicReport,scanId};await publicButton.click();
+    await page.getByRole('alert').filter({hasText:'snapshot did not match'}).waitFor();
+    assert.equal(await page.locator('.results').count(),0);
+  }
   for (const wrong of [{ ...publicReport, requestedUrl: 'https://example.com/old' },
     { ...publicReport, url: 'http://127.0.0.1/' },
+    { ...publicReport, url: 'https://example.org/start' },
+    { ...publicReport, url: 'https://www.www.example.com/start' },
+    { ...publicReport, url: 'https://other.example.com/start' },
+    { ...publicReport, url: 'http://example.com/start' },
     { ...publicReport, url: 'http://printer.local/' },
     { ...publicReport, url: 'https://user:pass@example.org/' },
     { ...publicReport, url: 'https://example.org:8443/' }, data.demoReport]) {
@@ -508,6 +591,11 @@ try {
     await page.getByRole('alert').filter({ hasText: status === 429 ? 'Another scan is still finishing' : 'The scan could not finish' }).waitFor();
     assert.equal(await page.locator('.results').count(), 0);
   }
+  publicStatus = 503; publicResponse = {code:'SCAN_FAILED',error:'PRIVATE_SENTINEL',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus:403}};
+  await publicButton.click();
+  await page.getByRole('alert').filter({hasText:'Access to the page was refused (HTTP 403)'}).waitFor();
+  assert.equal(await page.locator('.results').count(),0);
+  assert.equal(await page.getByText('PRIVATE_SENTINEL').count(),0);
   publicStatus = 200; publicResponse = publicReport;
   delayPublic = true;
   const publicStarted = new Promise(resolve => { notifyPublic = resolve; });
@@ -566,6 +654,64 @@ try {
     await page.getByRole('alert').filter({hasText:'snapshot did not match'}).waitFor();
     assert.equal(await page.locator('iframe').count(),0); assert.equal(await page.locator('.results').count(),0);
   }
+  // Browser-rendered previews: decoded pixels, fitting, scroll access, filters and inert hover areas.
+  publicResponse={...publicReport,scanId:data.imagePreview.scanId,sitePreview:data.imagePreview};
+  await publicButton.click();await page.locator('.results').waitFor();
+  await page.getByRole('button',{name:/Visual preview/}).click();
+  const imageFrames=page.locator('iframe');
+  for(let i=0;i<2;i++){
+    const frame=page.frameLocator('iframe').nth(i);
+    await frame.locator('img').evaluate(img=>img.decode());
+    const info=await frame.locator('img').evaluate(img=>{
+      const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
+      const context=canvas.getContext('2d');context.drawImage(img,0,0);
+      return {width:img.naturalWidth,height:img.naturalHeight,fit:img.getBoundingClientRect().width<=innerWidth,
+        top:[...context.getImageData(1270,100,1,1).data],bottom:[...context.getImageData(1270,1700,1,1).data]};
+    });
+    assert.equal(info.width,1280);assert.equal(info.height,1800);assert.equal(info.fit,true);
+    for(const [actual,expected] of [[info.top,[16,32,48]],[info.bottom,[192,32,64]]])expected.forEach((v,j)=>assert.ok(Math.abs(actual[j]-v)<8));
+    assert.equal(await imageFrames.nth(i).getAttribute('sandbox'),'');
+    assert.equal(await frame.locator('script,form,iframe,a[href]').count(),0);
+    assert.equal(await frame.locator('body').evaluate(()=>{try{void parent.document;return false;}catch{return true;}}),true);
+  }
+  const imageOriginalStyle=await imageFrames.first().getAttribute('style');
+  for(const name of ['Original','Red–green colour vision','Blue–yellow colour vision','Blurred vision','Reduced peripheral vision']){
+    await page.getByRole('group',{name:'Vision presets',exact:true}).getByRole('button',{name,exact:true}).click();
+    assert.equal(await imageFrames.first().getAttribute('style'),imageOriginalStyle);
+  }
+  const imagePresets=page.getByRole('group',{name:'Vision presets',exact:true});
+  await imagePresets.getByRole('button',{name:'Original',exact:true}).click();
+  const originalPixels=await imageFrames.first().screenshot();
+  const unfilteredPixels=await imageFrames.nth(1).screenshot();
+  for(const name of ['Blurred vision','Red–green colour vision']){
+    await imagePresets.getByRole('button',{name,exact:true}).click();
+    assert.notDeepEqual(await imageFrames.nth(1).screenshot(),unfilteredPixels,'The selected effect must visibly change the raster preview');
+    assert.deepEqual(await imageFrames.first().screenshot(),originalPixels,'The original image must remain visually unchanged');
+  }
+  const hotspot=page.frameLocator('iframe').first().locator('.kp-link').first();await hotspot.hover();
+  assert.equal(await hotspot.evaluate(node=>getComputedStyle(node).outlineStyle),'solid');await hotspot.dispatchEvent('click');
+  assert.equal(page.frames().slice(1).every(frame=>frame.url()==='about:srcdoc'),true);assert.equal(page.context().pages().length,1);
+  await page.getByLabel('Preview size',{exact:true}).selectOption('actual');
+  await page.frameLocator('iframe').first().locator('img').evaluate(img=>img.decode());
+  assert.equal(await page.frameLocator('iframe').first().locator('img').evaluate(img=>img.getBoundingClientRect().width),1280);
+  const scroll=await page.frameLocator('iframe').first().locator('body').evaluate(()=>{scrollTo(1200,1800);return {x:scrollX,y:scrollY};});
+  assert.ok(scroll.x>0&&scroll.y>0,'Actual size must allow access to the right and lower image');
+  await page.getByLabel('Preview size',{exact:true}).selectOption('fit');
+  await page.setViewportSize({width:390,height:844});
+  await page.frameLocator('iframe').first().locator('img').evaluate(img=>img.decode());
+  assert.ok(await page.frameLocator('iframe').first().locator('img').evaluate(img=>img.getBoundingClientRect().width<=innerWidth));
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.setViewportSize({width:1280,height:900});await assertDownload(publicResponse);
+  publicResponse={...publicReport,scanId:data.imagePreview.scanId,previewUnavailable:true};
+  await publicButton.click();await page.locator('.results').waitFor();await assertDownload(publicResponse);
+  await page.getByRole('button',{name:/Visual preview/}).click();
+  await page.getByText('The website image could not be captured. Your accessibility report and JSON download are still available. Try another scan to request a new image.',{exact:true}).waitFor();
+  assert.equal(await page.locator('iframe').count(),0);
+  for(const scanId of [undefined,'old']){
+    publicResponse={...publicReport,scanId,previewUnavailable:true};
+    await publicButton.click();await page.getByRole('alert').filter({hasText:'snapshot did not match'}).waitFor();
+    assert.equal(await page.locator('.results,iframe').count(),0);
+  }
   let qualityEmpty,qualitySparse;
   const qualityCases={...data.qualityPreviews,
     unknown:{...data.qualityPreviews.text,capturedTextCharacters:undefined},
@@ -599,9 +745,29 @@ try {
         await feedback.getByRole('heading',{name:'Limited preview detail',exact:true}).waitFor();
         assert.match(await feedback.textContent(),/page may simply be short/);
         qualitySparse=(await page.locator('.preview-workspace').screenshot()).toString('base64');
-      }else if(kind==='text')assert.equal(await feedback.count(),0,'Previous empty/sparse feedback must disappear');
+      }else if(kind==='text'||kind==='retained')assert.equal(await feedback.count(),0,'Previous empty/sparse feedback must disappear');
       else await feedback.getByRole('heading',{name:'Preview detail could not be assessed',exact:true}).waitFor();
-      if(kind!=='sparse')await page.frameLocator('iframe').first().locator('body').filter({hasText:'Captured page content.'}).waitFor();
+      if(kind!=='sparse')await page.frameLocator('iframe').first().locator('body').filter({hasText:kind==='retained'?'Retained visible guide':'Captured page content.'}).waitFor();
+      if(kind==='retained') {
+        for(const frame of page.frames().slice(1)) {
+          assert.equal(await frame.locator('body').evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(16, 24, 40)');
+          assert.equal(await frame.locator('body').evaluate(node=>getComputedStyle(node).color),'rgb(248, 250, 252)');
+          assert.equal(await frame.locator('body').evaluate(node=>getComputedStyle(node).padding),'24px');
+          assert.equal(await frame.locator('body').evaluate(node=>getComputedStyle(node).fontSize),'24px');
+          assert.equal(await frame.locator('pre code').textContent(),'if (water < 2) {\n  water += 1;\n}');
+          const retainedParagraph=frame.locator('p').filter({hasText:'Paragraph-before'});
+          assert.equal(await retainedParagraph.textContent(),'Paragraph-beforeParagraph-innerParagraph-after');
+          assert.equal(await retainedParagraph.locator('span').evaluate(node=>getComputedStyle(node).display),'block');
+          assert.equal(await frame.locator('b').textContent(),'Important text');assert.equal(await frame.locator('i').textContent(),'Emphasis');
+          assert.equal(await frame.locator('time').textContent(),'10 November');assert.equal(await frame.locator('[href],script,form,iframe,img').count(),0);
+        }
+        const presetGroup=page.getByRole('group',{name:'Vision presets',exact:true});
+        await presetGroup.getByRole('button',{name:'Original',exact:true}).press('Enter');
+        await presetGroup.getByRole('button',{name:'Blurred vision',exact:true}).press('Enter');
+        assert.equal(await page.locator('iframe').nth(1).evaluate(node=>node.style.filter),'blur(2px)');
+        assert.equal(await page.locator('iframe').first().evaluate(node=>node.style.filter),'');
+        assert.equal(publicCalls,scansBefore);
+      }
     }
     await page.getByRole('button',{name:/Accessibility findings/}).click();
     assert.equal(await page.getByRole('region',{name:'Confirmed automated violations',exact:true}).locator('article').count(),publicReport.findings.length);

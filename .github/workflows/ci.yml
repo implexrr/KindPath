@@ -64,3 +64,11 @@ jobs:
 
       - name: Verify fixture snapshot preview in an isolated browser
         run: npm run test:preview
+
+      - name: Diagnose owned resources after failure
+        if: failure()
+        run: |
+          docker ps --all --filter label=kindpath.scanner=public --format '{{.Names}} {{.Status}}'
+          docker ps --all --filter label=kindpath.scanner=fixture --format '{{.Names}} {{.Status}}'
+          docker network ls --filter label=kindpath.scanner=public --format '{{.Name}} {{.Driver}}'
+          docker volume ls --filter label=kindpath.scanner=public --format '{{.Name}}'

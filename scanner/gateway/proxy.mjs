@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { MAX_RESOURCE_REQUESTS } from './limits.mjs';
 import net from 'node:net';
 import { resolveTarget, pinnedDestination } from './policy.mjs';
 
@@ -31,7 +32,7 @@ export function createGateway(allowed, { resolve = resolveTarget, request = http
   const server = http.createServer({ maxHeaderSize: 16_384 }, async (req, res) => {
     let upstream;
     try {
-      if (++requests > 100 || !['GET', 'HEAD'].includes(req.method)
+      if (++requests > MAX_RESOURCE_REQUESTS || !['GET', 'HEAD'].includes(req.method)
         || req.headers['transfer-encoding'] !== undefined
         || (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0')) throw new Error('Blocked request');
       const target = await resolve(req.url, allowed);
@@ -59,7 +60,7 @@ export function createGateway(allowed, { resolve = resolveTarget, request = http
     client.once('end', () => client.destroy());
     let upstream;
     try {
-      if (++requests > 100) throw new Error('Too many requests');
+      if (++requests > MAX_RESOURCE_REQUESTS) throw new Error('Too many requests');
       const target = await resolve(req.url, allowed, true);
       if (client.destroyed) return;
       // Only a validated numeric public IP is dialled. TLS verification remains in Chromium.
@@ -78,6 +79,6 @@ export function createGateway(allowed, { resolve = resolveTarget, request = http
   server.on('clientError', (_error, socket) => deny(socket));
   server.headersTimeout = 5000;
   server.requestTimeout = 10_000;
-  server.maxRequestsPerSocket = 100;
+  server.maxRequestsPerSocket = MAX_RESOURCE_REQUESTS;
   return server;
 }

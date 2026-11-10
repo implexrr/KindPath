@@ -1,6 +1,6 @@
 # Local container image assessment
 
-Assessed November 9, 2026 after the bounded [formatting-whitespace retention fix](CONTENT-RETENTION.md). Review also tightened neighboring-block eligibility to preserve separators near omitted content. Dependencies and base digests are unchanged. This table describes the rebuilt images for that controlled fix; earlier live diagnostic/report/preview attempts used their then-current images recorded separately. **Public capture and scanning remain disabled.** The scanner and firewall images pass the raw high-severity threshold; QA still fails it. This is not ongoing activation or risk acceptance.
+Reassessed November 10, 2026 after the bounded [component-text and body-appearance improvements](CONTENT-RETENTION.md), source `2a19c57`, including the reviewed paragraph-grouping correction. Dependencies and base digests are unchanged. The table binds these rebuilt images to local cached-database results; earlier live attempts used their then-assessed images, not these updated collectors. **Public capture and scanning remain disabled; this branch made no public-site requests.** Scanner and firewall images pass the raw high-severity threshold. QA retains the same seven high matches without suppression or risk acceptance. This is not approval for activation.
 
 ## Image roles and build inputs
 
@@ -18,9 +18,9 @@ Free local Anchore Grype v0.121.2 inspected the squashed arm64 filesystems with 
 
 | Local image | Arm64 configuration digest (Grype imageID) | OCI index/repository digest |
 | --- | --- | --- |
-| Chromium scanner runtime | `sha256:cb658ad642a6565d9caa756ddb9016549c1d77299aa6a49768541501c8b5c2f8` | `sha256:31a27a7eec12f3ecc8c6eee2e670c0a1d8c244c4ed2a5324e93ebea04b617682` |
-| Browser QA | `sha256:9771bfb71a8318aaa285a5869b6b8da6abde632da7f8b3124427d91a57353919` | `sha256:da62e17c6c1544d06eea0ebfc21080504b9003e35dfbc785b78e5dd39e284a75` |
-| Firewall helper | `sha256:38024b7679a536a3d65e7044608021fa9a38a70e5a974d58b54c4250f1f3cf0f` | `sha256:47393a7b4234f4e290600aa29d808e6b22b67a8523e994dfb7e329a83e881c14` |
+| Chromium scanner runtime | `sha256:aa482e35ea218221970c7023e7aa9f611ddbbf9f4a7c2131ad329dcb31ee50d5` | `sha256:fec9010e5319990bfc032884a85725d9214271841bdcd14bcb4e07094a6004cc` |
+| Browser QA | `sha256:37371fddfa42be0ac825439badf0fc103dbc1d05b629871320ee043f05a3ed3f` | `sha256:28004b81e845dc055f3ebaf0ee0a51fd323cccd7e0744aa04b97f12f58ca743e` |
+| Firewall helper | `sha256:38024b7679a536a3d65e7044608021fa9a38a70e5a974d58b54c4250f1f3cf0f` | `sha256:54c6ef0657527c3b1820927ca9c24bfb4a24e7a12a728688afc63a1b6a962443` |
 
 Docker's local store reports the OCI index digest as its image ID; Grype reports the selected platform's configuration digest separately. Repository digests bind these reports to the local tags. Rebuilt attestation metadata can change an index even when the helper's filesystem/configuration stays unchanged.
 
@@ -44,7 +44,7 @@ The earlier diagnostics review’s 149 controlled tests passed: 98 unit/API, 7 i
 
 The preceding assessed images were used for [twenty approved anonymous scan-and-capture attempts](WEBSITE-PREVIEW-VALIDATION.md): sixteen returned reports and snapshots and four failed. Boundary/control checks passed on the returned captures, but six had no rendered text; these are not sixteen useful-preview or fidelity passes. No image/dependency change, fresh image advisory scan, suppression or risk acceptance accompanied that earlier validation. Both public features were restored to false.
 
-The current retention branch passed 161 controlled tests: 108 unit/API, 7 scanner, 25 gateway unit, 17 gateway integration, 3 firewall and 1 three-engine UI suite, plus the TypeScript/Vite build and both npm audits. All three images built successfully. Free local Grype reassessed these exact rebuilt images with the same cached database; the severity counts in this assessment are unchanged. No public site was visited, and the controlled whitespace fix does not establish improvement on the earlier live targets.
+The earlier whitespace-only retention branch passed 161 controlled tests: 108 unit/API, 7 scanner, 25 gateway unit, 17 gateway integration, 3 firewall and 1 three-engine UI suite, plus the TypeScript/Vite build and both npm audits. All three images built successfully. Free local Grype reassessed these exact rebuilt images with the same cached database; the severity counts in this assessment are unchanged. No public site was visited, and the controlled whitespace fix does not establish improvement on the earlier live targets.
 
 ## Open QA findings and activation decision
 
@@ -57,3 +57,12 @@ The remaining two high package records concern CVE-2025-3887. QA retains the rev
 The runtime now passes this image threshold; that does not automatically enable the application or accept QA risks. Both public constants remain false. The expanded path was reviewed before the five explicitly approved report-only attempts, and both gates were disabled afterward. Additional live requests, capture or ongoing activation require separate approval; the [snapshot validation plan](MVP-VALIDATION.md) records the earlier restricted-build attempt. Do not bypass default gates through a test dependency injection or enable unsupported browsers to obtain a live result.
 
 Historically, the Playwright 1.64.1 combined worker had 28 critical/144 high matches; the 1.65.0 combined image had 0 critical/7 high using this same database. The current role-specific table supersedes those combined-worker counts. Historical Docker Scout totals use different matching/feed data and are not directly comparable.
+
+
+The redirect-policy review at `c74eb08` passed 178 controlled tests. The subsequent three approved report-only visits used their then-assessed images recorded with the November 9 validation, before this collector extension; they are not live evidence for the current component/body changes.
+
+The current content-quality branch passed 184 controlled tests: 119 unit/API, 7 scanner, 25 gateway unit, 29 gateway integration, 3 firewall and 1 three-engine UI suite. TypeScript/Vite, all three image builds and both dependency audits passed. The two new capture cases failed before and passed after the change; implementation-stage controlled captures were rendered and visually inspected in a network-disabled opaque iframe; the review additionally verified preserved paragraph grouping in the actual parsed DOM. Same-visit identity, inert navigation, hidden/form-value/unsupported-content exclusions and unchanged truncation limits remain covered. No live site was retried.
+
+Free local Grype reassessed these exact images with the same cached database and left severity counts unchanged. The advisory database was not refreshed; no inventory was sent to an external service. These are image-assessment and controlled-compatibility observations, not universal security or fidelity clearance. Both public capabilities remain disabled.
+
+The review added the existing bounded availability probe before the atomic firewall fixture installs its rules, preserving the original denied-destination and fingerprint assertions. Fresh affected checks passed without changing production policy or deadlines. The image reassessment after the paragraph fix used the same cached database and retained the same advisory counts; no live website was requested.

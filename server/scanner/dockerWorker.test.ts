@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorkerRunner, ScannerError, settleResourceCreates } from './dockerWorker.js';
+import { createWorkerRunner, removeAndConfirm, ScannerError, settleResourceCreates } from './dockerWorker.js';
 
 // Simulates the daemon, including failures after a container has been created.
 function fakeDocker() {
@@ -96,7 +96,7 @@ test('a successful rm is insufficient if absence cannot be verified', async () =
   docker.verificationFails = true;
   await assert.rejects(docker.run('verify-isolation'), cleanupFailed);
   assert.equal(docker.calls.filter(args => args[0] === 'rm').length, 2);
-  assert.equal(docker.calls.filter(args => args[0] === 'ps' && args.some(arg => arg.startsWith('name='))).length, 2);
+  assert.equal(docker.calls.filter(args => args[0] === 'ps' && args.some(arg => arg.startsWith('name='))).length, 12);
   await assert.rejects(docker.run('clear'), cleanupFailed);
   assert.equal(docker.calls.filter(args => args[0] === 'create').length, 1);
 });
@@ -204,4 +204,14 @@ test('already cancelled Docker work never dispatches and attached runs remain ab
   })(['start', '--attach', 'owned-container'], attached.signal);
   const rejected = assert.rejects(running, error => error === attached.signal.reason);
   attached.abort(); await rejected;
+});
+
+test('asynchronous auto-removal must settle and be verified before cleanup returns', async () => {
+  let queries=0, removals=0;
+  await removeAndConfirm(async args=>{
+    if(args[0]==='rm'){removals++;throw new Error('Removal in progress');}
+    assert.equal(args[0],'ps');
+    return ++queries<5 ? 'owned-container' : '';
+  },'owned-container');
+  assert.equal(removals,2);assert.equal(queries,5);
 });

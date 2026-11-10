@@ -1,6 +1,6 @@
 const stages = ['dns','network-setup','worker-setup','worker-execution','page-loading','accessibility-analysis','capture','worker-result','cleanup'];
 const networkCodes = ['ERR_FAILED','ERR_BLOCKED_BY_CLIENT','ERR_CONNECTION_TIMED_OUT','ERR_HTTP2_PROTOCOL_ERROR','ERR_TUNNEL_CONNECTION_FAILED','ERR_PROXY_CONNECTION_FAILED','ERR_NAME_NOT_RESOLVED','ERR_CONNECTION_RESET','ERR_CONNECTION_CLOSED','ERR_CONNECTION_REFUSED','ERR_EMPTY_RESPONSE','ERR_ABORTED','ERR_TIMED_OUT','ERR_TOO_MANY_REDIRECTS','ERR_SSL_PROTOCOL_ERROR','ERR_CERT_DATE_INVALID','ERR_CERT_COMMON_NAME_INVALID'];
-const codes = ['FAILED','TIMEOUT','CANCELLED','HTTP_STATUS','NO_RESPONSE','TLS_CERTIFICATE_REJECTED','DESTINATION_REJECTED','PAGE_CHANGED_DURING_SCAN','UNCONFIRMED','INVALID_OUTPUT','ENOTFOUND','EAI_AGAIN','ETIMEDOUT','ECONNRESET','ECONNREFUSED',...networkCodes];
+const codes = ['FAILED','TIMEOUT','CANCELLED','HTTP_STATUS','NO_RESPONSE','TLS_CERTIFICATE_REJECTED','DESTINATION_REJECTED','PAGE_CHANGED_DURING_SCAN','REDIRECT_HOST_CHANGED','REDIRECT_PATH_CHANGED','REDIRECT_DOWNGRADE','REDIRECT_LOOP','REDIRECT_LIMIT','UNCONFIRMED','INVALID_OUTPUT','ENOTFOUND','EAI_AGAIN','ETIMEDOUT','ECONNRESET','ECONNREFUSED',...networkCodes];
 export const DIAGNOSTIC_PREFIX = 'KindPath diagnostic: ';
 
 // Whitelist and reconstruct: never return the original object or extra fields.
@@ -37,4 +37,12 @@ export function classifyFailure(error, stage, signal) {
     else if (networkCodes.includes(token)) code = token;
   }
   return readDiagnostic({stage,code});
+}
+
+// Fixed guidance, with only a validated HTTP status as dynamic output.
+export function httpStatusMessage(status) {
+  if (!Number.isInteger(status) || status < 400 || status > 599) return undefined;
+  if (status === 403) return 'Access to the page was refused (HTTP 403). No report was created.';
+  if (status === 429) return 'The website is limiting requests (HTTP 429). Wait before trying again. No report was created.';
+  return `The website returned HTTP ${status}. No report was created.`;
 }

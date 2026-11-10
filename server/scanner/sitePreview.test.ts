@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import { mapSitePreview } from './sitePreview.js';
 const identity = {scanId:'11111111-1111-4111-8111-111111111111',requestedUrl:'https://example.com/start',url:'https://example.com/final'};
 const element = (tag: string, children: unknown[] = [], style = {}, hover = {}, attributes = {}) => ({tag,attributes,style,hover,children});
@@ -53,4 +54,32 @@ test('snapshot text count is derived from accepted text, excluding whitespace, m
   const empty=mapSitePreview({...raw([element('input',[],{},{},{'aria-label':'Not visible text'}),{text:' \n\t '}]),capturedTextCharacters:999},identity);
   assert.equal(empty.capturedTextCharacters,0,'Do not trust a worker-supplied quality count');
   assert.equal(mapSitePreview(raw([{text:'x'.repeat(4000)},{text:'x'.repeat(4000)},{text:'x'.repeat(2000)}]),identity).capturedTextCharacters,10000);
+});
+
+
+test('body appearance uses independently validated CSS without executable resources',()=>{
+ const result=mapSitePreview({...raw([{text:'Light text'}]),bodyStyle:{'background-color':'rgb(16, 24, 40)',color:'rgb(248, 250, 252)',padding:'24px','font-size':'24px'}},identity);
+ assert.match(result.html,/body\{[^}]*background-color:rgb\(16, 24, 40\)/);
+ assert.equal(result.capturedTextCharacters,9);
+ for(const bodyStyle of [null,[],{background:'url(https://example.com/private)'},{color:'red; background:url(//example.com)'},{position:'fixed'},{color:'</style><script>'}]) {
+  assert.throws(()=>mapSitePreview({...raw(),bodyStyle},identity),/Invalid site snapshot/);
+ }
+});
+test('passive text markup is retained while raw component tags and active elements remain rejected',()=>{
+ const result=mapSitePreview(raw([element('p',[element('b',[{text:'Bold'}]),element('i',[{text:'Italic'}]),element('time',[{text:'Today'}])]),element('pre',[element('code',[{text:'a < b\n  next'}])])]),identity);
+ assert.match(result.html,/<b/);assert.match(result.html,/<i/);assert.match(result.html,/<time/);assert.match(result.html,/<pre/);assert.match(result.html,/<code[^>]*>a &lt; b\n  next/);
+ for(const tag of ['kindpath-card','textarea','select','option','template','script','style','svg','iframe'])assert.throws(()=>mapSitePreview(raw([element(tag,[{text:'Excluded'}])]),identity));
+});
+
+// Generated from controlled project content; real image decoding is also checked in the browser suite.
+const jpeg=readFileSync(new URL('../fixtures/preview.jpg',import.meta.url)).toString('base64');
+const image=()=>({kind:'image',url:identity.url,capturedAt:'2026-11-10T00:00:00.000Z',width:1280,height:1800,truncated:false,image:jpeg,links:[{x:1,y:2,width:10,height:10}]});
+test('image snapshots accept only bounded embedded JPEGs and inert geometry',()=>{
+ const result=mapSitePreview(image(),identity);assert.equal(result.kind,'image');assert.equal(result.width,1280);
+ assert.match(result.html,/img-src data:/);assert.match(result.html,/data:image\/jpeg;base64,/);assert.match(result.html,/kp-link/);
+ assert.doesNotMatch(result.html,/<script|<iframe|\bhref=|\bonerror=/);
+ for(const bad of [{width:65},{width:1281},{height:6001},{image:'PHN2Zz4='},{image:'AA=='},{image:jpeg+'==='},
+   {image:'A'.repeat(2000001)},{truncated:'false'},{truncated:true},{links:[{x:-1,y:0,width:1,height:1}]},
+   {links:[{x:1279,y:0,width:2,height:1}]},{links:[{x:0,y:0,width:1,height:1,url:'https://example.org/'}]},
+   {links:Array(201).fill({x:0,y:0,width:1,height:1})}])assert.throws(()=>mapSitePreview({...image(),...bad},identity));
 });

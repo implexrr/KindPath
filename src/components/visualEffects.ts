@@ -15,9 +15,30 @@ export const colourPresets: Record<ColourPreset, string> = {
 export const intensityPresets: Record<IntensityPreset, { name: string; strength: number }> = {
   mild: { name: 'Mild', strength: 25 }, moderate: { name: 'Moderate', strength: 50 }, strong: { name: 'Strong', strength: 80 },
 };
+export type VisionPreset = 'original' | 'red-green' | 'blue-yellow' | 'blurred' | 'peripheral';
+export const visionPresets: Record<VisionPreset, { name: string; colourPreset: ColourPreset; strengths: Record<Effect, number> }> = {
+  original: { name: 'Original', colourPreset: 'red-green', strengths: { colour: 0, contrast: 0, blur: 0, peripheral: 0 } },
+  'red-green': { name: 'Red–green colour vision', colourPreset: 'red-green', strengths: { colour: 65, contrast: 0, blur: 0, peripheral: 0 } },
+  'blue-yellow': { name: 'Blue–yellow colour vision', colourPreset: 'blue-yellow', strengths: { colour: 65, contrast: 0, blur: 0, peripheral: 0 } },
+  blurred: { name: 'Blurred vision', colourPreset: 'red-green', strengths: { colour: 0, contrast: 0, blur: 50, peripheral: 0 } },
+  peripheral: { name: 'Reduced peripheral vision', colourPreset: 'red-green', strengths: { colour: 0, contrast: 0, blur: 0, peripheral: 65 } },
+};
+export function applyVisionPreset(preset: VisionPreset): VisionSettings {
+  const value = visionPresets[preset];
+  return { enabled: true, colourPreset: value.colourPreset, strengths: { ...value.strengths } };
+}
+export function activeVisionPreset(settings: VisionSettings): VisionPreset | undefined {
+  if (!settings.enabled) return undefined;
+  return (Object.keys(visionPresets) as VisionPreset[]).find(key => {
+    const value = visionPresets[key];
+    return (Object.keys(effects) as Effect[]).every(effect => settings.strengths[effect] === value.strengths[effect])
+      && (value.strengths.colour === 0 || settings.colourPreset === value.colourPreset);
+  });
+}
+
 export const clampStrength = (value: number) => Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
 export function defaultVisionSettings(): VisionSettings {
-  return { enabled: true, colourPreset: 'red-green', strengths: { colour: 65, contrast: 0, blur: 0, peripheral: 0 } };
+  return applyVisionPreset('red-green');
 }
 export function applyIntensity(settings: VisionSettings, preset: IntensityPreset): VisionSettings {
   const strength = intensityPresets[preset].strength;
