@@ -12,13 +12,14 @@
     "dev:api": "tsx watch server/index.ts",
     "check": "tsc --noEmit",
     "build": "npm run check && vite build",
-    "test": "KINDPATH_PUBLIC_SCANNING=false KINDPATH_PUBLIC_CAPTURE=false tsx --test server/app.test.ts server/scanner/*.test.ts src/components/visualEffects.test.ts src/components/reportExport.test.ts src/components/sitePreview.test.ts src/components/scanFeedback.test.ts src/components/websiteEntry.test.ts",
+    "test": "KINDPATH_PUBLIC_SCANNING=false KINDPATH_PUBLIC_CAPTURE=false tsx --test server/app.test.ts server/scanner/*.test.ts src/components/visualEffects.test.ts src/components/reportExport.test.ts src/components/sitePreview.test.ts src/components/scanFeedback.test.ts src/components/websiteEntry.test.ts scripts/chrome-validation-safety.test.mjs",
     "scanner:build": "node scripts/build-scanner.mjs",
     "test:scanner": "KINDPATH_PUBLIC_SCANNING=false KINDPATH_PUBLIC_CAPTURE=false tsx --test server/scanner.integration.ts",
     "test:gateway:unit": "node scripts/test-gateway-unit.mjs",
     "test:gateway": "KINDPATH_PUBLIC_SCANNING=false KINDPATH_PUBLIC_CAPTURE=false tsx --test server/publicScanner.integration.ts",
     "test:firewall": "KINDPATH_PUBLIC_SCANNING=false KINDPATH_PUBLIC_CAPTURE=false tsx --test server/firewall.integration.ts",
-    "test:preview": "KINDPATH_PUBLIC_SCANNING=false KINDPATH_PUBLIC_CAPTURE=false tsx --test server/preview.integration.ts"
+    "test:preview": "KINDPATH_PUBLIC_SCANNING=false KINDPATH_PUBLIC_CAPTURE=false tsx --test server/preview.integration.ts",
+    "validate:chrome": "tsx scripts/validate-chrome.mjs"
   },
   "dependencies": {
     "express": "^5.3.0",

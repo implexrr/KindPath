@@ -90,3 +90,33 @@ npm --prefix scanner audit --audit-level=low
 The controlled test commands explicitly disable default public scanning/capture in their processes. Network tests use synthetic internal origins; UI checks run in network-disabled browser containers. They cover URL/report identity, redirects, cancellation, private-network rejection, cleanup, raster validation, image dimensions/pixels, desktop/mobile fitting, scrolling, presets, inert hover/navigation and JSON export. Test images are generated from project-owned fixture content. Diagnostic logs and generated review artifacts stay ignored under `logs/`.
 
 CI is defined in `.github/workflows/ci.yml`; running local checks does not publish, push or deploy. Historical observations and package-advisory assessments under `scanner/` describe their recorded versions, not current activation defaults or a guarantee of compatibility. See [image assessment](scanner/IMAGE-ASSESSMENT.md) for that assessment's limitations; package audits alone do not establish browser, kernel or Docker safety.
+
+
+## Manual Chrome validation
+
+With Google Chrome installed and KindPath running through `npm run dev`, this
+opt-in check submits up to three public URLs through the real interface:
+
+```sh
+npm ci --prefix scanner --ignore-scripts
+npm run validate:chrome -- --live https://example.com/
+```
+
+It uses the existing locked Playwright client and installed, visible Google
+Chrome with a fresh temporary profile, project-local temporary files and an
+environment that excludes shell credentials. Personal Chrome profiles are never
+opened; the test process disables sync and uses a mock keychain. Chrome can access only the loopback
+KindPath interface; submitted websites still load in the isolated scanner.
+The check verifies report identity, an actual JSON download, image decoding,
+vision presets, colour pixels where a suitable patch exists, inert navigation,
+fit/actual-size controls, fresh identities on repeated scans, clearing results
+on reload, and rejecting private URL entry before a scan request. You may repeat
+a URL to check rescan behavior. The first submission uses the keyboard, and
+addresses without a scheme exercise the normal HTTPS default. Query-bearing
+validation inputs are rejected to keep query credentials out of artifacts; the application's URL policy is unchanged.
+Reports, screenshots and summaries stay ignored under `logs/chrome-validation/`;
+the temporary Chrome profile is removed afterward. The relay rejects filesystem
+routes and reads responses with a streaming size limit; output folders cannot be
+symbolic links. A site refusing access or
+returning no preview is recorded and makes the check exit unsuccessfully.
+This command never runs as part of CI and does not deploy anything.
