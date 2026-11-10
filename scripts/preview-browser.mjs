@@ -60,6 +60,7 @@ try {
     assert.equal(exported.report.requestedUrl, expected.requestedUrl);
     assert.equal(exported.report.generatedAt, expected.generatedAt);
     assert.deepEqual(exported.report.coverage,coverage ?? undefined);
+    assert.equal(exported.report.pageLoadIncomplete,expected.pageLoadIncomplete);
     assert.deepEqual(exported.report.findings, expected.findings);
     assert.deepEqual(exported.report.scanner, expected.scanner);
     assert.deepEqual(exported.report.manualChecks, expected.manualChecks);
@@ -673,6 +674,10 @@ try {
     await page.getByRole('alert').filter({hasText:'snapshot did not match'}).waitFor();
     assert.equal(await page.locator('iframe').count(),0); assert.equal(await page.locator('.results').count(),0);
   }
+  publicResponse={...publicReport,pageLoadIncomplete:true,sitePreview:data.sitePreview};
+  await publicButton.click();await page.locator('.results').waitFor();
+  await page.getByRole('region',{name:'Scan coverage',exact:true}).getByText(/Unfinished loads were stopped; this partial report/).waitFor();
+  await assertDownload(publicResponse);
   // Browser-rendered previews: decoded pixels, fitting, scroll access, filters and inert hover areas.
   publicResponse={...publicReport,scanId:data.imagePreview.scanId,sitePreview:data.imagePreview};
   await publicButton.click();await page.locator('.results').waitFor();

@@ -35,6 +35,8 @@ Each destination independently passes public DNS/address validation, destination
 
 The API returns JSON; **Download report JSON** exports the findings, incomplete checks, coverage and limitations without embedding the preview image. Automated results do not establish accessibility conformance. Manual keyboard, screen-reader and usability review is still necessary.
 
+If the 15-second loading deadline expires after the successful main document has fully arrived and its HTML is parsed, KindPath can stop unfinished resource loads and scan the rendered content. The report is explicitly marked `pageLoadIncomplete: true`, with a partial-coverage notice in the interface and JSON export. An unfinished main document or rejected navigation still fails.
+
 A site may return an error, a login/consent page, or different content to the anonymous browser. HTTP 403 is reported as an access refusal; KindPath does not guess its cause or bypass it. Missing resources and bounded findings are disclosed. A valid report remains available if image capture alone fails, provided document stability and resource cleanup are verified.
 
 ## Visual previews

@@ -55,3 +55,8 @@ test('HTTP refusals explain the observed response without echoing URLs or guessi
   for(const httpStatus of ['403',403.5,999,'PRIVATE_SENTINEL'])assert.equal(scanErrorMessage({code:'SCAN_FAILED',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus}},503),'The scan could not finish. No report was created. Try again.');
   assert.match(scanErrorMessage({code:'SCANNER_CLEANUP_FAILED',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus:403}},503),/safely/);
 });
+
+test('partially loaded pages stay visibly limited even with zero failure counts',()=>{
+  const feedback=scanCoverageFeedback({mode:'public',pageLoadIncomplete:true,coverage:{blockedRequests:0,failedRequests:0,omittedRules:0,omittedNodes:0}})!;
+  assert.equal(feedback.title,'Scan coverage is limited');assert.match(feedback.details.join(' '),/15 seconds.*partial report/);
+});

@@ -22,7 +22,7 @@ export function scanErrorMessage(value: unknown, status: number): string {
   return 'The request could not finish. No report was created. Try again.';
 }
 
-export function scanCoverageFeedback(report: Pick<Report, 'mode' | 'coverage'>) {
+export function scanCoverageFeedback(report: Pick<Report, 'mode' | 'coverage' | 'pageLoadIncomplete'>) {
   if (report.mode !== 'public') return undefined;
   const coverage = readScanCoverage(report.coverage);
   if (!coverage) return { title: 'Scan coverage details unavailable', details: [
@@ -31,7 +31,8 @@ export function scanCoverageFeedback(report: Pick<Report, 'mode' | 'coverage'>) 
   ] };
   const missingResources = coverage.blockedRequests > 0 || coverage.failedRequests > 0;
   const omittedResults = coverage.omittedRules > 0 || coverage.omittedNodes > 0;
-  return { title: missingResources || omittedResults ? 'Scan coverage is limited' : 'Scan coverage', details: [
+  return { title: report.pageLoadIncomplete===true || missingResources || omittedResults ? 'Scan coverage is limited' : 'Scan coverage', details: [
+    ...(report.pageLoadIncomplete===true?['The page did not finish loading within 15 seconds. Unfinished loads were stopped; this partial report covers only the rendered content.']:[]),
     missingResources
       ? `${coverage.blockedRequests} requests blocked by policy; ${coverage.failedRequests} requests failed. These counts may overlap. Missing resources can change findings.`
       : 'No blocked or failed requests were reported. Other scan limitations still apply.',

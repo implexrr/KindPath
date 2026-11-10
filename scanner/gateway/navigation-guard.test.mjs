@@ -75,3 +75,13 @@ test('a browser restart does not reset the overall document budget',async()=>{
   await h.pause('https://example.com/final',{redirectedRequestId:'previous'});
   assert.equal(h.state.failure,'REDIRECT_LIMIT');
 });
+
+test('stopping resource loads uses the guarded browser channel and fails closed',async()=>{
+  const h=await harness();let stopped=0;
+  const send=h.session.send;
+  h.session.send=async(method,params)=>{if(method==='Page.stopLoading')stopped++;return send(method,params);};
+  await h.state.stopLoading();assert.equal(stopped,1);assert.equal(h.state.failed,false);
+  h.session.send=async()=>{throw new Error('Control channel failed');};
+  await assert.rejects(h.state.stopLoading());assert.equal(h.state.failed,true);assert.equal(h.closed(),true);
+  const lost=await harness();lost.session.emit('close');await assert.rejects(lost.state.stopLoading());
+});

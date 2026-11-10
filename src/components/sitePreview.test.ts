@@ -68,3 +68,8 @@ test('visual filters stay inside the guarded preview document', async()=>{
   const neutral=snapshotDocument(preview,true,applyVisionPreset('original'),'vision-test',false);
   assert.equal(neutral,original);
 });
+
+test('JSON export retains the explicit partial-loading marker',()=>{
+  const exported=createReportExport({...report,pageLoadIncomplete:true,limitations:['The page was partially loaded.']});
+  assert.equal(exported.report.pageLoadIncomplete,true);assert.ok(exported.report.limitations?.includes('The page was partially loaded.'));
+});
