@@ -242,6 +242,8 @@ for (const scenario of ['multi-host','private-redirect','late-policy-failure']) 
 for (const scenario of [
  {path:'/path-redirect',code:'REDIRECT_PATH_CHANGED',hosts:['example.com']},
  {path:'/query-redirect',code:'REDIRECT_PATH_CHANGED',hosts:['example.com']},
+ {path:'/empty-query-redirect',code:'REDIRECT_PATH_CHANGED',hosts:['example.com']},
+ {path:'/invalid-redirect',code:'DESTINATION_REJECTED',hosts:['example.com']},
  {path:'/other-host',code:'REDIRECT_HOST_CHANGED',hosts:['example.com']},
  {path:'/www-private',code:'HTTP_STATUS',hosts:['example.com','www.example.com']},
  {path:'/loop',code:'REDIRECT_LOOP',hosts:['example.com','www.example.com']},

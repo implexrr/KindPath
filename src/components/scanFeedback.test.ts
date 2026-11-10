@@ -36,8 +36,8 @@ test('missing and malformed coverage stays unknown; built-in and demo reports ge
 });
 
 test('redirect failures explain the policy using only validated fixed diagnostics', () => {
-  for (const [code, pattern] of [['REDIRECT_HOST_CHANGED',/hostname/],['REDIRECT_PATH_CHANGED',/path or query/],
-    ['REDIRECT_DOWNGRADE',/HTTPS to HTTP/],['REDIRECT_LOOP',/loop/],['REDIRECT_LIMIT',/limit/]] as const) {
+  for (const [code, pattern] of [['DESTINATION_REJECTED',/destination KindPath does not allow/],['REDIRECT_HOST_CHANGED',/hostname/],['REDIRECT_PATH_CHANGED',/path or query/],
+    ['REDIRECT_DOWNGRADE',/HTTPS to HTTP/],['REDIRECT_LOOP',/loops/],['REDIRECT_LIMIT',/limit/]] as const) {
     const message=scanErrorMessage({code:'SCAN_FAILED',error:'PRIVATE_SENTINEL',diagnostic:{stage:'page-loading',code}},503);
     assert.match(message,pattern); assert.doesNotMatch(message,/PRIVATE_SENTINEL/);
   }

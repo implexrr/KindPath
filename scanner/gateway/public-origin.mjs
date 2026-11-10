@@ -16,6 +16,8 @@ http.createServer((req,res)=>{
  if(path==='/private-redirect'){res.writeHead(302,{Location:'http://blocked.example.org/private'});res.end();return;}
  const redirect = location => {res.writeHead(302,{Location:location});res.end();};
  if(path==='/path-redirect'){redirect('/forbidden-page');return;}
+ if(path==='/empty-query-redirect'){redirect('/empty-query-redirect?');return;}
+ if(path==='/invalid-redirect'){redirect('http://127.0.0.1/private');return;}
  if(path==='/query-redirect'){redirect('/query-redirect?changed=1');return;}
  if(path==='/other-host'){redirect('http://example.org/other-host');return;}
  if(path==='/loop'){redirect('http://'+(req.headers.host==='example.com'?'www.example.com':'example.com')+'/loop');return;}

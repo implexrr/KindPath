@@ -119,7 +119,7 @@ test('capture defaults stay disabled and captured data is accepted only by an ex
 });
 
 test('public result validation accepts only the submitted page or its permitted canonical URL', async () => {
-  for (const url of ['https://example.org/start','https://example.com/other','https://example.com/start?q=1','http://example.com/start']) {
+  for (const url of ['https://example.org/start','https://example.com/other','https://example.com/start?q=1','https://example.com/start?','http://example.com/start']) {
     await assert.rejects(createPublicSiteScanner({enabled:()=>true,worker:async()=>({...raw,url})})('https://example.com/start'), error => {
       assert.ok(error instanceof ScannerError);
       assert.equal(error.code,'SCAN_FAILED');

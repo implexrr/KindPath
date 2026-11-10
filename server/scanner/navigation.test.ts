@@ -31,8 +31,16 @@ test('single-page navigation rejects host tricks, path/query changes and downgra
   }
 });
 test('redirect explanations are fixed strings and never echo untrusted fields', () => {
-  for (const code of ['REDIRECT_HOST_CHANGED', 'REDIRECT_PATH_CHANGED', 'REDIRECT_DOWNGRADE', 'REDIRECT_LOOP', 'REDIRECT_LIMIT']) {
+  for (const code of ['DESTINATION_REJECTED', 'REDIRECT_HOST_CHANGED', 'REDIRECT_PATH_CHANGED', 'REDIRECT_DOWNGRADE', 'REDIRECT_LOOP', 'REDIRECT_LIMIT']) {
     assert.match(redirectMessage(code)!, /No report was created/);
   }
   for (const value of ['constructor', '__proto__', 'https://private.invalid/', {}, undefined]) assert.equal(redirectMessage(value), undefined);
+});
+
+test('single-page navigation preserves the difference between absent and empty queries', () => {
+  for (const [from,to] of [
+    ['https://example.com/page?','https://example.com/page'],
+    ['https://example.com/page','https://example.com/page?'],
+  ]) assert.equal(navigationRejection(from,to),'REDIRECT_PATH_CHANGED');
+  assert.equal(navigationRejection('http://example.com/page?', 'https://www.example.com/page?'),undefined);
 });

@@ -10,16 +10,19 @@ export function navigationRejection(requested, destination, previous = requested
   const counterpart = initial.hostname.startsWith('www.')
     ? initial.hostname.slice(4) : `www.${initial.hostname}`;
   if (next.hostname !== initial.hostname && next.hostname !== counterpart) return 'REDIRECT_HOST_CHANGED';
-  if (next.pathname !== initial.pathname || next.search !== initial.search) return 'REDIRECT_PATH_CHANGED';
+  // URL.search collapses an absent query and an explicitly empty '?' query.
+  // Compare the serialized path/query to preserve that server-visible distinction.
+  if (next.href.slice(next.origin.length) !== initial.href.slice(initial.origin.length)) return 'REDIRECT_PATH_CHANGED';
   if (next.protocol === 'http:' && (initial.protocol === 'https:' || prior.protocol === 'https:')) return 'REDIRECT_DOWNGRADE';
   return undefined;
 }
 
 const messages = new Map([
+  ['DESTINATION_REJECTED', 'The page tried to navigate to a destination KindPath does not allow. No report was created.'],
   ['REDIRECT_HOST_CHANGED', 'This page redirects to a different hostname. KindPath only allows adding or removing www. from the submitted hostname. No report was created.'],
   ['REDIRECT_PATH_CHANGED', 'This page redirects to a different path or query. KindPath currently scans only the submitted page. No report was created.'],
   ['REDIRECT_DOWNGRADE', 'This page redirects from HTTPS to HTTP. KindPath does not allow insecure downgrades. No report was created.'],
-  ['REDIRECT_LOOP', 'This page has a redirect loop. No report was created.'],
+  ['REDIRECT_LOOP', 'This page repeats a navigation URL. KindPath stops repeated redirects to prevent loops. No report was created.'],
   ['REDIRECT_LIMIT', 'This page exceeds the redirect limit. No report was created.'],
 ]);
 export function redirectMessage(code) { return messages.get(code); }
