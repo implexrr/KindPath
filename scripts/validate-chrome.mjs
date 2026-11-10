@@ -3,10 +3,10 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { colourMatrix } from "../src/components/visualEffects.ts";
 import { navigationRejection } from "../scanner/gateway/navigation.mjs";
+import { allowsUiRequest, createValidationDirectory, readValidationBody, assertColourPixel } from "./chrome-validation-safety.mjs";
 import { websiteUrl } from "../scanner/gateway/url.mjs";
 import { normalizeWebsiteEntry } from "../src/components/websiteEntry.ts";
 const args = process.argv.slice(2);
@@ -17,9 +17,7 @@ const targets = args.slice(1).map((value) => {
   return url.href;
 });
 const root = fileURLToPath(new URL("../", import.meta.url));
-const logs = join(root, "logs", "chrome-validation");
-await mkdir(logs, { recursive: true });
-const out = await mkdtemp(join(logs, "run-"));
+const out = await createValidationDirectory(root);
 await mkdir(out + "/tmp");
 await mkdir(out + "/downloads");
 process.env.TMPDIR = out + "/tmp";
@@ -31,7 +29,7 @@ try {
 }
 const capabilities = await fetch("http://127.0.0.1:5173/api/scanning-capabilities", { redirect: "error", signal: AbortSignal.timeout(3e3) }).then((response) => response.json());
 assert.ok(capabilities.publicScanningEnabled === true && capabilities.publicCaptureEnabled === true, "Start npm run dev with scanning and capture enabled.");
-const base = "http://127.0.0.1:5173", allowedPosts = /* @__PURE__ */ new Set(["/api/scan-public", "/api/scan-fixture"]);
+const base = "http://127.0.0.1:5173";
 const proxy = http.createServer((_req, res) => {
   res.writeHead(403);
   res.end();
@@ -60,9 +58,8 @@ try {
       await route.continue();
       return;
     }
-    const get = req.method() === "GET" && (url.pathname === "/" || url.pathname === "/favicon.ico" || ["/src/", "/shared/", "/scanner/gateway/", "/node_modules/", "/@vite/", "/@id/", "/@fs/" + root + "/"].some((prefix) => url.pathname.startsWith(prefix)) || url.pathname === "/@react-refresh" || url.pathname === "/api/scanning-capabilities");
-    const post = req.method() === "POST" && allowedPosts.has(url.pathname);
-    if (url.origin !== base || !get && !post) {
+    const post = req.method() === "POST";
+    if (!allowsUiRequest(url.href,req.method())) {
       errors.push("Unexpected browser destination");
       await route.abort();
       return;
@@ -73,8 +70,7 @@ try {
         requests++;
       }
       const response = await fetch(url, { method: req.method(), redirect: "error", headers: { Origin: base, ...post ? { "Content-Type": "application/json" } : {} }, ...post ? { body: req.postData() } : {}, signal: AbortSignal.any([interrupted.signal, AbortSignal.timeout(95e3)]) });
-      const body = Buffer.from(await response.arrayBuffer());
-      assert.ok(body.length <= 8 * 1024 * 1024);
+      const body = await readValidationBody(response);
       if (post) actual = { status: response.status, report: JSON.parse(body.toString()) };
       const headers = Object.fromEntries(response.headers);
       for (const name of ["content-encoding", "content-length", "transfer-encoding", "connection"]) delete headers[name];
@@ -195,8 +191,10 @@ try {
     await select("Original");
     const originalSource = await original.getAttribute("srcdoc");
     const address = page.frames().map((frame) => frame.url());
+    await page.mouse.move(0, 0);
     const baseline = await original.screenshot();
-    const sample = await page.frameLocator("iframe").nth(0).locator("img").evaluate((img) => {
+    const modifiedBaseline = await modified.screenshot();
+    const sample = await page.frameLocator("iframe").nth(0).locator("img").evaluate((img, matrices) => {
       const image = img, canvas = document.createElement("canvas");
       canvas.width = image.naturalWidth;
       canvas.height = image.naturalHeight;
@@ -206,16 +204,16 @@ try {
       for (let y = 30; y < maxY; y += 13) for (let x = 30; x < image.naturalWidth - 30; x += 13) {
         const p = [...ctx.getImageData(x, y, 1, 1).data].slice(0, 3);
         if (Math.max(...p) - Math.min(...p) < 60) continue;
+        // An ignored filter must differ by more than the comparison tolerance.
+        if (!matrices.every(matrix => Math.max(...p.map((v,row) => Math.abs(v-p.reduce((sum,channel,col) => sum+channel*matrix[row*5+col],0)))) >= 12)) continue;
         let flat = true;
         for (const [dx, dy] of [[-4, -4], [4, 4], [-4, 4], [4, -4]]) if ([...ctx.getImageData(x + dx, y + dy, 1, 1).data].slice(0, 3).some((v, i) => Math.abs(v - p[i]) > 3)) flat = false;
         if (flat) return { x, y, rgb: p, scale };
       }
       return null;
-    });
-    const renderedPixel = async () => {
+    }, [colourMatrix("red-green", 65), colourMatrix("blue-yellow", 65)]);
+    const readPixel = async (bytes) => {
       assert.ok(sample);
-      await modified.scrollIntoViewIfNeeded();
-      const box = await modified.boundingBox(), bytes = await page.screenshot({ clip: box });
       return page.evaluate(async ({ data, x, y }) => {
         const img = new Image();
         img.src = "data:image/png;base64," + data;
@@ -228,20 +226,30 @@ try {
         return [...ctx.getImageData(x, y, 1, 1).data].slice(0, 3);
       }, { data: bytes.toString("base64"), x: Math.floor(sample.x * sample.scale), y: Math.floor(sample.y * sample.scale) });
     };
+    const neutralPixel = sample ? await readPixel(modifiedBaseline) : null;
+    const renderedPixel = async () => {
+      await page.mouse.move(0, 0);
+      await modified.scrollIntoViewIfNeeded();
+      const box = await modified.boundingBox();
+      return readPixel(await page.screenshot({ clip: box }));
+    };
     const pixels = [];
     for (const [name, preset] of [["Red\u2013green colour vision", "red-green"], ["Blue\u2013yellow colour vision", "blue-yellow"]]) {
       await select(name);
       if (sample) {
         const expected = colourMatrix(preset, 65), actual2 = await renderedPixel(), rgb = sample.rgb.map((_v, row) => Math.round(sample.rgb.reduce((sum, v, col) => sum + v * expected[row * 5 + col], 0)));
-        rgb.forEach((v, i) => assert.ok(Math.abs(v - actual2[i]) <= 8, `Colour sample expected ${rgb}, got ${actual2}`));
-        pixels.push({ preset, expected: rgb, actual: actual2 });
+        assertColourPixel(neutralPixel, rgb, actual2);
+        pixels.push({ preset, original: neutralPixel, expected: rgb, actual: actual2 });
       }
     }
     await select("Blurred vision");
-    assert.notDeepEqual(await modified.screenshot(), baseline);
+    await page.mouse.move(0, 0);
+    assert.notDeepEqual(await modified.screenshot(), modifiedBaseline, "Blur must alter the modified frame itself");
     await select("Reduced peripheral vision");
     assert.equal(await page.locator(".field-mask").evaluate((el) => el.style.opacity), "0.65");
     await select("Original");
+    await page.mouse.move(0, 0);
+    assert.deepEqual(await modified.screenshot(), modifiedBaseline, "Original must restore the modified frame");
     assert.deepEqual(await original.screenshot(), baseline);
     assert.equal(await original.getAttribute("srcdoc"), originalSource);
     assert.equal(requests, before + 1, "Effects must not rescan");
@@ -276,6 +284,7 @@ try {
   if (results.some((result) => result.outcome !== "report-and-preview")) process.exitCode = 1;
   console.log("Validation artifacts are in " + out);
 } finally {
+  interrupted.abort();
   try {
     await context?.close();
   } finally {

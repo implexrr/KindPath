@@ -115,6 +115,8 @@ a URL to check rescan behavior. The first submission uses the keyboard, and
 addresses without a scheme exercise the normal HTTPS default. Query-bearing
 validation inputs are rejected to keep query credentials out of artifacts; the application's URL policy is unchanged.
 Reports, screenshots and summaries stay ignored under `logs/chrome-validation/`;
-the temporary Chrome profile is removed afterward. A site refusing access or
+the temporary Chrome profile is removed afterward. The relay rejects filesystem
+routes and reads responses with a streaming size limit; output folders cannot be
+symbolic links. A site refusing access or
 returning no preview is recorded and makes the check exit unsuccessfully.
 This command never runs as part of CI and does not deploy anything.
