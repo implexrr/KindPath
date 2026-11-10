@@ -6,7 +6,7 @@ import { preparePublicEgress, scanInNamespace } from './publicTransport.js';
 import { createResourceRunner } from './resources.js';
 import { createFirewallContainer, firewallControl, prepareNamespace, PINNED_FIXTURE_IP } from './firewallDocker.js';
 
-const controlledTargets = new Map([['verify-pinned-scan','http://example.com/redirect'],
+const controlledTargets = new Map([['verify-pinned-scan','http://example.com/barriers'],
   ['verify-pinned-redirect','http://example.com/blocked-redirect'], ['verify-pinned-tls','https://example.com/barriers'], ['verify-pinned-moving','http://example.com/moving']]);
 
 export function createPublicWorkerRunner(openSession: () => Promise<DockerSession>) {

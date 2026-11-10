@@ -12,8 +12,19 @@ const page=`<!doctype html><html lang="en"><title>Public website fixture</title>
 http.createServer((req,res)=>{
  const path=new URL(req.url,'http://example.com').pathname;
  process.stdout.write(JSON.stringify({host:req.headers.host,path,method:req.method})+'\n');
- if(path==='/redirect'){res.writeHead(302,{Location:'http://example.org/page'});res.end();return;}
+ if(path==='/redirect' && req.headers.host==='example.com'){res.writeHead(302,{Location:'http://www.example.com/redirect'});res.end();return;}
  if(path==='/private-redirect'){res.writeHead(302,{Location:'http://blocked.example.org/private'});res.end();return;}
+ const redirect = location => {res.writeHead(302,{Location:location});res.end();};
+ if(path==='/path-redirect'){redirect('/forbidden-page');return;}
+ if(path==='/query-redirect'){redirect('/query-redirect?changed=1');return;}
+ if(path==='/other-host'){redirect('http://example.org/other-host');return;}
+ if(path==='/loop'){redirect('http://'+(req.headers.host==='example.com'?'www.example.com':'example.com')+'/loop');return;}
+ if(path==='/intermediate-redirect'){redirect('http://'+(req.headers.host==='example.com'?'www.example.com':'example.org')+'/intermediate-redirect');return;}
+ if(path==='/www-private'){redirect('http://www.example.com/www-private');return;}
+ if(path==='/script-redirect'||path==='/meta-redirect'){
+  res.writeHead(200,{'Content-Type':'text/html'});
+  res.end(path==='/script-redirect'?'<script>location.replace("/forbidden-page")</script>':'<meta http-equiv="refresh" content="0;url=/forbidden-page">');return;
+ }
  if(path.endsWith('.css')){res.writeHead(200,{'Content-Type':'text/css'});res.end('p{color:rgb(0,128,0)}');return;}
  if(path==='/render.js'){res.writeHead(200,{'Content-Type':'application/javascript'});res.end("document.body.insertAdjacentHTML('beforeend','<p>Multi-host rendered marker</p>');fetch('http://late.example.net/pending').catch(()=>{})");return;}
  if(path==='/pixel.svg'){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');return;}

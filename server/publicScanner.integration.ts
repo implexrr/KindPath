@@ -42,7 +42,7 @@ test('a frozen destination plan drives real gateway/browser scans behind verifie
   for(const id of ['image-alt','label','button-name'])assert.ok(report.findings.some(finding=>finding.id===id));
   const coverage=(proof.result as {coverage:{blockedRequests:number;failedRequests:number}}).coverage;
   assert.ok(coverage.blockedRequests>=5);assert.ok(coverage.failedRequests>0);
-  assert.ok(proof.requests.some(request=>request.path==='/redirect'));
+  assert.ok(!proof.requests.some(request=>request.path==='/redirect'));
   assert.ok(proof.requests.some(request=>request.path==='/barriers'));
   assert.equal(PUBLIC_SCANNING_ENABLED,false);
 });
@@ -68,7 +68,7 @@ test('forbidden redirects, untrusted TLS and a page changing during analysis nev
 });
 
 for (const scenario of [
-  {path:'/redirect',final:'/barriers'}, {path:'/content',final:'/content'},
+  {path:'/redirect',final:'/redirect'}, {path:'/content',final:'/content'},
   {path:'/indented-content',final:'/indented-content'}, {path:'/indented-budget',final:'/indented-budget'},
   {path:'/forms',final:'/forms'}, {path:'/missing',final:'/missing'},
   {path:'/same-url-history',final:'/same-url-history'}, {path:'/same-url-reload',final:'/same-url-reload'},
@@ -87,9 +87,9 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
     captureEnabled: () => true,
     enabled: () => true, // Local test instance only; the application's router/runner gates stay false.
     planTarget: async (url, signal) => {
-      assert.equal(url, target);
+      assert.ok(url === target || (scenario.path === '/redirect' && url === 'https://www.example.com/'));
       return createDestinationPlan(url, async host => {
-        lookups++; assert.equal(host, 'example.com'); return [{ address: PINNED_FIXTURE_IP, family: 4 }];
+        lookups++; assert.ok(['example.com','www.example.com'].includes(host)); return [{ address: PINNED_FIXTURE_IP, family: 4 }];
       }, signal);
     },
     prepareNetwork: async (command, resources, signal) => {
@@ -121,10 +121,10 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
     } else {
     const report = await response.json();
     assert.equal(response.status,200,JSON.stringify({code:report.code,diagnostic:report.diagnostic}));
-    assert.equal(report.mode, 'public'); assert.equal(report.requestedUrl, target); assert.equal(report.url,'http://example.com'+scenario.final);
+    assert.equal(report.mode, 'public'); assert.equal(report.requestedUrl, target); assert.equal(report.url,'http://'+(scenario.path==='/redirect'?'www.example.com':'example.com')+scenario.final);
     if (scenario.path === '/redirect') for (const id of ['image-alt','label','button-name']) assert.ok(report.findings.some((finding: {id:string}) => finding.id === id));
     assert.ok(report.limitations.some((text: string) => /requests were blocked by policy/.test(text)));
-    assert.equal(lookups, 1); assert.equal(PUBLIC_SCANNING_ENABLED, false);
+    assert.equal(lookups, scenario.path==='/redirect'?2:1); assert.equal(PUBLIC_SCANNING_ENABLED, false);
     const { PUBLIC_CAPTURE_ENABLED } = await import('./scanner/publicPolicy.js'); assert.equal(PUBLIC_CAPTURE_ENABLED,false);
     assert.equal(report.sitePreview.scanId,report.scanId); assert.equal(report.sitePreview.requestedUrl,target);
     assert.equal(report.sitePreview.url,report.url);
@@ -221,20 +221,81 @@ for (const scenario of ['multi-host','private-redirect','late-policy-failure']) 
   if(privateRedirect||failLate)await assert.rejects(scan(target),error=>error instanceof ScannerError&&error.code==='SCAN_FAILED');
   else {
    const report=await scan(target);
-   assert.equal(report.mode,'public');assert.equal(report.requestedUrl,target);assert.equal(report.url,'http://example.org/page');
+   assert.equal(report.mode,'public');assert.equal(report.requestedUrl,target);assert.equal(report.url,'http://www.example.com/redirect');
    assert.equal(report.sitePreview?.scanId,report.scanId);assert.equal(report.sitePreview?.url,report.url);
    assert.match(report.sitePreview!.html,/Multi-host rendered marker/);assert.match(report.sitePreview!.html,/Static website advertisement/);
    assert.match(report.sitePreview!.html,/color:rgb\(0, 128, 0\)/);assert.match(report.sitePreview!.html,/:hover\{color:rgb\(255, 0, 0\)/);
    assert.doesNotMatch(report.sitePreview!.html,/<(?:script|iframe|form|img|svg)\b|\b(?:href|src|onclick)=|synthetic-form-value/i);
-   for(const host of ['example.com','example.org','static.example.net','rebind.example.net','blocked.example.org','late.example.net'])assert.equal(calls.get(host),1,host);
+   for(const host of ['example.com','www.example.com','static.example.net','rebind.example.net','blocked.example.org','late.example.net'])assert.equal(calls.get(host),1,host);
    assert.ok(report.limitations.some(text=>text.includes('requests failed')));
   }
   if(!privateRedirect)assert.ok(capturedCommands.some(args=>args.includes('replace')),'Additional public host must require a verified firewall update');
   if(failLate)assert.equal(injectedFailure,true,'The late policy failure must be exercised after browser completion');
-  assert.equal(calls.get('blocked.example.org'),1);
+  assert.equal(calls.get('blocked.example.org'),privateRedirect?undefined:1);
   const session=await openLocalDockerSession();
   try {
    for(const args of [['ps','--all','--quiet'],['network','ls','--quiet'],['volume','ls','--quiet']])assert.equal((await session.command([...args,'--filter','label=kindpath.scanner=public'])).trim(),'');
   } finally {await session.dispose();}
+ });
+}
+
+for (const scenario of [
+ {path:'/path-redirect',code:'REDIRECT_PATH_CHANGED',hosts:['example.com']},
+ {path:'/query-redirect',code:'REDIRECT_PATH_CHANGED',hosts:['example.com']},
+ {path:'/other-host',code:'REDIRECT_HOST_CHANGED',hosts:['example.com']},
+ {path:'/www-private',code:'HTTP_STATUS',hosts:['example.com','www.example.com']},
+ {path:'/loop',code:'REDIRECT_LOOP',hosts:['example.com','www.example.com']},
+ {path:'/intermediate-redirect',code:'REDIRECT_HOST_CHANGED',hosts:['example.com','www.example.com']},
+ {path:'/script-redirect',code:'REDIRECT_PATH_CHANGED',hosts:['example.com']},
+ {path:'/meta-redirect',code:'REDIRECT_PATH_CHANGED',hosts:['example.com']},
+]) {
+ test(`main-page policy blocks ${scenario.path} before requesting its forbidden destination`,{timeout:90000},async()=>{
+  const {createPublicUrlWorkerRunner}=await import('./scanner/publicUrlWorker.js');
+  const {createPublicSiteScanner}=await import('./scanner/publicScanner.js');
+  const {createDestinationPlan}=await import('./scanner/destinationSnapshot.js');
+  const {prepareNamespace,createFirewallContainer}=await import('./scanner/firewallDocker.js');
+  const origins:string[]=[], lookups:string[]=[];
+  const requests:{host:string;path:string;method:string}[]=[];
+  const worker=createPublicUrlWorkerRunner({enabled:()=>true,captureEnabled:()=>false,
+   planTarget:(url,signal)=>createDestinationPlan(url,async host=>{
+    lookups.push(host);
+    assert.ok(scenario.hosts.includes(host),'Forbidden hostname must not reach DNS admission');
+    return [{address:host==='example.com'?'93.184.216.34':scenario.path==='/www-private'?'127.0.0.1':'93.184.216.36',family:4}];
+   },signal),
+   openSession:async()=>{
+    const session=await openLocalDockerSession();
+    return {...session,command:async(...args:Parameters<typeof session.command>)=>{
+     try{return await session.command(...args);}
+     finally {
+      if(args[0][0]==='start'&&args[0].some(arg=>arg.startsWith('kindpath-public-browser-'))) {
+       for(const origin of origins){
+        const logs=await session.command(['logs',origin]);
+        requests.push(...logs.trim().split('\n').filter(Boolean).map(line=>JSON.parse(line)));
+       }
+      }
+     }
+    }};
+   },
+   prepareNetwork:async(command,resources,signal)=>{
+    const ns=await prepareNamespace(command,resources,signal,'pinned');
+    for(const ip of ['93.184.216.34','93.184.216.36']){
+     const origin=await createFirewallContainer(command,resources,ns.network,'origin',['gateway/public-origin.mjs'],signal,ip);
+     origins.push(origin.name);await command(['start',origin.name],signal);
+    }
+    return ns;
+   },
+  });
+  const scan=createPublicSiteScanner({enabled:()=>true,worker});
+  await assert.rejects(scan('http://example.com'+scenario.path),error=>{
+   assert.ok(error instanceof ScannerError);assert.equal(error.code,'SCAN_FAILED');
+   assert.deepEqual(error.diagnostic,{stage:'page-loading',code:scenario.code,...(scenario.path==='/www-private'?{httpStatus:403}:{})});
+   assert.match(error.message,/No report was (?:created|produced)/);return true;
+  });
+  assert.deepEqual(lookups,scenario.hosts);
+  assert.deepEqual(requests.map(request=>({host:request.host,path:request.path})),(scenario.path==='/www-private'?['example.com']:scenario.hosts).map(host=>({host,path:scenario.path})));
+  const session=await openLocalDockerSession();
+  try{
+   for(const args of [['ps','--all','--quiet'],['network','ls','--quiet'],['volume','ls','--quiet']])assert.equal((await session.command([...args,'--filter','label=kindpath.scanner=public'])).trim(),'');
+  }finally{await session.dispose();}
  });
 }
