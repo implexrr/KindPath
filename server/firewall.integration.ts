@@ -28,6 +28,10 @@ test('atomic destination updates require the prior policy proof and preserve den
       const origin=await createFirewallContainer(command,resources,ns.network,'origin',['gateway/readiness-origin.mjs'],signal,ip);
       await command(['start',origin.name],signal);
     }
+    // Establish availability before interpreting a failed connection as filtering.
+    const readiness=await createFirewallContainer(command,resources,`container:${ns.id}`,'probe',['firewall/probe.mjs','before','pinned'],signal);
+    const available=JSON.parse(await command(['start','--attach',readiness.name],signal,20000));
+    assert.equal(available.phase,'before');assert.equal(available.allowedConnections,2);assert.equal(available.forbiddenConnections,5);
     ns.addresses=['93.184.216.34'];await firewallControl(command,resources,ns,'setup',signal);
     const before=ns.hash;
     const probe=async()=>{
