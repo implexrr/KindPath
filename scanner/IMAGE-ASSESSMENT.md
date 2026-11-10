@@ -1,6 +1,6 @@
 # Local container image assessment
 
-Reassessed November 10, 2026 after the bounded [component-text and body-appearance improvements](CONTENT-RETENTION.md), source `8f18a42`. Dependencies and base digests are unchanged. The table binds these rebuilt images to local cached-database results; earlier live attempts used their then-assessed images, not these updated collectors. **Public capture and scanning remain disabled; this branch made no public-site requests.** Scanner and firewall images pass the raw high-severity threshold. QA retains the same seven high matches without suppression or risk acceptance. This is not approval for activation.
+Reassessed November 10, 2026 after the bounded [component-text and body-appearance improvements](CONTENT-RETENTION.md), source `2a19c57`, including the reviewed paragraph-grouping correction. Dependencies and base digests are unchanged. The table binds these rebuilt images to local cached-database results; earlier live attempts used their then-assessed images, not these updated collectors. **Public capture and scanning remain disabled; this branch made no public-site requests.** Scanner and firewall images pass the raw high-severity threshold. QA retains the same seven high matches without suppression or risk acceptance. This is not approval for activation.
 
 ## Image roles and build inputs
 
@@ -18,9 +18,9 @@ Free local Anchore Grype v0.121.2 inspected the squashed arm64 filesystems with 
 
 | Local image | Arm64 configuration digest (Grype imageID) | OCI index/repository digest |
 | --- | --- | --- |
-| Chromium scanner runtime | `sha256:72b4a1c33181b85f43dbc8ab83d037f150edf86de7aa346669442f53f9814957` | `sha256:3e9d3db4cdecf1f83aa1955c1d2774fbe4aa3728c8cb1852aa3f1686bb3e3746` |
-| Browser QA | `sha256:b3def1334f6e01488a3f28b592b7b8d72a85cdf1da0e0fe3f09a570436ffbe41` | `sha256:144bfca48d4f0d73eb16e81aefa92cf9905a6d290d8819cb4a4dd5e1ba9c504a` |
-| Firewall helper | `sha256:38024b7679a536a3d65e7044608021fa9a38a70e5a974d58b54c4250f1f3cf0f` | `sha256:1f5b66ebec596e320e33f58e88d6be59596223aa912b8251bcb12f6a5acd79c3` |
+| Chromium scanner runtime | `sha256:aa482e35ea218221970c7023e7aa9f611ddbbf9f4a7c2131ad329dcb31ee50d5` | `sha256:fec9010e5319990bfc032884a85725d9214271841bdcd14bcb4e07094a6004cc` |
+| Browser QA | `sha256:37371fddfa42be0ac825439badf0fc103dbc1d05b629871320ee043f05a3ed3f` | `sha256:28004b81e845dc055f3ebaf0ee0a51fd323cccd7e0744aa04b97f12f58ca743e` |
+| Firewall helper | `sha256:38024b7679a536a3d65e7044608021fa9a38a70e5a974d58b54c4250f1f3cf0f` | `sha256:54c6ef0657527c3b1820927ca9c24bfb4a24e7a12a728688afc63a1b6a962443` |
 
 Docker's local store reports the OCI index digest as its image ID; Grype reports the selected platform's configuration digest separately. Repository digests bind these reports to the local tags. Rebuilt attestation metadata can change an index even when the helper's filesystem/configuration stays unchanged.
 
@@ -61,6 +61,8 @@ Historically, the Playwright 1.64.1 combined worker had 28 critical/144 high mat
 
 The redirect-policy review at `c74eb08` passed 178 controlled tests. The subsequent three approved report-only visits used their then-assessed images recorded with the November 9 validation, before this collector extension; they are not live evidence for the current component/body changes.
 
-The current content-quality branch passed 184 controlled tests: 119 unit/API, 7 scanner, 25 gateway unit, 29 gateway integration, 3 firewall and 1 three-engine UI suite. TypeScript/Vite, all three image builds and both dependency audits passed. The two new capture cases failed before and passed after the change; actual controlled captures were also rendered and visually inspected in a network-disabled opaque iframe. Same-visit identity, inert navigation, hidden/form-value/unsupported-content exclusions and unchanged truncation limits remain covered. No live site was retried.
+The current content-quality branch passed 184 controlled tests: 119 unit/API, 7 scanner, 25 gateway unit, 29 gateway integration, 3 firewall and 1 three-engine UI suite. TypeScript/Vite, all three image builds and both dependency audits passed. The two new capture cases failed before and passed after the change; implementation-stage controlled captures were rendered and visually inspected in a network-disabled opaque iframe; the review additionally verified preserved paragraph grouping in the actual parsed DOM. Same-visit identity, inert navigation, hidden/form-value/unsupported-content exclusions and unchanged truncation limits remain covered. No live site was retried.
 
 Free local Grype reassessed these exact images with the same cached database and left severity counts unchanged. The advisory database was not refreshed; no inventory was sent to an external service. These are image-assessment and controlled-compatibility observations, not universal security or fidelity clearance. Both public capabilities remain disabled.
+
+The review added the existing bounded availability probe before the atomic firewall fixture installs its rules, preserving the original denied-destination and fingerprint assertions. Fresh affected checks passed without changing production policy or deadlines. The image reassessment after the paragraph fix used the same cached database and retained the same advisory counts; no live website was requested.
