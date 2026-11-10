@@ -70,6 +70,7 @@ test('forbidden redirects, untrusted TLS and a page changing during analysis nev
 for (const scenario of [
   {path:'/redirect',final:'/redirect'}, {path:'/content',final:'/content'},
   {path:'/indented-content',final:'/indented-content'}, {path:'/indented-budget',final:'/indented-budget'},
+  {path:'/components',final:'/components'}, {path:'/body-contrast',final:'/body-contrast'},
   {path:'/forms',final:'/forms'}, {path:'/missing',final:'/missing'},
   {path:'/same-url-history',final:'/same-url-history'}, {path:'/same-url-reload',final:'/same-url-reload'},
 ]) {
@@ -164,6 +165,26 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
         assert.doesNotMatch(html,/Retained end-of-page marker/);
         assert.ok(report.sitePreview.limitations.some((text:string)=>/At least [1-9]\d* subtrees/.test(text)));
       }
+    }
+    if(scenario.path==='/components') {
+      assert.match(report.sitePreview.html,/Component garden guide/);
+      assert.match(report.sitePreview.html,/Component end marker/);
+      assert.match(report.sitePreview.html,/<b[^>]*>important text/);
+      assert.match(report.sitePreview.html,/<i[^>]*>emphasized text/);
+      assert.match(report.sitePreview.html,/<pre/);assert.match(report.sitePreview.html,/<code/);assert.match(report.sitePreview.html,/<time/);
+      assert.match(report.sitePreview.html,/water &lt; 2/);
+      assert.match(report.sitePreview.html,/grid-template-columns:240px 320px/);
+      assert.match(report.sitePreview.html,/Inline-left<\/span> <span/);
+      assert.match(report.sitePreview.html,/Content through a boxless component/);
+      assert.match(report.sitePreview.html,/Visible slotted light content/);
+      assert.doesNotMatch(report.sitePreview.html,/kindpath-(?:layout|card|inline|contents|slotted|closed|hidden)|unrendered-light-marker|hidden-(?:css-)?component-marker|private-(?:textarea|option|input)-marker|(?:closed-)?shadow-(?:tree-)?marker|embedded-frame-marker|datetime=/);
+      assert.match(report.sitePreview.html,/input[^>]* disabled/);assert.match(report.sitePreview.html,/button[^>]* disabled/);
+    }
+    if(scenario.path==='/body-contrast') {
+      assert.match(report.sitePreview.html,/Night garden guide/);
+      assert.match(report.sitePreview.html,/body\{[^}]*background-color:rgb\(16, 24, 40\)/);
+      assert.match(report.sitePreview.html,/body\{[^}]*font-size:24px/);
+      assert.match(report.sitePreview.html,/body\{[^}]*padding:24px/);
     }
     assert.ok(report.sitePreview.limitations.length>0);
     }

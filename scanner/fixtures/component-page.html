@@ -1,0 +1,25 @@
+<!doctype html><html lang="en"><title>Component content fixture</title>
+<style>
+body{margin:0;padding:24px;font:18px/1.5 Arial;background:#f4f1e8;color:#183c32}
+kindpath-layout{display:block;max-width:900px}kindpath-card{display:grid;grid-template-columns:240px 320px;gap:16px;padding:20px;border:1px solid #355f4a}
+kindpath-inline{display:inline}kindpath-contents{display:contents}.hidden-panel{display:none}
+pre{white-space:pre-wrap;background:#e5e9df;padding:12px}a:hover{color:rgb(180,60,0)}
+</style><body>
+<kindpath-layout><h1>Component garden guide</h1>
+<kindpath-card><section><h2>Planting notes</h2><p>Keep <b>important text</b> and <i>emphasized text</i>.</p><p><kindpath-inline>Inline-left</kindpath-inline> <kindpath-inline>Inline-right</kindpath-inline></p></section>
+<section><h2>Example code</h2><pre><code>if (water &lt; 2) {
+  water += 1;
+}</code></pre><p>Updated <time datetime="2026-11-10">10 November</time></p><a href="https://example.com/elsewhere">Inactive component link</a></section></kindpath-card>
+<kindpath-contents><p>Content through a boxless component</p></kindpath-contents>
+<kindpath-slotted><p>Visible slotted light content</p></kindpath-slotted>
+<kindpath-closed><p>unrendered-light-marker</p></kindpath-closed>
+<kindpath-hidden hidden><p>hidden-component-marker</p></kindpath-hidden>
+<kindpath-hidden class="hidden-panel"><p>hidden-css-component-marker</p></kindpath-hidden>
+<textarea>private-textarea-marker</textarea><select><option>private-option-marker</option></select>
+<input value="private-input-marker"><button onclick="location.href='/elsewhere'">Inactive component button</button>
+<iframe srcdoc="<p>embedded-frame-marker</p>"></iframe>
+<p>Component end marker</p></kindpath-layout>
+<script>
+document.querySelector('kindpath-slotted').attachShadow({mode:'open'}).innerHTML='<slot></slot><span>shadow-tree-marker</span>';
+document.querySelector('kindpath-closed').attachShadow({mode:'closed'}).innerHTML='<p>closed-shadow-marker</p>';
+</script></body></html>

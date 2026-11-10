@@ -54,3 +54,18 @@ test('snapshot text count is derived from accepted text, excluding whitespace, m
   assert.equal(empty.capturedTextCharacters,0,'Do not trust a worker-supplied quality count');
   assert.equal(mapSitePreview(raw([{text:'x'.repeat(4000)},{text:'x'.repeat(4000)},{text:'x'.repeat(2000)}]),identity).capturedTextCharacters,10000);
 });
+
+
+test('body appearance uses independently validated CSS without executable resources',()=>{
+ const result=mapSitePreview({...raw([{text:'Light text'}]),bodyStyle:{'background-color':'rgb(16, 24, 40)',color:'rgb(248, 250, 252)',padding:'24px','font-size':'24px'}},identity);
+ assert.match(result.html,/body\{[^}]*background-color:rgb\(16, 24, 40\)/);
+ assert.equal(result.capturedTextCharacters,9);
+ for(const bodyStyle of [null,[],{background:'url(https://example.com/private)'},{color:'red; background:url(//example.com)'},{position:'fixed'},{color:'</style><script>'}]) {
+  assert.throws(()=>mapSitePreview({...raw(),bodyStyle},identity),/Invalid site snapshot/);
+ }
+});
+test('passive text markup is retained while raw component tags and active elements remain rejected',()=>{
+ const result=mapSitePreview(raw([element('p',[element('b',[{text:'Bold'}]),element('i',[{text:'Italic'}]),element('time',[{text:'Today'}])]),element('pre',[element('code',[{text:'a < b\n  next'}])])]),identity);
+ assert.match(result.html,/<b/);assert.match(result.html,/<i/);assert.match(result.html,/<time/);assert.match(result.html,/<pre/);assert.match(result.html,/<code[^>]*>a &lt; b\n  next/);
+ for(const tag of ['kindpath-card','textarea','select','option','template','script','style','svg','iframe'])assert.throws(()=>mapSitePreview(raw([element(tag,[{text:'Excluded'}])]),identity));
+});

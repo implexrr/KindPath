@@ -2,7 +2,7 @@ import { PREVIEW_GUARD } from '../../shared/previewPolicy.js';
 import type { SitePreview } from '../../shared/types.js';
 import { validatePublicUrl } from './publicPolicy.js';
 
-const tags = new Set(['header','nav','main','section','article','aside','footer','div','span','p','h1','h2','h3','h4','h5','h6','blockquote','figure','figcaption','dl','dt','dd','table','caption','thead','tbody','tfoot','tr','th','td','hr','a','form','input','button','label','strong','em','small','br','ul','ol','li']);
+const tags = new Set(['header','nav','main','section','article','aside','footer','div','span','p','h1','h2','h3','h4','h5','h6','blockquote','figure','figcaption','dl','dt','dd','table','caption','thead','tbody','tfoot','tr','th','td','hr','a','form','input','button','label','strong','em','small','b','i','pre','code','time','br','ul','ol','li']);
 const length = /^(?:auto|none|normal|-?(?:\d{1,5})(?:\.\d{1,4})?px)(?: (?:auto|-?\d{1,5}(?:\.\d{1,4})?px)){0,3}$/;
 const color = /^(?:transparent|[a-z]{1,24}|#[a-fA-F0-9]{3,8}|rgba?\([0-9.,% ]{1,80}\))$/;
 const styles = new Map<string,RegExp>([
@@ -40,6 +40,7 @@ export function mapSitePreview(raw: unknown, identity: {scanId:string;requestedU
       return `${key}:${value};`;
     }).join('');
   }
+  if (snapshot.bodyStyle !== undefined) css = `body{${declarations(snapshot.bodyStyle)}}`;
   function render(value: unknown, depth = 0): string {
     if (++count > 300 || depth > 15) return invalid();
     const node = record(value);
@@ -75,7 +76,7 @@ export function mapSitePreview(raw: unknown, identity: {scanId:string;requestedU
   if (html.length > 100000) return invalid();
   return {mode:'public',...identity,requestedUrl,url,title,capturedAt:snapshot.capturedAt,capturedTextCharacters,html,limitations:[
     'A limited visual approximation captured after automated analysis in the same browser visit; dynamic content may differ.',
-    'Scripts, embedded frames, images, media, custom fonts, form values and unsupported structure/styles are omitted. Only simple readable link/button hover rules are retained.',
+    'Scripts, embedded frames, images, media, custom fonts, form values, shadow-tree content and unsupported structure/styles are omitted. Component wrappers are normalized to inert HTML. Only simple readable link/button hover rules are retained.',
     `At least ${snapshot.omittedSubtrees} subtrees, ${snapshot.omittedText} text characters and ${snapshot.omittedStyles} style declarations were omitted.`,
   ]};
 }
