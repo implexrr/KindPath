@@ -9,6 +9,28 @@ const browserType = new Map([['chromium', chromium], ['firefox', firefox], ['web
 assert.ok(browserType, 'Choose a fixed browser engine');
 const browser = await browserType.launch({ headless: true, ...(engine === 'chromium' ? { chromiumSandbox: true } : {}) });
 try {
+  if (engine === 'chromium') {
+    const { installNavigationGuard } = await import('./gateway/navigation-guard.mjs');
+    for (const analyzing of [false, true]) {
+      const guardPage = await browser.newPage({serviceWorkers:'block'});
+      const session = await guardPage.context().newCDPSession(guardPage);
+      let scanning = false;
+      await guardPage.route('**/*', route => route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>Guard lifecycle</title><h1>Controlled page</h1>'}));
+      // Use a real CDP session while retaining a handle for deliberate detachment.
+      const guard = await installNavigationGuard({
+        context: () => ({newCDPSession: async () => session}),
+        close: () => guardPage.close(),
+      }, 'https://example.com/', {isScanning:()=>scanning,onPageChange:()=>assert.fail('Unexpected document change')});
+      if (analyzing) {
+        await guardPage.goto('https://example.com/');
+        assert.equal(guard.failed,false); scanning = true;
+      }
+      const closed = guardPage.waitForEvent('close');
+      await session.detach(); await closed;
+      assert.equal(guard.failed,true,'Lost navigation interception must fail closed');
+      assert.equal(guardPage.isClosed(),true);
+    }
+  }
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: true });
   page.setDefaultTimeout(10000);
   let previews = 0; const unexpected = [];
@@ -498,6 +520,7 @@ try {
     { ...publicReport, url: 'https://www.www.example.com/start' },
     { ...publicReport, url: 'https://example.com/other' },
     { ...publicReport, url: 'https://example.com/start?changed=1' },
+    { ...publicReport, url: 'https://example.com/start?' },
     { ...publicReport, url: 'http://example.com/start' },
     { ...publicReport, url: 'http://printer.local/' },
     { ...publicReport, url: 'https://user:pass@example.org/' },

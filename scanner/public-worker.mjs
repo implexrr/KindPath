@@ -8,6 +8,7 @@ import { chromium } from 'playwright';
 import AxeBuilder from '@axe-core/playwright';
 import { validateTarget } from './gateway/policy.mjs';
 import { navigationRejection } from './gateway/navigation.mjs';
+import { installNavigationGuard } from './gateway/navigation-guard.mjs';
 import { summarizeRules } from './public-report.mjs';
 
 const socketPath = '/run/kindpath/egress.sock';
@@ -28,7 +29,7 @@ let relay;
 let rejectedNavigation = false;
 let pageChanged = false;
 let redirectFailure;
-let navigationGuardFailed = false;
+let navigationGuard;
 try {
   if (process.argv.length > 4 || (process.argv[3] && !capture) || (capture && target === 'verify-public-isolation')) throw new Error('Invalid worker task');
   if (process.getuid() === 0 || Object.values(networkInterfaces()).flat().some(a => a && !a.internal)) throw new Error('Isolation missing');
@@ -91,42 +92,17 @@ try {
     });
     page.on('requestfailed', () => { failedRequests++; });
     page.on('response', response => { if (response.status() >= 400) failedRequests++; });
-    // A separate CDP session pauses every main-document request, including
-    // redirect hops that Playwright's normal route handler does not intercept.
-    // Keep context routing for all other request/method/budget restrictions.
-    const navigationSession = await context.newCDPSession(page);
-    const { frameTree } = await navigationSession.send('Page.getFrameTree');
-    const visited = new Set();
-    let previousUrl = target;
-    navigationSession.on('Fetch.requestPaused', event => {
-      void (async () => {
-        if (event.frameId === frameTree.frame.id) {
-          if (scanningDocument) pageChanged = true;
-          const url = event.request.url;
-          redirectFailure ??= navigationRejection(target, url, previousUrl);
-          if (!scanningDocument && !redirectFailure && visited.has(url)) redirectFailure = 'REDIRECT_LOOP';
-          if (!scanningDocument && !redirectFailure && visited.size >= 10) redirectFailure = 'REDIRECT_LIMIT';
-          if (redirectFailure || pageChanged) {
-            await navigationSession.send('Fetch.failRequest', { requestId: event.requestId, errorReason: 'BlockedByClient' });
-            return;
-          }
-          visited.add(url); previousUrl = url;
-        }
-        await navigationSession.send('Fetch.continueRequest', { requestId: event.requestId });
-      })().catch(() => {
-        // Losing interception must never be treated as successful enforcement.
-        navigationGuardFailed = true;
-        void page.close().catch(() => {});
-      });
+    navigationGuard = await installNavigationGuard(page, target, {
+      isScanning: () => scanningDocument,
+      onPageChange: () => { pageChanged = true; },
     });
-    await navigationSession.send('Fetch.enable', { patterns: [{ resourceType: 'Document', requestStage: 'Request' }] });
     stage = 'page-loading';
     const response = await page.goto(target, { waitUntil: 'load', timeout: 15_000 });
     if (!response) {missingResponse=true;throw new Error('Navigation failed');}
     if (!response.ok()) {rejectedStatus=response.status();throw new Error('Navigation failed');}
-    if (redirectFailure || navigationGuardFailed) throw new Error('Navigation rejected');
+    if (navigationGuard.failure || navigationGuard.failed) throw new Error('Navigation rejected');
     const scannedUrl = page.url();
-    redirectFailure = navigationRejection(target, scannedUrl, previousUrl);
+    redirectFailure = navigationRejection(target, scannedUrl, navigationGuard.lastUrl);
     if (redirectFailure) throw new Error('Invalid final page');
     if(latestDocumentRequest!==response.request()){pageChanged=true;throw new Error('Pending document navigation');}
     scanningDocument=true;
@@ -138,12 +114,12 @@ try {
     stage = 'accessibility-analysis';
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).options({ iframes: false }).analyze();
     // Do not label findings from one document with another URL, including same-URL reloads.
-    if (navigationGuardFailed || redirectFailure || pageChanged || page.url() !== scannedUrl || result.url !== scannedUrl || !(await page.evaluate(original=>original===document,scannedDocument))) {
+    if (navigationGuard.failed || navigationGuard.failure || redirectFailure || pageChanged || page.url() !== scannedUrl || result.url !== scannedUrl || !(await page.evaluate(original=>original===document,scannedDocument))) {
       pageChanged = true; throw new Error('Page changed during scan');
     }
     if (capture) stage = 'capture';
     const preview = capture ? await captureSiteSnapshot(page) : undefined;
-    if (navigationGuardFailed || redirectFailure || pageChanged || page.url() !== scannedUrl || (preview && preview.url !== scannedUrl) || !(await page.evaluate(original=>original===document,scannedDocument))) {
+    if (navigationGuard.failed || navigationGuard.failure || redirectFailure || pageChanged || page.url() !== scannedUrl || (preview && preview.url !== scannedUrl) || !(await page.evaluate(original=>original===document,scannedDocument))) {
       pageChanged = true; throw new Error('Page changed during capture');
     }
     stage = 'worker-result';
@@ -156,12 +132,12 @@ try {
       passes: result.passes.length, inapplicable: result.inapplicable.length }));
   }
 } catch (error) {
+  redirectFailure ??= navigationGuard?.failure;
   const diagnostic = redirectFailure ? {stage:'page-loading',code:redirectFailure}
     : pageChanged ? {stage,code:'PAGE_CHANGED_DURING_SCAN'}
     : missingResponse ? {stage,code:'NO_RESPONSE'} : rejectedStatus !== undefined ? {stage:'page-loading',code:'HTTP_STATUS',httpStatus:rejectedStatus}
     : classifyFailure(error,stage);
-  const code = diagnostic?.code === 'TLS_CERTIFICATE_REJECTED' ? 'TLS_CERTIFICATE_REJECTED'
-    : pageChanged ? 'PAGE_CHANGED_DURING_SCAN' : redirectFailure ?? (rejectedNavigation ? 'DESTINATION_REJECTED' : 'SCAN_FAILED');
+  const code = diagnostic?.code ?? (rejectedNavigation ? 'DESTINATION_REJECTED' : 'SCAN_FAILED');
   emitDiagnostic(diagnostic);
   process.stderr.write(`Isolated gateway scan failed: ${code}.\n`); process.exitCode = 1;
 }
