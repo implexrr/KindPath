@@ -26,6 +26,13 @@ const siteCss='*{box-sizing:border-box}body{font:18px Arial;color:#111;backgroun
 function handle(req,res){
   const path=req.url.split('?')[0];
   process.stdout.write(JSON.stringify({method:req.method,path})+'\n');
+  if(path==='/pending-script'){res.writeHead(200,{'Content-Type':'text/html'});res.end(html.replace('</head>','<script>window.stop=()=>{throw new Error("Untrusted page stop override")};</script><script type="module" src="/delayed-module.js"></script></head>'));return;}
+  // Start the unfinished dependency late enough to exceed the page deadline,
+  // rather than only the gateway's shorter per-request timeout.
+  if(path==='/delayed-module.js'){setTimeout(()=>{res.writeHead(200,{'Content-Type':'application/javascript'});res.end('import "/unfinished-script.js";');},6000);return;}
+  if(path==='/unfinished-script.js'){res.writeHead(200,{'Content-Type':'application/javascript'});res.flushHeaders();return;}
+  if(path==='/script-pending-load'){res.writeHead(200,{'Content-Type':'text/html'});res.end('<!doctype html><script>location.replace("/pending-script")</script>');return;}
+  if(path==='/pending-document'){res.writeHead(200,{'Content-Type':'text/html'});res.write('<!doctype html><html><body><h1>Unfinished main document</h1>');return;}
   if(path==='/raster'){res.writeHead(200,{'Content-Type':'text/html'});res.end(awaitRaster);return;}
   if(path==='/components'||path==='/body-contrast'){res.writeHead(200,{'Content-Type':'text/html'});res.end(path==='/components'?componentPage:contrastPage);return;}
   if(path==='/site.css'){setTimeout(()=>{res.writeHead(200,{'Content-Type':'text/css'});res.end(siteCss);},150);return;}

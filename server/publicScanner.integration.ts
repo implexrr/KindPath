@@ -71,6 +71,7 @@ for (const scenario of [
   {path:'/redirect',final:'/redirect'}, {path:'/content',final:'/content'},
   {path:'/indented-content',final:'/indented-content'}, {path:'/indented-budget',final:'/indented-budget'},
   {path:'/components',final:'/components'}, {path:'/body-contrast',final:'/body-contrast'},
+  {path:'/pending-script',final:'/pending-script'}, {path:'/script-pending-load',final:'/pending-script'}, {path:'/pending-document',final:'/pending-document'},
   {path:'/forms',final:'/forms'}, {path:'/raster',final:'/raster'}, {path:'/missing',final:'/missing'},
   {path:'/same-url-history',final:'/same-url-history'}, {path:'/same-url-reload',final:'/same-url-reload'},
 ]) {
@@ -88,7 +89,7 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
     captureEnabled: () => true,
     enabled: () => true, // Local test instance only; the application's router/runner gates stay false.
     planTarget: async (url, signal) => {
-      assert.ok(url === target || (scenario.path === '/redirect' && url === 'https://www.example.com/'));
+      assert.ok(url === target || (scenario.path === '/redirect' && url === 'https://www.example.com/') || (scenario.path==='/script-pending-load'&&url==='http://example.com/'));
       return createDestinationPlan(url, async host => {
         lookups++; assert.ok(['example.com','www.example.com'].includes(host)); return [{ address: PINNED_FIXTURE_IP, family: 4 }];
       }, signal);
@@ -124,13 +125,14 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
     const response = await fetch(`http://127.0.0.1:${address.port}/api/scan-public`, {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url:target}), signal: AbortSignal.timeout(80000),
     });
-    if (scenario.path === '/missing' || scenario.path === '/same-url-reload') {
+    if (scenario.path === '/missing' || scenario.path === '/same-url-reload' || scenario.path === '/pending-document') {
       assert.equal(response.status,503); const failure=await response.json();
       assert.equal(failure.code,'SCAN_FAILED'); assert.equal(failure.sitePreview,undefined);
-      assert.deepEqual(failure.diagnostic,scenario.path==='/missing' ? {stage:'page-loading',code:'HTTP_STATUS',httpStatus:404} : {stage:'accessibility-analysis',code:'PAGE_CHANGED_DURING_SCAN'});
+      assert.deepEqual(failure.diagnostic,scenario.path==='/pending-document' ? {stage:'page-loading',code:'TIMEOUT'} : scenario.path==='/missing' ? {stage:'page-loading',code:'HTTP_STATUS',httpStatus:404} : {stage:'accessibility-analysis',code:'PAGE_CHANGED_DURING_SCAN'});
     } else {
     const report = await response.json();
     assert.equal(response.status,200,JSON.stringify({code:report.code,diagnostic:report.diagnostic}));
+    if(scenario.path==='/pending-script'||scenario.path==='/script-pending-load'){assert.equal(report.pageLoadIncomplete,true);assert.ok(report.limitations.some((text:string)=>text.includes('partial report')));}
     assert.equal(report.mode, 'public'); assert.equal(report.requestedUrl, target); assert.equal(report.url,'http://'+(scenario.path==='/redirect'?'www.example.com':'example.com')+scenario.final);
     if (scenario.path === '/redirect') for (const id of ['image-alt','label','button-name']) assert.ok(report.findings.some((finding: {id:string}) => finding.id === id));
     assert.ok(report.limitations.some((text: string) => /requests were blocked by policy/.test(text)));

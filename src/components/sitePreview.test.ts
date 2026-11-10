@@ -53,3 +53,23 @@ test('capture failures and capture-disabled results still require valid public s
  assert.equal(hasMatchingCaptureResult(unavailable,false),false);
  assert.equal(hasMatchingCaptureResult(report,false),false);
 });
+
+test('visual filters stay inside the guarded preview document', async()=>{
+  const {snapshotDocument}=await import('./snapshotDocument.js');
+  const {applyVisionPreset}=await import('./visualEffects.js');
+  const settings=applyVisionPreset('red-green');
+  const original=snapshotDocument(preview,false,settings,'vision-test',false);
+  assert.ok(original.endsWith(preview.html));assert.ok(!original.includes('feColorMatrix'));
+  const modified=snapshotDocument(preview,true,settings,'vision-test',false);
+  assert.ok(modified.includes('<body style="filter:url(#vision-test)">'));
+  assert.ok(modified.includes('<filter id="vision-test"'));
+  assert.ok(modified.includes("script-src 'none'"));assert.ok(modified.includes("connect-src 'none'"));
+  assert.ok(!modified.includes('<script'));
+  const neutral=snapshotDocument(preview,true,applyVisionPreset('original'),'vision-test',false);
+  assert.equal(neutral,original);
+});
+
+test('JSON export retains the explicit partial-loading marker',()=>{
+  const exported=createReportExport({...report,pageLoadIncomplete:true,limitations:['The page was partially loaded.']});
+  assert.equal(exported.report.pageLoadIncomplete,true);assert.ok(exported.report.limitations?.includes('The page was partially loaded.'));
+});

@@ -34,6 +34,7 @@ export function createReportExport(report: Report) {
   const exported: Report = {
     mode: report.mode, url: report.url, generatedAt: report.generatedAt,
     ...(coverage ? { coverage } : {}),
+    ...(report.mode==='public'&&report.pageLoadIncomplete===true?{pageLoadIncomplete:true as const}:{}),
     ...(report.mode === 'public' && report.requestedUrl ? { requestedUrl: report.requestedUrl } : {}),
     manualChecks: [...report.manualChecks], findings: report.findings.map(copyFinding), limitations,
     ...(report.scanner ? { scanner: {

@@ -103,11 +103,27 @@ try {
     stage = 'page-loading';
     const loadingDeadline=Date.now()+15_000;
     let response;
+    let pageLoadIncomplete=false;
+    const stopIncompleteLoad=async error=>{
+      // Require the complete successful main response and parsed HTML before
+      // stopping pending resources. Preserve the final navigation/document proof.
+      const latest=latestDocumentRequest;
+      if(navigationGuard.failure||navigationGuard.failed||!latest||!completedRequests.has(latest)
+        ||Date.now()-lastMainRequestAt<300)throw error;
+      const received=await latest.response();
+      if(!received?.ok()||navigationRejection(target,page.url(),navigationGuard.lastUrl))throw error;
+      const parsed=await page.evaluate(()=>document.readyState!=='loading'&&Boolean(document.body));
+      if(!parsed||latest!==latestDocumentRequest)throw error;
+      await navigationGuard.stopLoading();
+      if(latest!==latestDocumentRequest)throw error;
+      pageLoadIncomplete=true;
+    };
     try { response=await page.goto(target,{waitUntil:'load',timeout:15_000}); }
     catch(error){
-      // A script/meta navigation can abort goto while replacing the entry page.
-      // Only that browser abort is eligible to settle into a later response.
-      if(!/^page\.goto:\s*net::ERR_ABORTED\b/.test(error?.message??''))throw error;
+      // Script/meta replacements can abort goto. Both the original navigation
+      // and a permitted replacement may need the same bounded partial fallback.
+      if(error?.name==='TimeoutError')await stopIncompleteLoad(error);
+      else if(!/^page\.goto:\s*net::ERR_ABORTED\b/.test(error?.message??''))throw error;
     }
     // goto may return the entry response while a permitted replacement is loading.
     // Require the latest main request to finish and a brief quiet interval before
@@ -116,11 +132,16 @@ try {
       if(navigationGuard.failure||navigationGuard.failed)throw new Error('Navigation rejected');
       const latest=latestDocumentRequest;
       let loaded=false;
-      try{loaded=await page.evaluate(()=>document.readyState==='complete');}catch{/* A replacement may be committing. */}
-      if(Date.now()>=loadingDeadline){const error=new Error('Page loading timed out');error.name='TimeoutError';throw error;}
-      if(latest&&completedRequests.has(latest)&&loaded&&Date.now()-lastMainRequestAt>=300){
+      try{loaded=await page.evaluate(partial=>document.readyState==='complete'||(partial&&document.readyState==='interactive'),pageLoadIncomplete);}catch{/* A replacement may be committing. */}
+      if(latest&&completedRequests.has(latest)&&loaded&&Date.now()-lastMainRequestAt>=300&&(Date.now()<loadingDeadline||pageLoadIncomplete)){
         response=await latest.response();
         if(latest===latestDocumentRequest)break;
+      }
+      if(Date.now()>=loadingDeadline){
+        const error=new Error('Page loading timed out');error.name='TimeoutError';
+        if(pageLoadIncomplete)throw error;
+        await stopIncompleteLoad(error);
+        continue;
       }
       await new Promise(resolve=>setTimeout(resolve,50));
     }
@@ -152,7 +173,7 @@ try {
     stage = 'worker-result';
     const violations = summarizeRules(result.violations);
     const incomplete = summarizeRules(result.incomplete);
-    process.stdout.write(JSON.stringify({ fixture: 'public', url: scannedUrl, ...(preview ? {preview} : {}),...(captureFailure ? {captureFailure} : {}),
+    process.stdout.write(JSON.stringify({ fixture: 'public', url: scannedUrl, ...(pageLoadIncomplete?{pageLoadIncomplete:true}:{}), ...(preview ? {preview} : {}),...(captureFailure ? {captureFailure} : {}),
       coverage: { blockedRequests, failedRequests, omittedRules: violations.omittedRules + incomplete.omittedRules,
         omittedNodes: violations.omittedNodes + incomplete.omittedNodes },
       engine: result.testEngine.version, violations: violations.rules, incomplete: incomplete.rules,

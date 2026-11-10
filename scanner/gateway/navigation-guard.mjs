@@ -45,5 +45,13 @@ export async function installNavigationGuard(page, target, { isScanning, onPageC
     })().catch(fail);
   });
   await session.send('Fetch.enable', { patterns: [{ resourceType: 'Document', requestStage: 'Request' }] });
+  // Use the browser control channel, not a window.stop implementation supplied
+  // by the untrusted page. A failed stop must never permit a partial report.
+  state.stopLoading = async () => {
+    if (state.failed || state.failure) throw new Error('Navigation guard unavailable');
+    try { await session.send('Page.stopLoading'); }
+    catch (error) { fail(); throw error; }
+    if (state.failed || state.failure) throw new Error('Navigation guard unavailable');
+  };
   return state;
 }

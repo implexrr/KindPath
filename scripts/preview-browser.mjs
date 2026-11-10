@@ -60,6 +60,7 @@ try {
     assert.equal(exported.report.requestedUrl, expected.requestedUrl);
     assert.equal(exported.report.generatedAt, expected.generatedAt);
     assert.deepEqual(exported.report.coverage,coverage ?? undefined);
+    assert.equal(exported.report.pageLoadIncomplete,expected.pageLoadIncomplete);
     assert.deepEqual(exported.report.findings, expected.findings);
     assert.deepEqual(exported.report.scanner, expected.scanner);
     assert.deepEqual(exported.report.manualChecks, expected.manualChecks);
@@ -229,7 +230,26 @@ try {
   assert.equal(await page.getByRole('slider').count(), 4);
   assert.equal(await slider('Colour strength').inputValue(), '65');
   for (const name of names.slice(1)) assert.equal(await slider(name).inputValue(), '0');
-  const matrix = page.locator('feColorMatrix');
+  const modifiedBody = page.frameLocator('iframe').nth(1).locator('body');
+  const matrix = page.frameLocator('iframe').nth(1).locator('feColorMatrix');
+  const waitForModifiedDocument=async()=>{
+    const source=await modified.getAttribute('srcdoc');
+    const expectedFilter=source.match(/<body style="filter:([^"]*)"/)?.[1]??'';
+    const normalizedFilter=await page.evaluate(value=>{const element=document.createElement('div');element.style.filter=value;return element.style.filter;},expectedFilter);
+    let last;
+    const expectedMatrix=source.match(/<feColorMatrix type="matrix" values="([^"]*)"/)?.[1]??null;
+    for(let attempt=0;attempt<100;attempt++){
+      try{
+        const actual=await modifiedBody.evaluate(body=>({filter:body.style.filter,matrix:body.ownerDocument.querySelector('feColorMatrix')?.getAttribute('values')??null}));
+        last=actual;
+        if(actual.filter===normalizedFilter&&actual.matrix===expectedMatrix)return actual.filter;
+      }catch{/* A preset replaces srcdoc; wait for the new opaque document. */}
+      await page.waitForTimeout(20);
+    }
+    throw new Error('The modified preview did not finish loading its current effects: '+JSON.stringify({expected:normalizedFilter,expectedMatrix,actual:last}));
+  };
+  const matrixValues=async()=>{await waitForModifiedDocument();return matrix.getAttribute('values');};
+
   const presets = page.getByRole('group', {name:'Vision presets',exact:true});
   const selectedPreset = () => presets.getByRole('button', {pressed:true});
   const presetCases = [
@@ -249,20 +269,20 @@ try {
     for (let index=0;index<names.length;index++)assert.equal(await slider(names[index]).inputValue(),String(strengths[index]));
     assert.equal(await page.locator('iframe').first().evaluate(element=>element.style.filter),'');
     if(name==='Original') {
-      assert.equal(await modified.evaluate(element=>element.style.filter),'');assert.equal(await page.locator('.field-mask').count(),0);
+      assert.equal(await waitForModifiedDocument(),'');assert.equal(await page.locator('.field-mask').count(),0);
     } else if(name==='Blurred vision') {
-      assert.equal(await modified.evaluate(element=>element.style.filter),'blur(2px)');assert.equal(await page.locator('.field-mask').count(),0);
+      assert.equal(await waitForModifiedDocument(),'blur(2px)');assert.equal(await page.locator('.field-mask').count(),0);
     } else if(name==='Reduced peripheral vision') {
-      assert.equal(await modified.evaluate(element=>element.style.filter),'');assert.equal(await page.locator('.field-mask').evaluate(element=>element.style.opacity),'0.65');
+      assert.equal(await waitForModifiedDocument(),'');assert.equal(await page.locator('.field-mask').evaluate(element=>element.style.opacity),'0.65');
     } else {
-      assert.match(await modified.evaluate(element=>element.style.filter),/url\(/);
+      assert.match(await waitForModifiedDocument(),/url\(/);
       assert.equal(await page.getByLabel('Colour preset',{exact:true}).inputValue(),name.startsWith('Red')?'red-green':'blue-yellow');
     }
   }
   await page.getByRole('button',{name:'Apply visual effects',exact:true}).press('Space');
   assert.equal(await selectedPreset().count(),0);assert.equal(await page.locator('.field-mask').count(),0);
   await presets.getByRole('button',{name:'Blurred vision',exact:true}).press('Space');
-  assert.equal(await selectedPreset().innerText(),'Blurred vision');assert.equal(await modified.evaluate(element=>element.style.filter),'blur(2px)');
+  assert.equal(await selectedPreset().innerText(),'Blurred vision');assert.equal(await waitForModifiedDocument(),'blur(2px)');
   await slider('Blur strength').press('ArrowRight');
   assert.equal(await selectedPreset().count(),0);
   await page.getByText('Custom visual settings are applied to the modified snapshot only.',{exact:true}).waitFor();
@@ -270,30 +290,30 @@ try {
   assert.deepEqual(page.frames().map(frame=>frame.url()),frameAddressesBeforePresets);
   await page.getByRole('button',{name:'Reset effects',exact:true}).press('Enter');
   assert.equal(await selectedPreset().innerText(),'Red–green colour vision');
-  const redGreen = await matrix.getAttribute('values');
+  const redGreen = await matrixValues();
   await page.getByLabel('Colour preset', { exact: true }).selectOption('blue-yellow');
-  assert.notEqual(await matrix.getAttribute('values'), redGreen);
+  assert.notEqual(await matrixValues(), redGreen);
   await page.getByLabel('Colour preset', { exact: true }).selectOption('grayscale');
   await slider('Colour strength').press('End');
-  const gray = (await matrix.getAttribute('values')).split(' ').map(Number);
+  const gray = (await matrixValues()).split(' ').map(Number);
   assert.deepEqual(gray.slice(0,3), gray.slice(5,8)); assert.deepEqual(gray.slice(0,3), gray.slice(10,13));
   await slider('Blur strength').press('End');
   await slider('Contrast reduction').press('End');
   await slider('Peripheral restriction').press('End');
-  assert.match(await modified.evaluate(element => element.style.filter), /url\(["']?#vision-.*contrast\(.*blur\(4px\)/);
+  assert.match(await waitForModifiedDocument(), /url\(["']?#vision-.*contrast\(.*blur\(4px\)/);
   assert.equal(await page.locator('.field-mask').evaluate(element => element.style.opacity), '1');
   assert.equal(await page.locator('iframe').first().evaluate(element => element.style.filter), '');
   const toggle = page.getByRole('button', { name: 'Apply visual effects', exact: true });
   await toggle.press('Space');
   assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
-  assert.equal(await modified.evaluate(element => element.style.filter), '');
+  assert.equal(await waitForModifiedDocument(), '');
   assert.equal(await page.locator('.field-mask').count(), 0);
   for (const name of names) assert.equal(await slider(name).inputValue(), '100');
   await slider('Blur strength').press('Home'); await slider('Blur strength').press('ArrowRight');
   assert.equal(await slider('Blur strength').inputValue(), '1');
-  assert.equal(await modified.evaluate(element => element.style.filter), '');
+  assert.equal(await waitForModifiedDocument(), '');
   await toggle.press('Space');
-  assert.match(await modified.evaluate(element => element.style.filter), /blur\(0.04px\)/);
+  assert.match(await waitForModifiedDocument(), /blur\(0.04px\)/);
   for (const [name, value] of [['Mild',25], ['Moderate',50], ['Strong',80]]) {
     await page.getByRole('button', { name, exact: true }).press('Enter');
     for (const label of names) assert.equal(await slider(label).inputValue(), String(value));
@@ -306,7 +326,7 @@ try {
   for (const name of names.slice(1)) assert.equal(await slider(name).inputValue(), '0');
   assert.equal(await toggle.getAttribute('aria-pressed'), 'true');
   for (const name of names) await slider(name).press('Home');
-  assert.equal(await modified.evaluate(element => element.style.filter), '');
+  assert.equal(await waitForModifiedDocument(), '');
   assert.equal(await page.locator('.field-mask').count(), 0);
   await page.getByText('All strengths are zero. Both snapshots show the original appearance.', { exact: true }).waitFor();
   const neutralPixels = await modified.screenshot();
@@ -654,6 +674,10 @@ try {
     await page.getByRole('alert').filter({hasText:'snapshot did not match'}).waitFor();
     assert.equal(await page.locator('iframe').count(),0); assert.equal(await page.locator('.results').count(),0);
   }
+  publicResponse={...publicReport,pageLoadIncomplete:true,sitePreview:data.sitePreview};
+  await publicButton.click();await page.locator('.results').waitFor();
+  await page.getByRole('region',{name:'Scan coverage',exact:true}).getByText(/Unfinished loads were stopped; this partial report/).waitFor();
+  await assertDownload(publicResponse);
   // Browser-rendered previews: decoded pixels, fitting, scroll access, filters and inert hover areas.
   publicResponse={...publicReport,scanId:data.imagePreview.scanId,sitePreview:data.imagePreview};
   await publicButton.click();await page.locator('.results').waitFor();
@@ -681,13 +705,34 @@ try {
   }
   const imagePresets=page.getByRole('group',{name:'Vision presets',exact:true});
   await imagePresets.getByRole('button',{name:'Original',exact:true}).click();
+  const visiblePixel=async index=>{
+    if(index===1)await waitForModifiedDocument();
+    const element=imageFrames.nth(index);
+    await page.frameLocator('iframe').nth(index).locator('img').evaluate(img=>img.decode());
+    await element.scrollIntoViewIfNeeded();
+    const box=await element.boundingBox();
+    const imageWidth=await page.frameLocator('iframe').nth(index).locator('img').evaluate(img=>img.getBoundingClientRect().width);
+    const bytes=await page.screenshot({clip:box});
+    return page.evaluate(async({data,x,y})=>{
+      const img=new Image();img.src='data:image/png;base64,'+data;await img.decode();
+      const canvas=document.createElement('canvas');canvas.width=img.width;canvas.height=img.height;
+      const context=canvas.getContext('2d');context.drawImage(img,0,0);
+      return [...context.getImageData(x,y,1,1).data].slice(0,3);
+    },{data:bytes.toString('base64'),x:Math.floor(imageWidth*1270/1280),y:Math.floor(imageWidth*500/1280)});
+  };
+  const assertPixel=(actual,expected)=>expected.forEach((value,index)=>assert.ok(Math.abs(actual[index]-value)<=3,`Expected rendered pixel ${expected}, got ${actual}`));
   const originalPixels=await imageFrames.first().screenshot();
   const unfilteredPixels=await imageFrames.nth(1).screenshot();
-  for(const name of ['Blurred vision','Red–green colour vision']){
+  assertPixel(await visiblePixel(0),[192,32,64]);
+  for(const [name,expected] of [['Red–green colour vision',[147,90,59]],['Blue–yellow colour vision',[187,44,54]]]){
     await imagePresets.getByRole('button',{name,exact:true}).click();
-    assert.notDeepEqual(await imageFrames.nth(1).screenshot(),unfilteredPixels,'The selected effect must visibly change the raster preview');
-    assert.deepEqual(await imageFrames.first().screenshot(),originalPixels,'The original image must remain visually unchanged');
+    assertPixel(await visiblePixel(1),expected);
+    assertPixel(await visiblePixel(0),[192,32,64]);
+    assert.equal(await imageFrames.nth(1).evaluate(el=>el.style.filter),'','No parent filter may cross the opaque iframe boundary');
   }
+  await imagePresets.getByRole('button',{name:'Blurred vision',exact:true}).click();
+  assert.notDeepEqual(await imageFrames.nth(1).screenshot(),unfilteredPixels,'Blur must change the raster preview');
+  assert.deepEqual(await imageFrames.first().screenshot(),originalPixels,'The original image must remain visually unchanged');
   const hotspot=page.frameLocator('iframe').first().locator('.kp-link').first();await hotspot.hover();
   assert.equal(await hotspot.evaluate(node=>getComputedStyle(node).outlineStyle),'solid');await hotspot.dispatchEvent('click');
   assert.equal(page.frames().slice(1).every(frame=>frame.url()==='about:srcdoc'),true);assert.equal(page.context().pages().length,1);
@@ -764,7 +809,7 @@ try {
         const presetGroup=page.getByRole('group',{name:'Vision presets',exact:true});
         await presetGroup.getByRole('button',{name:'Original',exact:true}).press('Enter');
         await presetGroup.getByRole('button',{name:'Blurred vision',exact:true}).press('Enter');
-        assert.equal(await page.locator('iframe').nth(1).evaluate(node=>node.style.filter),'blur(2px)');
+        assert.equal(await waitForModifiedDocument(),'blur(2px)');
         assert.equal(await page.locator('iframe').first().evaluate(node=>node.style.filter),'');
         assert.equal(publicCalls,scansBefore);
       }

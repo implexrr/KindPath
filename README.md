@@ -35,6 +35,8 @@ Each destination independently passes public DNS/address validation, destination
 
 The API returns JSON; **Download report JSON** exports the findings, incomplete checks, coverage and limitations without embedding the preview image. Automated results do not establish accessibility conformance. Manual keyboard, screen-reader and usability review is still necessary.
 
+If the 15-second loading deadline expires after the successful main document has fully arrived and its HTML is parsed, KindPath can stop unfinished resource loads and scan the rendered content. The report is explicitly marked `pageLoadIncomplete: true`, with a partial-coverage notice in the interface and JSON export. An unfinished main document or rejected navigation still fails.
+
 A site may return an error, a login/consent page, or different content to the anonymous browser. HTTP 403 is reported as an access refusal; KindPath does not guess its cause or bypass it. Missing resources and bounded findings are disclosed. A valid report remains available if image capture alone fails, provided document stability and resource cleanup are verified.
 
 ## Visual previews
@@ -43,6 +45,7 @@ Real-page previews use a JPEG rendered in the same isolated visit as the report.
 
 - **Fit width** shows the desktop-width image inside each comparison panel. **Actual size** supports scrolling to inspect small details. Both panels can scroll vertically.
 - **Original**, **Red–green colour vision**, **Blue–yellow colour vision**, **Blurred vision** and **Reduced peripheral vision** use the existing visual effects. Sliders can adjust their strength. These are illustrative approximations, not medical reproductions.
+- Effects render inside the sandboxed preview document, alongside its image. Changing effects refreshes only the modified document from the stored capture and can reset its scroll position; it does not rescan the website.
 - The original panel stays unchanged. Link areas highlight on hover; navigation and form interaction are disabled. Hover highlights do not reproduce a source site's scripted hover behavior. Visible ads are part of the static image.
 - Captures are bounded to the scan viewport's width (up to 1,280 pixels), the first 6,000 pixels of height, and 1.5 MB of JPEG data. Long-page truncation is labelled. Horizontal overflow outside the scan viewport, content requiring interaction, and resources not loaded by the source browser are not included.
 - A screenshot is an image rather than a semantic, responsive or interactive replica. Changing the panel width scales the captured desktop page; it does not rerun its responsive layout. Live content can change between scans.

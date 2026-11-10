@@ -10,12 +10,14 @@ import { mapWorkerReport } from './fixtureScanner.js';
 
 export function mapPublicReport(raw: unknown, requestedUrl?: string) {
   const report = mapWorkerReport(raw, 'public');
-  const result = raw as { url?: unknown; coverage?: { blockedRequests?: unknown; failedRequests?: unknown; omittedRules?: unknown; omittedNodes?: unknown } };
+  const result = raw as { pageLoadIncomplete?: unknown; url?: unknown; coverage?: { blockedRequests?: unknown; failedRequests?: unknown; omittedRules?: unknown; omittedNodes?: unknown } };
+  if(result.pageLoadIncomplete!==undefined&&result.pageLoadIncomplete!==true)throw new Error('Invalid page loading state.');
   const finalUrl = validatePublicUrl(result.url);
   if (requestedUrl && navigationRejection(requestedUrl, finalUrl)) throw new Error('Invalid final page.');
   const coverage = readScanCoverage(result.coverage);
   if (!coverage) throw new Error('Invalid scan coverage.');
-  return { ...report, mode: 'public' as const, coverage, url: finalUrl, ...(requestedUrl ? { requestedUrl: validatePublicUrl(requestedUrl) } : {}), limitations: [
+  return { ...report, ...(result.pageLoadIncomplete===true?{pageLoadIncomplete:true as const}:{}), mode: 'public' as const, coverage, url: finalUrl, ...(requestedUrl ? { requestedUrl: validatePublicUrl(requestedUrl) } : {}), limitations: [
+    ...(result.pageLoadIncomplete===true?['The page did not finish loading within 15 seconds. Unfinished loads were stopped; this partial report covers only the rendered content.']:[]),
     'Only the initial top-level page at the default viewport was scanned; embedded frames and interactive states are excluded.',
     `${coverage.blockedRequests} requests were blocked by policy and ${coverage.failedRequests} requests failed (including gateway denials). Missing resources can change the result.`,
     ...(Number(coverage.omittedRules) || Number(coverage.omittedNodes) ? [

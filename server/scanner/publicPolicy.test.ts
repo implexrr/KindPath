@@ -45,3 +45,12 @@ test('public reports disclose truncation and reject missing or malformed omissio
     }
   }
 });
+
+test('partial page loading is explicit and malformed loading markers are rejected',()=>{
+  const raw={fixture:'public',url:'https://example.com/',engine:'test',violations:[],incomplete:[],passes:0,inapplicable:0,
+    coverage:{blockedRequests:0,failedRequests:0,omittedRules:0,omittedNodes:0}};
+  const report=mapPublicReport({...raw,pageLoadIncomplete:true});
+  assert.equal(report.pageLoadIncomplete,true);assert.ok(report.limitations.some(text=>text.includes('partial report')));
+  assert.equal(mapPublicReport(raw).pageLoadIncomplete,undefined);
+  for(const value of [false,null,'true',1,{}])assert.throws(()=>mapPublicReport({...raw,pageLoadIncomplete:value}));
+});

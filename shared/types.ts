@@ -18,6 +18,7 @@ export interface ScanCoverage {
   omittedNodes: number;
 }
 export interface Report {
+  pageLoadIncomplete?: true;
   coverage?: ScanCoverage;
   mode: 'demo' | 'fixture' | 'public';
   requestedUrl?: string;

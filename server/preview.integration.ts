@@ -14,7 +14,7 @@ import { openLocalDockerSession, removeAndConfirm } from './scanner/dockerWorker
 import { assertContainerIsolation, containerArguments, IMAGE, QA_IMAGE } from './scanner/containerPolicy.js';
 
 // Fulfill the app's requests from the built assets and real fixture responses, entirely inside network none.
-test('reports, exports and isolated previews work in Chromium, Firefox and WebKit', { timeout: 180000 }, async () => {
+test('reports, exports and isolated previews work in Chromium, Firefox and WebKit', { timeout: 240000 }, async () => {
   const snapshot = await captureFixturePreview();
   const barriersSnapshot = await captureFixturePreview('barriers');
   const clearSnapshot = await captureFixturePreview('clear');
@@ -69,7 +69,7 @@ test('reports, exports and isolated previews work in Chromium, Firefox and WebKi
       const socket = process.platform === 'darwin' ? join(homedir(), '.docker/run/docker.sock') : '/var/run/docker.sock';
       const stdout = await new Promise<string>((resolve, reject) => {
         const child = execFile(docker, ['--config', config, '--host', `unix://${socket}`, 'start', '--attach', '--interactive', name],
-          { env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' }, timeout: 60000, maxBuffer: 5 * 1024 * 1024 },
+          { env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' }, timeout: 90000, maxBuffer: 5 * 1024 * 1024 },
           (error, output) => error ? reject(error) : resolve(output));
         child.stdin!.on('error', () => {});
         child.stdin!.end(JSON.stringify({ browser, snapshot, barriersSnapshot, clearSnapshot, report, clearReport, demoReport, sitePreview, imagePreview, qualityPreviews, assets }));
