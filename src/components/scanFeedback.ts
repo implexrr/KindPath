@@ -4,6 +4,7 @@ import type { Report } from '../../shared/types';
 import { readScanCoverage } from '../../shared/scanCoverage';
 
 const messages = new Map([
+  ['SCAN_RATE_LIMITED','Too many requests. Wait up to a minute and try again.'],
   ['SCANNER_BUSY','Another scan is still finishing. Try again shortly.'],
   ['SCANNER_CLEANUP_FAILED','The previous scan could not finish safely. Scanning is unavailable until cleanup is verified.'],
   ['SCANNER_UNAVAILABLE','The scanner is unavailable. Try again later.'],
