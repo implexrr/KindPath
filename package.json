@@ -18,7 +18,8 @@
     "test:gateway:unit": "node scripts/test-gateway-unit.mjs",
     "test:gateway": "KINDPATH_PUBLIC_SCANNING=false KINDPATH_PUBLIC_CAPTURE=false tsx --test server/publicScanner.integration.ts",
     "test:firewall": "KINDPATH_PUBLIC_SCANNING=false KINDPATH_PUBLIC_CAPTURE=false tsx --test server/firewall.integration.ts",
-    "test:preview": "KINDPATH_PUBLIC_SCANNING=false KINDPATH_PUBLIC_CAPTURE=false tsx --test server/preview.integration.ts"
+    "test:preview": "KINDPATH_PUBLIC_SCANNING=false KINDPATH_PUBLIC_CAPTURE=false tsx --test server/preview.integration.ts",
+    "validate:chrome": "tsx scripts/validate-chrome.mjs"
   },
   "dependencies": {
     "express": "^5.3.0",
