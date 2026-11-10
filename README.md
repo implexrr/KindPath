@@ -143,6 +143,7 @@ npm run test:scanner
 npm run test:gateway:unit
 npm run test:gateway
 npm run test:firewall
+npm run build
 npm run test:preview
 npm audit --include=dev --audit-level=low
 npm --prefix scanner audit --audit-level=low

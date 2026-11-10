@@ -62,7 +62,9 @@ jobs:
         run: npm run test:firewall
 
       - name: Verify fixture snapshot preview in an isolated browser
-        run: npm run test:preview
+        run: |
+          npm run build
+          npm run test:preview
 
       - name: Diagnose owned resources after failure
         if: failure()
