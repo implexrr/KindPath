@@ -16,6 +16,7 @@
 
 !codec/
 !codec/*.c
+!codec/*.patch
 
 !site-preview.mjs
 
