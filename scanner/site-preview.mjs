@@ -117,7 +117,9 @@ export async function captureSiteSnapshot(page) {
           try { if (node.matches(selector)) Object.assign(highlighted,styles(declaration)); } catch {}
         }
       }
-      const tag = component ? (computed.display.startsWith('inline') || computed.display === 'contents' ? 'span' : 'div') : node.localName;
+      // A div inside p implicitly closes the paragraph when serialized HTML is parsed.
+      // Use a span in that context; validated display styling still preserves its box.
+      const tag = component ? (computed.display.startsWith('inline') || computed.display === 'contents' || node.closest('p') ? 'span' : 'div') : node.localName;
       return {tag,attributes,style:normal,hover:highlighted,children:children(node,depth+1,renderedOnly || component)};
     }
     // Preserve canvas text contrast and spacing before spending the shared style budget on descendants.

@@ -682,6 +682,9 @@ try {
           assert.equal(await frame.locator('body').evaluate(node=>getComputedStyle(node).padding),'24px');
           assert.equal(await frame.locator('body').evaluate(node=>getComputedStyle(node).fontSize),'24px');
           assert.equal(await frame.locator('pre code').textContent(),'if (water < 2) {\n  water += 1;\n}');
+          const retainedParagraph=frame.locator('p').filter({hasText:'Paragraph-before'});
+          assert.equal(await retainedParagraph.textContent(),'Paragraph-beforeParagraph-innerParagraph-after');
+          assert.equal(await retainedParagraph.locator('span').evaluate(node=>getComputedStyle(node).display),'block');
           assert.equal(await frame.locator('b').textContent(),'Important text');assert.equal(await frame.locator('i').textContent(),'Emphasis');
           assert.equal(await frame.locator('time').textContent(),'10 November');assert.equal(await frame.locator('[href],script,form,iframe,img').count(),0);
         }

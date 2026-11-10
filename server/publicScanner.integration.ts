@@ -174,6 +174,7 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
       assert.match(report.sitePreview.html,/<pre/);assert.match(report.sitePreview.html,/<code/);assert.match(report.sitePreview.html,/<time/);
       assert.match(report.sitePreview.html,/water &lt; 2/);
       assert.match(report.sitePreview.html,/grid-template-columns:240px 320px/);
+      assert.match(report.sitePreview.html,/Paragraph-before<span\b[^>]*>Paragraph-inner<\/span>Paragraph-after<\/p>/);
       assert.match(report.sitePreview.html,/Inline-left<\/span> <span/);
       assert.match(report.sitePreview.html,/Content through a boxless component/);
       assert.match(report.sitePreview.html,/Visible slotted light content/);
