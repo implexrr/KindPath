@@ -90,11 +90,11 @@ test('redirect explanations survive verified cleanup but never override a cleanu
  const {createResourceRunner}=await import('./resources.js');
  const {createPublicSiteScanner}=await import('./publicScanner.js');
  const {ScannerError}=await import('./dockerWorker.js');
- for (const cleanupFails of [false,true]) {
+ for (const cleanupFails of [false,true]) for (const diagnostic of [{stage:'page-loading',code:'REDIRECT_PATH_CHANGED'},{stage:'page-loading',code:'HTTP_STATUS',httpStatus:403}]) {
   let removed=false;
   const worker=createResourceRunner(async(_command,resources)=>{
    resources.containers.push('controlled-owned-container');
-   throw Object.assign(new Error('PRIVATE_SENTINEL'),{stderr:DIAGNOSTIC_PREFIX+'{"stage":"page-loading","code":"REDIRECT_PATH_CHANGED"}\n'});
+   throw Object.assign(new Error('PRIVATE_SENTINEL'),{stderr:DIAGNOSTIC_PREFIX+JSON.stringify(diagnostic)+'\n'});
   },async()=>({dispose:async()=>{},command:async(args:string[])=>{
    if(args[0]==='rm')removed=true;
    if(cleanupFails && args.includes('name=^/controlled-owned-container$'))throw new Error('PRIVATE_DAEMON_FAILURE');
@@ -103,8 +103,8 @@ test('redirect explanations survive verified cleanup but never override a cleanu
   await assert.rejects(createPublicSiteScanner({enabled:()=>true,worker})('https://example.com/'),error=>{
    assert.ok(error instanceof ScannerError); assert.ok(removed);
    assert.equal(error.code,cleanupFails?'SCANNER_CLEANUP_FAILED':'SCAN_FAILED');
-   assert.deepEqual(error.diagnostic,cleanupFails?{stage:'cleanup',code:'UNCONFIRMED'}:{stage:'page-loading',code:'REDIRECT_PATH_CHANGED'});
-   if(!cleanupFails)assert.match(error.message,/different path or query/);
+   assert.deepEqual(error.diagnostic,cleanupFails?{stage:'cleanup',code:'UNCONFIRMED'}:diagnostic);
+   if(!cleanupFails)assert.match(error.message,diagnostic.code==='HTTP_STATUS'?/refused.*HTTP 403/:/different path or query/);
    assert.doesNotMatch(error.message,/PRIVATE/); return true;
   });
  }

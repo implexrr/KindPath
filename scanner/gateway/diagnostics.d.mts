@@ -3,3 +3,4 @@ export const DIAGNOSTIC_PREFIX:string;
 export function readDiagnostic(value:unknown):ScanDiagnostic|undefined;
 export function workerDiagnostic(stderr:unknown):ScanDiagnostic|undefined;
 export function classifyFailure(error:unknown,stage:ScanDiagnostic['stage'],signal?:AbortSignal):ScanDiagnostic|undefined;
+export function httpStatusMessage(status:unknown):string|undefined;

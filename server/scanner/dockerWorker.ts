@@ -122,7 +122,7 @@ export async function openLocalDockerSession(): Promise<DockerSession> {
     command: settleResourceCreates(async (args, signal, timeout = 10_000) => {
       const { stdout } = await exec(docker, [...prefix, ...args], {
         env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' },
-        timeout, maxBuffer: 1024 * 1024, signal,
+        timeout, maxBuffer: 4 * 1024 * 1024, signal,
       });
       return stdout;
     }),

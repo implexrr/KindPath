@@ -38,3 +38,11 @@ export function classifyFailure(error, stage, signal) {
   }
   return readDiagnostic({stage,code});
 }
+
+// Fixed guidance, with only a validated HTTP status as dynamic output.
+export function httpStatusMessage(status) {
+  if (!Number.isInteger(status) || status < 400 || status > 599) return undefined;
+  if (status === 403) return 'Access to the page was refused (HTTP 403). No report was created.';
+  if (status === 429) return 'The website is limiting requests (HTTP 429). Wait before trying again. No report was created.';
+  return `The website returned HTTP ${status}. No report was created.`;
+}

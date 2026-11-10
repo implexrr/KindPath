@@ -11,7 +11,8 @@ try {
     await writeFile(join(config, 'config.json'), JSON.stringify({ cliPluginsExtraDirs: ['/Applications/Docker.app/Contents/Resources/cli-plugins'] }));
   }
   // The build context is scanner/ only; the app, private docs, and home directory are never sent to Docker.
-  for (const [target, tag] of [['worker', 'kindpath-fixture-scanner:local'], ['qa', 'kindpath-browser-qa:local'], ['firewall', 'kindpath-firewall:local']]) {
+  const targets=[['worker', 'kindpath-fixture-scanner:local'], ...(process.argv.includes('--runtime')?[]:[['qa', 'kindpath-browser-qa:local']]), ['firewall', 'kindpath-firewall:local']];
+  for (const [target, tag] of targets) {
     const child = spawn(docker, ['--config', config, '--host', `unix://${socket}`, 'build', ...(process.argv.includes('--refresh') ? ['--no-cache'] : []), '--target', target, '--tag', tag, fileURLToPath(new URL('../scanner/', import.meta.url))], {
       env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' }, stdio: 'inherit',
     });

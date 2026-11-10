@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hasMatchingSitePreview, previewTextFeedback } from './sitePreview.js';
+import { hasMatchingCaptureResult, hasMatchingSitePreview, previewTextFeedback } from './sitePreview.js';
 import { createReportExport } from './reportExport.js';
 import { mapSitePreview } from '../../server/scanner/sitePreview.js';
 import { createDemoReport } from '../../server/services/analyze.js';
@@ -37,4 +37,19 @@ test('missing and malformed quality hints stay unknown without rejecting an othe
     assert.equal(previewTextFeedback(value)?.kind,'unknown');
     assert.equal(hasMatchingSitePreview({...report,sitePreview:{...preview,capturedTextCharacters:value as any}}),true);
   }
+});
+
+test('capture failures and capture-disabled results still require valid public scan identities',()=>{
+ const unavailable={...report,sitePreview:undefined,previewUnavailable:true};
+ const withoutCapture={...report,sitePreview:undefined};
+ assert.equal(hasMatchingCaptureResult(report,true),true);
+ assert.equal(hasMatchingCaptureResult(unavailable,true),true);
+ assert.equal(hasMatchingCaptureResult(withoutCapture,false),true);
+ for(const scanId of [undefined,null,'old','constructor',123]){
+  assert.equal(hasMatchingCaptureResult({...unavailable,scanId} as Report,true),false);
+  assert.equal(hasMatchingCaptureResult({...withoutCapture,scanId} as Report,false),false);
+ }
+ for(const value of [{...unavailable,sitePreview:preview},{...unavailable,previewUnavailable:false},{...unavailable,mode:'demo'}])assert.equal(hasMatchingCaptureResult(value as Report,true),false);
+ assert.equal(hasMatchingCaptureResult(unavailable,false),false);
+ assert.equal(hasMatchingCaptureResult(report,false),false);
 });

@@ -48,3 +48,10 @@ test('redirect failures explain the policy using only validated fixed diagnostic
   }
   assert.match(scanErrorMessage({code:'SCANNER_CLEANUP_FAILED',diagnostic:{stage:'page-loading',code:'REDIRECT_LOOP'}},503),/safely/);
 });
+
+test('HTTP refusals explain the observed response without echoing URLs or guessing its cause',()=>{
+  assert.equal(scanErrorMessage({code:'SCAN_FAILED',error:'PRIVATE_SENTINEL',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus:403}},503),'Access to the page was refused (HTTP 403). No report was created.');
+  assert.match(scanErrorMessage({code:'SCAN_FAILED',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus:429}},503),/limiting requests/);
+  for(const httpStatus of ['403',403.5,999,'PRIVATE_SENTINEL'])assert.equal(scanErrorMessage({code:'SCAN_FAILED',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus}},503),'The scan could not finish. No report was created. Try again.');
+  assert.match(scanErrorMessage({code:'SCANNER_CLEANUP_FAILED',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus:403}},503),/safely/);
+});

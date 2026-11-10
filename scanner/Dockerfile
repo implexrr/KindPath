@@ -34,7 +34,7 @@ RUN node node_modules/playwright/cli.js install-deps chromium \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 FROM chromium-runtime AS worker
-COPY worker.mjs preview.mjs site-preview.mjs public-worker.mjs public-report.mjs public-report.test.mjs ./
+COPY worker.mjs preview.mjs site-preview.mjs page-image.mjs jpeg.mjs public-worker.mjs public-report.mjs public-report.test.mjs ./
 COPY gateway/ ./gateway/
 COPY firewall/ ./firewall/
 COPY fixtures/ ./fixtures/
@@ -100,7 +100,7 @@ WORKDIR /opt/kindpath-worker
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force \
     && rm -rf /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx /root/.npm
-COPY worker.mjs preview.mjs site-preview.mjs public-worker.mjs public-report.mjs public-report.test.mjs ./
+COPY worker.mjs preview.mjs site-preview.mjs page-image.mjs jpeg.mjs public-worker.mjs public-report.mjs public-report.test.mjs ./
 COPY gateway/ ./gateway/
 COPY firewall/ ./firewall/
 COPY fixtures/ ./fixtures/

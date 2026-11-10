@@ -4,7 +4,7 @@ import { PUBLIC_SCANNING_ENABLED, PUBLIC_CAPTURE_ENABLED, validatePublicUrl } fr
 import { scanPublicSite } from '../scanner/publicScanner.js';
 import { ScannerError } from '../scanner/dockerWorker.js';
 
-// Only tests inject these dependencies; the app mounts the default, disabled router.
+// Only tests inject these dependencies; the app mounts the local runtime defaults.
 export function createPublicRouter({ enabled = (): boolean => PUBLIC_SCANNING_ENABLED, captureEnabled = (): boolean => PUBLIC_CAPTURE_ENABLED, scan = scanPublicSite } = {}) {
   const publicRouter = Router();
   publicRouter.get('/scanning-capabilities', (_req, res) => {
@@ -12,7 +12,7 @@ export function createPublicRouter({ enabled = (): boolean => PUBLIC_SCANNING_EN
   });
   publicRouter.post('/scan-public', async (req, res, next) => {
     if (!enabled()) {
-      res.status(503).json({ error: 'Public URL scanning is disabled pending security review.', code: 'PUBLIC_SCANNING_DISABLED' });
+      res.status(503).json({ error: 'Website scanning is disabled in this local process.', code: 'PUBLIC_SCANNING_DISABLED' });
       return;
     }
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).length !== 1 || !('url' in req.body)) {

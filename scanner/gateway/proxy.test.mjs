@@ -1,3 +1,4 @@
+import { MAX_RESOURCE_REQUESTS } from './limits.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -139,9 +140,9 @@ test('CONNECT forwards bytes through a controlled Unix socket without external n
   });
 });
 
-test('gateway request budget blocks additional lookups after 100 attempts', { timeout: 5000 }, async t => {
+test('gateway request budget blocks additional lookups at the configured cap', { timeout: 5000 }, async t => {
   let lookups = 0;
   const gateway = await listen(t, createGateway(allowed, { resolve: async () => { lookups++; throw new Error('Controlled denial'); } }));
-  for (let i = 0; i < 101; i++) assert.equal((await get(gateway)).status, 403);
-  assert.equal(lookups, 100);
+  for (let i = 0; i <= MAX_RESOURCE_REQUESTS; i++) assert.equal((await get(gateway)).status, 403);
+  assert.equal(lookups, MAX_RESOURCE_REQUESTS);
 });

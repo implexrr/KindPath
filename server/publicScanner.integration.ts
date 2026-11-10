@@ -71,7 +71,7 @@ for (const scenario of [
   {path:'/redirect',final:'/redirect'}, {path:'/content',final:'/content'},
   {path:'/indented-content',final:'/indented-content'}, {path:'/indented-budget',final:'/indented-budget'},
   {path:'/components',final:'/components'}, {path:'/body-contrast',final:'/body-contrast'},
-  {path:'/forms',final:'/forms'}, {path:'/missing',final:'/missing'},
+  {path:'/forms',final:'/forms'}, {path:'/raster',final:'/raster'}, {path:'/missing',final:'/missing'},
   {path:'/same-url-history',final:'/same-url-history'}, {path:'/same-url-reload',final:'/same-url-reload'},
 ]) {
 test(`URL scan/capture handles controlled ${scenario.path} without public access`, {timeout:90000}, async () => {
@@ -129,63 +129,16 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
     const { PUBLIC_CAPTURE_ENABLED } = await import('./scanner/publicPolicy.js'); assert.equal(PUBLIC_CAPTURE_ENABLED,false);
     assert.equal(report.sitePreview.scanId,report.scanId); assert.equal(report.sitePreview.requestedUrl,target);
     assert.equal(report.sitePreview.url,report.url);
-    if (scenario.path === '/redirect') {
-    assert.match(report.sitePreview.html,/Community garden/);
-    assert.match(report.sitePreview.html,/Rendered capture marker/); assert.match(report.sitePreview.html,/Controlled advertisement/);
-    assert.match(report.sitePreview.html,/:hover\{color:rgb\(255, 0, 0\)/);
-    assert.ok(!report.sitePreview.html.includes('controlled-form-value-marker'));
-    assert.match(report.sitePreview.html,/input[^>]* disabled/);
-    }
-    assert.doesNotMatch(report.sitePreview.html,/<(?:script|iframe|form|img|svg)\b|\b(?:href|src|onclick)=/i);
-    if (scenario.path === '/content') {
-      assert.match(report.sitePreview.html,/Garden accessibility guide/); assert.match(report.sitePreview.html,/<h4/);
-      assert.match(report.sitePreview.html,/<table/); assert.match(report.sitePreview.html,/scope="col"/);
-      assert.match(report.sitePreview.html,/colspan="2"/); assert.match(report.sitePreview.html,/box-sizing:border-box/);
-      assert.ok(!report.sitePreview.html.includes('hidden-content-marker'));
-    }
-    if (scenario.path === '/forms') {
-      assert.ok(report.findings.some((finding:{id:string})=>finding.id==='label'));
-      assert.match(report.sitePreview.html,/Static garden supplies advertisement/);
-      assert.ok(!report.sitePreview.html.includes('controlled-name-value'));
-      assert.ok(!report.sitePreview.html.includes('hidden-style-marker'));
-    }
-    if(scenario.path==='/indented-content'||scenario.path==='/indented-budget') {
-      const html=report.sitePreview.html;
-      assert.match(html,/Inline-left<\/span> <span\b[^>]*>Inline-right/);
-      assert.match(html,/Box-left<\/span> <span\b[^>]*>Box-right/);
-      assert.match(html,/Pre-left<\/p>\n<p\b[^>]*>Pre-right/);
-      assert.match(html,/Nonbreaking-left<\/p>\u00a0<p\b[^>]*>Nonbreaking-right/);
-      assert.match(html,/Omitted-left<\/span> <span\b[^>]*>Omitted-right/);
-      assert.match(html,/Hidden-left<\/span> <span\b[^>]*>Hidden-right/);
-      assert.match(html,/Floating-left<\/span> <span\b[^>]*>Floating-right/);
-      assert.doesNotMatch(html,/controlled-retention-value|controlled-hidden-retention-marker|controlled-omitted-retention-marker|controlled-hidden-gap-marker/);
-      assert.match(html,/input[^>]* disabled/);
-      if(scenario.path==='/indented-content')assert.match(html,/Retained end-of-page marker/);
-      else {
-        assert.doesNotMatch(html,/Retained end-of-page marker/);
-        assert.ok(report.sitePreview.limitations.some((text:string)=>/At least [1-9]\d* subtrees/.test(text)));
-      }
-    }
-    if(scenario.path==='/components') {
-      assert.match(report.sitePreview.html,/Component garden guide/);
-      assert.match(report.sitePreview.html,/Component end marker/);
-      assert.match(report.sitePreview.html,/<b[^>]*>important text/);
-      assert.match(report.sitePreview.html,/<i[^>]*>emphasized text/);
-      assert.match(report.sitePreview.html,/<pre/);assert.match(report.sitePreview.html,/<code/);assert.match(report.sitePreview.html,/<time/);
-      assert.match(report.sitePreview.html,/water &lt; 2/);
-      assert.match(report.sitePreview.html,/grid-template-columns:240px 320px/);
-      assert.match(report.sitePreview.html,/Paragraph-before<span\b[^>]*>Paragraph-inner<\/span>Paragraph-after<\/p>/);
-      assert.match(report.sitePreview.html,/Inline-left<\/span> <span/);
-      assert.match(report.sitePreview.html,/Content through a boxless component/);
-      assert.match(report.sitePreview.html,/Visible slotted light content/);
-      assert.doesNotMatch(report.sitePreview.html,/kindpath-(?:layout|card|inline|contents|slotted|closed|hidden)|unrendered-light-marker|hidden-(?:css-)?component-marker|private-(?:textarea|option|input)-marker|(?:closed-)?shadow-(?:tree-)?marker|embedded-frame-marker|datetime=/);
-      assert.match(report.sitePreview.html,/input[^>]* disabled/);assert.match(report.sitePreview.html,/button[^>]* disabled/);
-    }
-    if(scenario.path==='/body-contrast') {
-      assert.match(report.sitePreview.html,/Night garden guide/);
-      assert.match(report.sitePreview.html,/body\{[^}]*background-color:rgb\(16, 24, 40\)/);
-      assert.match(report.sitePreview.html,/body\{[^}]*font-size:24px/);
-      assert.match(report.sitePreview.html,/body\{[^}]*padding:24px/);
+    assert.equal(report.sitePreview.kind,'image');
+    assert.equal(report.sitePreview.width,1280);
+    assert.ok(report.sitePreview.height>=720&&report.sitePreview.height<=6000);
+    assert.match(report.sitePreview.html,/<img[^>]+src="data:image\/jpeg;base64,/);
+    assert.doesNotMatch(report.sitePreview.html,/<(?:script|iframe|form|svg)\b|\b(?:href|onclick|onerror)=/i);
+    assert.ok(report.sitePreview.html.length<=2100000);
+    if(scenario.path==='/raster'){
+      assert.equal(report.sitePreview.height,6000);assert.equal(report.sitePreview.truncated,true);
+      assert.match(report.sitePreview.html,/class="kp-link"/);
+      assert.ok(report.sitePreview.limitations.some((text:string)=>/6,000/.test(text)));
     }
     assert.ok(report.sitePreview.limitations.length>0);
     }
@@ -245,9 +198,9 @@ for (const scenario of ['multi-host','private-redirect','late-policy-failure']) 
    const report=await scan(target);
    assert.equal(report.mode,'public');assert.equal(report.requestedUrl,target);assert.equal(report.url,'http://www.example.com/redirect');
    assert.equal(report.sitePreview?.scanId,report.scanId);assert.equal(report.sitePreview?.url,report.url);
-   assert.match(report.sitePreview!.html,/Multi-host rendered marker/);assert.match(report.sitePreview!.html,/Static website advertisement/);
-   assert.match(report.sitePreview!.html,/color:rgb\(0, 128, 0\)/);assert.match(report.sitePreview!.html,/:hover\{color:rgb\(255, 0, 0\)/);
-   assert.doesNotMatch(report.sitePreview!.html,/<(?:script|iframe|form|img|svg)\b|\b(?:href|src|onclick)=|synthetic-form-value/i);
+   assert.equal(report.sitePreview?.kind,'image');
+   assert.match(report.sitePreview!.html,/src="data:image\/jpeg;base64,/);
+   assert.doesNotMatch(report.sitePreview!.html,/<(?:script|iframe|form|svg)\b|\b(?:href|onclick)=|synthetic-form-value/i);
    for(const host of ['example.com','www.example.com','static.example.net','rebind.example.net','blocked.example.org','late.example.net'])assert.equal(calls.get(host),1,host);
    assert.ok(report.limitations.some(text=>text.includes('requests failed')));
   }
@@ -262,18 +215,18 @@ for (const scenario of ['multi-host','private-redirect','late-policy-failure']) 
 }
 
 for (const scenario of [
- {path:'/path-redirect',code:'REDIRECT_PATH_CHANGED',hosts:['example.com']},
- {path:'/query-redirect',code:'REDIRECT_PATH_CHANGED',hosts:['example.com']},
- {path:'/empty-query-redirect',code:'REDIRECT_PATH_CHANGED',hosts:['example.com']},
+ {path:'/path-redirect',final:'/canonical-result',hosts:['example.com']},
+ {path:'/query-redirect',final:'/canonical-result?changed=1',hosts:['example.com']},
+ {path:'/empty-query-redirect',final:'/canonical-result?',hosts:['example.com']},
  {path:'/invalid-redirect',code:'DESTINATION_REJECTED',hosts:['example.com']},
  {path:'/other-host',code:'REDIRECT_HOST_CHANGED',hosts:['example.com']},
  {path:'/www-private',code:'HTTP_STATUS',hosts:['example.com','www.example.com']},
  {path:'/loop',code:'REDIRECT_LOOP',hosts:['example.com','www.example.com']},
  {path:'/intermediate-redirect',code:'REDIRECT_HOST_CHANGED',hosts:['example.com','www.example.com']},
- {path:'/script-redirect',code:'REDIRECT_PATH_CHANGED',hosts:['example.com']},
- {path:'/meta-redirect',code:'REDIRECT_PATH_CHANGED',hosts:['example.com']},
+ {path:'/script-redirect',final:'/canonical-result',hosts:['example.com']},
+ {path:'/meta-redirect',final:'/canonical-result',hosts:['example.com']},
 ]) {
- test(`main-page policy blocks ${scenario.path} before requesting its forbidden destination`,{timeout:90000},async()=>{
+ test(`main-page policy handles ${scenario.path}`,{timeout:90000},async()=>{
   const {createPublicUrlWorkerRunner}=await import('./scanner/publicUrlWorker.js');
   const {createPublicSiteScanner}=await import('./scanner/publicScanner.js');
   const {createDestinationPlan}=await import('./scanner/destinationSnapshot.js');
@@ -310,13 +263,20 @@ for (const scenario of [
    },
   });
   const scan=createPublicSiteScanner({enabled:()=>true,worker});
-  await assert.rejects(scan('http://example.com'+scenario.path),error=>{
-   assert.ok(error instanceof ScannerError);assert.equal(error.code,'SCAN_FAILED');
-   assert.deepEqual(error.diagnostic,{stage:'page-loading',code:scenario.code,...(scenario.path==='/www-private'?{httpStatus:403}:{})});
-   assert.match(error.message,/No report was (?:created|produced)/);return true;
-  });
-  assert.deepEqual(lookups,scenario.hosts);
-  assert.deepEqual(requests.map(request=>({host:request.host,path:request.path})),(scenario.path==='/www-private'?['example.com']:scenario.hosts).map(host=>({host,path:scenario.path})));
+  const target='http://example.com'+scenario.path;
+  if('final' in scenario){
+   const report=await scan(target);assert.equal(report.requestedUrl,target);assert.equal(report.url,'http://example.com'+scenario.final);
+   assert.ok(report.findings);assert.deepEqual(lookups,scenario.hosts);
+   assert.deepEqual(requests.map(r=>r.path),[scenario.path,'/canonical-result']);
+  }else{
+   await assert.rejects(scan(target),error=>{
+    assert.ok(error instanceof ScannerError);assert.equal(error.code,'SCAN_FAILED');
+    assert.deepEqual(error.diagnostic,{stage:'page-loading',code:scenario.code,...(scenario.path==='/www-private'?{httpStatus:403}:{})});
+    assert.match(error.message,/No report was (?:created|produced)/);return true;
+   });
+   assert.deepEqual(lookups,scenario.hosts);
+   assert.deepEqual(requests.map(request=>({host:request.host,path:request.path})),(scenario.path==='/www-private'?['example.com']:scenario.hosts).map(host=>({host,path:scenario.path})));
+  }
   const session=await openLocalDockerSession();
   try{
    for(const args of [['ps','--all','--quiet'],['network','ls','--quiet'],['volume','ls','--quiet']])assert.equal((await session.command([...args,'--filter','label=kindpath.scanner=public'])).trim(),'');

@@ -119,7 +119,7 @@ test('capture defaults stay disabled and captured data is accepted only by an ex
 });
 
 test('public result validation accepts only the submitted page or its permitted canonical URL', async () => {
-  for (const url of ['https://example.org/start','https://example.com/other','https://example.com/start?q=1','https://example.com/start?','http://example.com/start']) {
+  for (const url of ['https://example.org/start','https://blog.example.com/start','http://example.com/start']) {
     await assert.rejects(createPublicSiteScanner({enabled:()=>true,worker:async()=>({...raw,url})})('https://example.com/start'), error => {
       assert.ok(error instanceof ScannerError);
       assert.equal(error.code,'SCAN_FAILED');
@@ -127,8 +127,16 @@ test('public result validation accepts only the submitted page or its permitted 
       return true;
     });
   }
-  for (const url of ['http://example.com/start','https://example.com/start','https://www.example.com/start']) {
+  for (const url of ['http://example.com/start','https://example.com/start','https://www.example.com/start','https://example.com/other','https://example.com/start?q=1','https://example.com/start?']) {
     const report=await createPublicSiteScanner({enabled:()=>true,worker:async()=>({...raw,url})})('http://example.com/start');
     assert.equal(report.requestedUrl,'http://example.com/start'); assert.equal(report.url,url);
   }
+});
+
+test('an explicitly failed capture preserves a valid report without accepting contradictory worker output',async()=>{
+ const worker=async()=>({...raw,captureFailure:'CAPTURE_FAILED'});
+ const report=await createPublicSiteScanner({enabled:()=>true,captureEnabled:()=>true,worker})('https://example.com/start');
+ assert.equal(report.previewUnavailable,true);assert.equal(report.sitePreview,undefined);assert.equal(report.mode,'public');
+ assert.ok(report.limitations?.some(text=>/image could not be captured/.test(text)));
+ for(const value of [{...raw,captureFailure:'PRIVATE_SENTINEL'},{...raw,captureFailure:'CAPTURE_FAILED',preview:{}}])await assert.rejects(createPublicSiteScanner({enabled:()=>true,captureEnabled:()=>true,worker:async()=>value})('https://example.com/start'));
 });

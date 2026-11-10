@@ -1,5 +1,6 @@
+import { MAX_RESOURCE_REQUESTS } from './gateway/limits.mjs';
 import { classifyFailure, DIAGNOSTIC_PREFIX } from './gateway/diagnostics.mjs';
-import { captureSiteSnapshot } from './site-preview.mjs';
+import { capturePageImage } from './page-image.mjs';
 import net from 'node:net';
 import http from 'node:http';
 import { networkInterfaces } from 'node:os';
@@ -72,7 +73,7 @@ try {
     await context.route('**/*', route => {
       try {
         validateTarget(route.request().url(), allowed);
-        if (++requests > 100 || !['GET', 'HEAD'].includes(route.request().method())) throw new Error('Blocked request');
+        if (++requests > MAX_RESOURCE_REQUESTS || !['GET', 'HEAD'].includes(route.request().method())) throw new Error('Blocked request');
         return route.continue();
       } catch { blockedRequests++; if (route.request().isNavigationRequest()) rejectedNavigation = true; return route.abort(); }
     });
@@ -81,10 +82,13 @@ try {
     page.on('popup', popup => popup.close());
     let scanningDocument = false;
     let latestDocumentRequest;
+    let lastMainRequestAt=0;
+    const completedRequests=new WeakSet();
+    page.on('requestfinished',request=>completedRequests.add(request));
     page.on('request', request => {
       if (request.isNavigationRequest()) {
         if(request.frame()===page.mainFrame()){
-          latestDocumentRequest=request;
+          latestDocumentRequest=request;lastMainRequestAt=Date.now();
           if(scanningDocument)pageChanged=true;
         }
         try { validateTarget(request.url(), allowed); } catch { rejectedNavigation = true; }
@@ -97,7 +101,29 @@ try {
       onPageChange: () => { pageChanged = true; },
     });
     stage = 'page-loading';
-    const response = await page.goto(target, { waitUntil: 'load', timeout: 15_000 });
+    const loadingDeadline=Date.now()+15_000;
+    let response;
+    try { response=await page.goto(target,{waitUntil:'load',timeout:15_000}); }
+    catch(error){
+      // A script/meta navigation can abort goto while replacing the entry page.
+      // Only that browser abort is eligible to settle into a later response.
+      if(!/^page\.goto:\s*net::ERR_ABORTED\b/.test(error?.message??''))throw error;
+    }
+    // goto may return the entry response while a permitted replacement is loading.
+    // Require the latest main request to finish and a brief quiet interval before
+    // analysis. Network-idle is deliberately unnecessary for busy modern sites.
+    while(true){
+      if(navigationGuard.failure||navigationGuard.failed)throw new Error('Navigation rejected');
+      const latest=latestDocumentRequest;
+      let loaded=false;
+      try{loaded=await page.evaluate(()=>document.readyState==='complete');}catch{/* A replacement may be committing. */}
+      if(Date.now()>=loadingDeadline){const error=new Error('Page loading timed out');error.name='TimeoutError';throw error;}
+      if(latest&&completedRequests.has(latest)&&loaded&&Date.now()-lastMainRequestAt>=300){
+        response=await latest.response();
+        if(latest===latestDocumentRequest)break;
+      }
+      await new Promise(resolve=>setTimeout(resolve,50));
+    }
     if (!response) {missingResponse=true;throw new Error('Navigation failed');}
     if (!response.ok()) {rejectedStatus=response.status();throw new Error('Navigation failed');}
     if (navigationGuard.failure || navigationGuard.failed) throw new Error('Navigation rejected');
@@ -118,14 +144,15 @@ try {
       pageChanged = true; throw new Error('Page changed during scan');
     }
     if (capture) stage = 'capture';
-    const preview = capture ? await captureSiteSnapshot(page) : undefined;
+    let preview, captureFailure;
+    if(capture){try{preview=await capturePageImage(page);}catch{captureFailure='CAPTURE_FAILED';}}
     if (navigationGuard.failed || navigationGuard.failure || redirectFailure || pageChanged || page.url() !== scannedUrl || (preview && preview.url !== scannedUrl) || !(await page.evaluate(original=>original===document,scannedDocument))) {
       pageChanged = true; throw new Error('Page changed during capture');
     }
     stage = 'worker-result';
     const violations = summarizeRules(result.violations);
     const incomplete = summarizeRules(result.incomplete);
-    process.stdout.write(JSON.stringify({ fixture: 'public', url: scannedUrl, ...(preview ? {preview} : {}),
+    process.stdout.write(JSON.stringify({ fixture: 'public', url: scannedUrl, ...(preview ? {preview} : {}),...(captureFailure ? {captureFailure} : {}),
       coverage: { blockedRequests, failedRequests, omittedRules: violations.omittedRules + incomplete.omittedRules,
         omittedNodes: violations.omittedNodes + incomplete.omittedNodes },
       engine: result.testEngine.version, violations: violations.rules, incomplete: incomplete.rules,

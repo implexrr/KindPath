@@ -1,4 +1,4 @@
-import { readDiagnostic } from '../../scanner/gateway/diagnostics.mjs';
+import { httpStatusMessage, readDiagnostic } from '../../scanner/gateway/diagnostics.mjs';
 import { redirectMessage } from '../../scanner/gateway/navigation.mjs';
 import type { Report } from '../../shared/types';
 import { readScanCoverage } from '../../shared/scanCoverage';
@@ -14,7 +14,7 @@ export function scanErrorMessage(value: unknown, status: number): string {
   const data = value && typeof value === 'object' ? value as Record<string,unknown> : {};
   if (data.code === 'SCAN_FAILED') {
     const diagnostic = readDiagnostic(data.diagnostic);
-    const explanation = diagnostic?.stage === 'page-loading' ? redirectMessage(diagnostic.code) : undefined;
+    const explanation = diagnostic?.stage === 'page-loading' ? (diagnostic.code === 'HTTP_STATUS' ? httpStatusMessage(diagnostic.httpStatus) : redirectMessage(diagnostic.code)) : undefined;
     if (explanation) return explanation;
   }
   if (typeof data.code === 'string' && messages.has(data.code)) return messages.get(data.code)!;

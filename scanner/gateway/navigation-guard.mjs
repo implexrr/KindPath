@@ -14,6 +14,7 @@ export async function installNavigationGuard(page, target, { isScanning, onPageC
   session.on('close', fail);
   const { frameTree } = await session.send('Page.getFrameTree');
   const visited = new Set();
+  let lastRequest, restarted=false, documents=0;
   session.on('Fetch.requestPaused', event => {
     void (async () => {
       if (event.frameId === frameTree.frame.id) {
@@ -21,13 +22,24 @@ export async function installNavigationGuard(page, target, { isScanning, onPageC
         if (scanning) onPageChange();
         const url = event.request.url;
         state.failure ??= navigationRejection(target, url, state.lastUrl);
-        if (!scanning && !state.failure && visited.has(url)) state.failure = 'REDIRECT_LOOP';
-        if (!scanning && !state.failure && visited.size >= 10) state.failure = 'REDIRECT_LIMIT';
+        // Fetch may re-intercept an existing network request. Server redirect
+        // hops carry redirectedRequestId; a browser restart of the original
+        // request does not. Permit one such restart without resetting budgets.
+        const sameNetworkRequest = typeof event.networkId === 'string' && event.networkId.length > 0
+          && lastRequest?.networkId === event.networkId && !event.redirectedRequestId;
+        const repeatedInterception = sameNetworkRequest && lastRequest.url === url;
+        const originalRequestRestart = sameNetworkRequest && !repeatedInterception
+          && !restarted && url === target;
+        if (!scanning && !state.failure && originalRequestRestart) {visited.clear();restarted=true;}
+        if (!scanning && !state.failure && !repeatedInterception && visited.has(url)) state.failure = 'REDIRECT_LOOP';
+        if (!scanning && !state.failure && !repeatedInterception && documents >= 10) state.failure = 'REDIRECT_LIMIT';
         if (state.failed || state.failure || scanning) {
           await session.send('Fetch.failRequest', { requestId: event.requestId, errorReason: 'BlockedByClient' });
           return;
         }
+        if(!repeatedInterception)documents++;
         visited.add(url); state.lastUrl = url;
+        lastRequest = {networkId:event.networkId,url};
       }
       await session.send('Fetch.continueRequest', { requestId: event.requestId });
     })().catch(fail);

@@ -1,3 +1,4 @@
+import {mapImagePreview} from './imagePreview.js';
 import { PREVIEW_GUARD } from '../../shared/previewPolicy.js';
 import type { SitePreview } from '../../shared/types.js';
 import { validatePublicUrl } from './publicPolicy.js';
@@ -29,7 +30,9 @@ export function mapSitePreview(raw: unknown, identity: {scanId:string;requestedU
   const snapshot = record(raw);
   const requestedUrl = validatePublicUrl(identity.requestedUrl), url = validatePublicUrl(identity.url);
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(identity.scanId) || snapshot.url !== url || typeof snapshot.capturedAt !== 'string'
-    || snapshot.capturedAt.length > 30 || !Number.isFinite(Date.parse(snapshot.capturedAt)) || !Array.isArray(snapshot.nodes)) return invalid();
+    || snapshot.capturedAt.length > 30 || !Number.isFinite(Date.parse(snapshot.capturedAt))) return invalid();
+  if(snapshot.kind==='image')return mapImagePreview(snapshot,{...identity,requestedUrl,url});
+  if(!Array.isArray(snapshot.nodes))return invalid();
   for (const key of ['omittedSubtrees','omittedText','omittedStyles']) if (!Number.isSafeInteger(snapshot[key]) || Number(snapshot[key]) < 0 || Number(snapshot[key]) > 1000000) return invalid();
   let count = 0, css = '', textLength = 0, capturedTextCharacters = 0;
   function declarations(value: unknown) {
