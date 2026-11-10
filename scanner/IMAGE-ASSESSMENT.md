@@ -1,6 +1,6 @@
 # Local container image assessment
 
-Assessed November 9, 2026 after the bounded [formatting-whitespace retention fix](CONTENT-RETENTION.md). Review also tightened neighboring-block eligibility to preserve separators near omitted content. Dependencies and base digests are unchanged. This table describes the rebuilt images for that controlled fix; earlier live diagnostic/report/preview attempts used their then-current images recorded separately. **Public capture and scanning remain disabled.** The scanner and firewall images pass the raw high-severity threshold; QA still fails it. This is not ongoing activation or risk acceptance.
+Reassessed November 9, 2026 during preparation for [single-page redirect validation](REDIRECT-VALIDATION.md), after the reviewed redirect implementation at `c74eb08`. Dependencies and base digests are unchanged. This table binds the current rebuilt images to fresh local cached-database results; earlier live attempts used their then-assessed images recorded separately. **Public capture and scanning remain disabled; no live attempt has run for this validation branch.** The scanner and firewall images pass the raw high-severity threshold; QA still fails it with the same seven high matches as the prior assessment. This is not activation or risk acceptance.
 
 ## Image roles and build inputs
 
@@ -18,9 +18,9 @@ Free local Anchore Grype v0.121.2 inspected the squashed arm64 filesystems with 
 
 | Local image | Arm64 configuration digest (Grype imageID) | OCI index/repository digest |
 | --- | --- | --- |
-| Chromium scanner runtime | `sha256:cb658ad642a6565d9caa756ddb9016549c1d77299aa6a49768541501c8b5c2f8` | `sha256:31a27a7eec12f3ecc8c6eee2e670c0a1d8c244c4ed2a5324e93ebea04b617682` |
-| Browser QA | `sha256:9771bfb71a8318aaa285a5869b6b8da6abde632da7f8b3124427d91a57353919` | `sha256:da62e17c6c1544d06eea0ebfc21080504b9003e35dfbc785b78e5dd39e284a75` |
-| Firewall helper | `sha256:38024b7679a536a3d65e7044608021fa9a38a70e5a974d58b54c4250f1f3cf0f` | `sha256:47393a7b4234f4e290600aa29d808e6b22b67a8523e994dfb7e329a83e881c14` |
+| Chromium scanner runtime | `sha256:5c9f0b535f8e23339385db46342287728ba0a67129a294936e524c6a771deb7a` | `sha256:5e2cd548a673e60357a4cf02ff16af152320439c371f8c7057e7e7c833ac0bfd` |
+| Browser QA | `sha256:863c858351de96e4c20e86b16f205efb897cf33b4dbdfa168db72fcdaafae9d0` | `sha256:322cf3e7b3cb9457671792dda09fbfa6fdf21a4d3299ec94cb16646fb0ac44e9` |
+| Firewall helper | `sha256:38024b7679a536a3d65e7044608021fa9a38a70e5a974d58b54c4250f1f3cf0f` | `sha256:e0395e9423a0ad9fb63c60653c56208e7d5145654039ee94e62620c810a31911` |
 
 Docker's local store reports the OCI index digest as its image ID; Grype reports the selected platform's configuration digest separately. Repository digests bind these reports to the local tags. Rebuilt attestation metadata can change an index even when the helper's filesystem/configuration stays unchanged.
 
@@ -57,3 +57,6 @@ The remaining two high package records concern CVE-2025-3887. QA retains the rev
 The runtime now passes this image threshold; that does not automatically enable the application or accept QA risks. Both public constants remain false. The expanded path was reviewed before the five explicitly approved report-only attempts, and both gates were disabled afterward. Additional live requests, capture or ongoing activation require separate approval; the [snapshot validation plan](MVP-VALIDATION.md) records the earlier restricted-build attempt. Do not bypass default gates through a test dependency injection or enable unsupported browsers to obtain a live result.
 
 Historically, the Playwright 1.64.1 combined worker had 28 critical/144 high matches; the 1.65.0 combined image had 0 critical/7 high using this same database. The current role-specific table supersedes those combined-worker counts. Historical Docker Scout totals use different matching/feed data and are not directly comparable.
+
+
+The redirect-policy review at `c74eb08` passed 178 controlled tests, including real Chromium interception-session loss checks and the three-engine UI suite. This validation branch has freshly passed 115 unit/API tests and the TypeScript/Vite build without a production change. The image reassessment used the same cached database and left severity counts unchanged; it did not refresh the advisory database, suppress findings or make a public website request. Exact live targets and attempt counts remain pending separate confirmation.
