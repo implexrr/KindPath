@@ -225,6 +225,46 @@ try {
   assert.equal(await slider('Colour strength').inputValue(), '65');
   for (const name of names.slice(1)) assert.equal(await slider(name).inputValue(), '0');
   const matrix = page.locator('feColorMatrix');
+  const presets = page.getByRole('group', {name:'Vision presets',exact:true});
+  const selectedPreset = () => presets.getByRole('button', {pressed:true});
+  const presetCases = [
+    ['Original',[0,0,0,0]], ['Red–green colour vision',[65,0,0,0]],
+    ['Blue–yellow colour vision',[65,0,0,0]], ['Blurred vision',[0,0,50,0]],
+    ['Reduced peripheral vision',[0,0,0,65]],
+  ];
+  assert.equal(await presets.getByRole('button').count(),5);
+  assert.equal(await selectedPreset().innerText(),'Red–green colour vision');
+  const callsBeforePresets = apiRequests;
+  const frameAddressesBeforePresets = page.frames().map(frame=>frame.url());
+  for (const [name,strengths] of presetCases) {
+    const button = presets.getByRole('button',{name,exact:true});
+    await button.focus(); await button.press('Enter');
+    assert.equal(await button.evaluate(element=>element===document.activeElement),true);
+    assert.equal(await selectedPreset().count(),1);assert.equal(await selectedPreset().innerText(),name);
+    for (let index=0;index<names.length;index++)assert.equal(await slider(names[index]).inputValue(),String(strengths[index]));
+    assert.equal(await page.locator('iframe').first().evaluate(element=>element.style.filter),'');
+    if(name==='Original') {
+      assert.equal(await modified.evaluate(element=>element.style.filter),'');assert.equal(await page.locator('.field-mask').count(),0);
+    } else if(name==='Blurred vision') {
+      assert.equal(await modified.evaluate(element=>element.style.filter),'blur(2px)');assert.equal(await page.locator('.field-mask').count(),0);
+    } else if(name==='Reduced peripheral vision') {
+      assert.equal(await modified.evaluate(element=>element.style.filter),'');assert.equal(await page.locator('.field-mask').evaluate(element=>element.style.opacity),'0.65');
+    } else {
+      assert.match(await modified.evaluate(element=>element.style.filter),/url\(/);
+      assert.equal(await page.getByLabel('Colour preset',{exact:true}).inputValue(),name.startsWith('Red')?'red-green':'blue-yellow');
+    }
+  }
+  await page.getByRole('button',{name:'Apply visual effects',exact:true}).press('Space');
+  assert.equal(await selectedPreset().count(),0);assert.equal(await page.locator('.field-mask').count(),0);
+  await presets.getByRole('button',{name:'Blurred vision',exact:true}).press('Space');
+  assert.equal(await selectedPreset().innerText(),'Blurred vision');assert.equal(await modified.evaluate(element=>element.style.filter),'blur(2px)');
+  await slider('Blur strength').press('ArrowRight');
+  assert.equal(await selectedPreset().count(),0);
+  await page.getByText('Custom visual settings are applied to the modified snapshot only.',{exact:true}).waitFor();
+  assert.equal(apiRequests,callsBeforePresets,'Preset changes must not fetch or recapture a page');
+  assert.deepEqual(page.frames().map(frame=>frame.url()),frameAddressesBeforePresets);
+  await page.getByRole('button',{name:'Reset effects',exact:true}).press('Enter');
+  assert.equal(await selectedPreset().innerText(),'Red–green colour vision');
   const redGreen = await matrix.getAttribute('values');
   await page.getByLabel('Colour preset', { exact: true }).selectOption('blue-yellow');
   assert.notEqual(await matrix.getAttribute('values'), redGreen);

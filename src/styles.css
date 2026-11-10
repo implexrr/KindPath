@@ -36,3 +36,9 @@
 @media print{.print-report .scan-coverage{background:#fff;border-color:#555;padding:8pt;margin:12pt 0}.print-report .scan-coverage p{font:inherit;color:#000}}
 
 .preview-quality h4{font-size:15px;margin:0 0 8px}.preview-quality p{margin:0;line-height:1.7}
+
+/* Preset choices stay outside the altered snapshot and wrap on narrow screens. */
+.vision-presets{margin-top:22px}
+.vision-presets h4{font-size:14px;margin:0 0 12px}
+.vision-preset-buttons{display:flex;flex-wrap:wrap;gap:10px}
+.vision-preset-buttons button{min-height:44px;max-width:100%;white-space:normal}
