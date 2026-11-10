@@ -109,8 +109,11 @@ opened; the test process disables sync and uses a mock keychain. Chrome can acce
 KindPath interface; submitted websites still load in the isolated scanner.
 The check verifies report identity, an actual JSON download, image decoding,
 vision presets, colour pixels where a suitable patch exists, inert navigation,
-and fit/actual-size controls. Query-bearing validation inputs are rejected to
-keep query credentials out of artifacts; the application's URL policy is unchanged.
+fit/actual-size controls, fresh identities on repeated scans, clearing results
+on reload, and rejecting private URL entry before a scan request. You may repeat
+a URL to check rescan behavior. The first submission uses the keyboard, and
+addresses without a scheme exercise the normal HTTPS default. Query-bearing
+validation inputs are rejected to keep query credentials out of artifacts; the application's URL policy is unchanged.
 Reports, screenshots and summaries stay ignored under `logs/chrome-validation/`;
 the temporary Chrome profile is removed afterward. A site refusing access or
 returning no preview is recorded and makes the check exit unsuccessfully.

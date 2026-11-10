@@ -93,13 +93,19 @@ try {
   await page.goto(base);
   await page.getByRole("button", { name: "Scan website", exact: true }).waitFor({ state: "visible" });
   await page.waitForFunction(() => !document.querySelector('button[type="submit"]')?.disabled);
+  const scanIds = new Set();
   for (let index = 0; index < targets.length; index++) {
     const target = targets[index];
     actual = void 0;
     const before = requests;
-    await page.getByLabel("Your website URL").fill(target);
-    assert.equal(await page.locator(".results").count(), 0);
-    await page.getByRole("button", { name: "Scan website", exact: true }).click();
+    const input = page.getByLabel("Your website URL");
+    const entered = args[index + 1];
+    const previous = await input.inputValue();
+    await input.fill(entered);
+    if (previous !== entered) assert.equal(await page.locator(".results").count(), 0);
+    if (index === 0) await input.press("Enter");
+    else await page.getByRole("button", { name: "Scan website", exact: true }).click();
+    await page.locator(".results").waitFor({ state: "detached" });
     await page.waitForFunction(() => document.querySelector("form")?.getAttribute("aria-busy") === "false", void 0, { timeout: 1e5 });
     assert.equal(requests, before + 1);
     assert.ok(actual);
@@ -113,7 +119,9 @@ try {
     assert.equal(report.mode, "public");
     assert.equal(report.requestedUrl, target);
     assert.equal(navigationRejection(target, report.url), void 0);
-    assert.ok(report.scanId);
+    assert.match(report.scanId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    assert.ok(!scanIds.has(report.scanId), "A new scan must not reuse the previous report identity");
+    scanIds.add(report.scanId);
     await page.locator(".results").waitFor();
     const event = page.waitForEvent("download");
     await page.getByRole("link", { name: "Download report JSON", exact: true }).click();
@@ -252,8 +260,19 @@ try {
     results.push(result);
     console.log(JSON.stringify(result));
   }
+  const requestsBeforeReload = requests;
+  await page.reload();
+  await page.waitForFunction(() => !document.querySelector('button[type="submit"]')?.disabled);
+  assert.equal(await page.locator(".results,iframe").count(), 0, "Reload must clear ephemeral reports and previews");
+  await page.getByLabel("Your website URL").fill("http://127.0.0.1/");
+  await page.getByLabel("Your website URL").press("Enter");
+  await page.getByRole("alert").waitFor();
+  assert.match(await page.getByRole("alert").innerText(), /public HTTP\/HTTPS hostname/);
+  assert.equal(requests, requestsBeforeReload, "A rejected private URL must not reach the scan API");
+  assert.equal(await page.locator(".results,iframe").count(), 0);
+  console.log("Reload and private-URL rejection passed without another scan.");
   assert.deepEqual(errors, []);
-  await writeFile(out + "/result.json", JSON.stringify({ chrome: context.browser().version(), results }, null, 2));
+  await writeFile(out + "/result.json", JSON.stringify({ chrome: context.browser().version(), reloadClearsResults: true, privateUrlRejectedLocally: true, results }, null, 2));
   if (results.some((result) => result.outcome !== "report-and-preview")) process.exitCode = 1;
   console.log("Validation artifacts are in " + out);
 } finally {
