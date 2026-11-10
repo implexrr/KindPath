@@ -27,24 +27,35 @@ async function udp() {
     socket.once('error', () => finish(false)); socket.send('fixture', 53, allowed);
   });
 }
-try {
-  assert.equal(process.getuid(), 1000);
-  for (let i = 0; !(await tcp(allowed, 80)); i++) {
-    if (i >= 40) throw new Error('Fixture did not start');
+let stage = 'identity';
+async function waitForFixture(check) {
+  for (let i = 0; !(await check()); i++) {
+    if (i >= 40) throw new Error('Controlled fixture did not start');
     await new Promise(done => setTimeout(done, 100));
   }
+}
+try {
+  assert.equal(process.getuid(), 1000);
+  stage = 'fixture-readiness';
+  await waitForFixture(() => tcp(allowed, 80));
   if (!after) {
-    for (let i = 0; !(await tcp(blocked, 80)); i++) {
-      if (i >= 40) throw new Error('Second fixture did not start');
-      await new Promise(done => setTimeout(done, 100));
-    }
+    // Origins bind HTTP, TLS and UDP sequentially; an open HTTP port alone
+    // does not prove that all positive canaries are ready on a busy runner.
+    await Promise.all([
+      () => tcp(allowed, 443), () => tcp(allowed, 81), () => tcp(blocked, 80),
+      () => tcp('127.0.0.1', 8888), () => tcp('::1', 8888), udp,
+    ].map(waitForFixture));
   }
+  stage = 'allowed-tls';
   assert.equal(await tcp(allowed, 443), true);
+  stage = 'firewall-canaries';
   const denied = await Promise.all([tcp(allowed, 81), tcp(blocked, 80), tcp('127.0.0.1', 8888), tcp('::1', 8888), udp()]);
   assert.deepEqual(denied, Array(5).fill(!after));
   // This process shares the gateway namespace and privileges, and cannot remove the filter.
+  stage = 'capability-denial';
   const attempt = spawnSync('/usr/sbin/nft', ['delete', 'table', 'inet', 'kindpath'], { encoding: 'utf8', timeout: 2000 });
   assert.equal(isPermissionDenied(attempt), true, 'nft must run and report a permission denial');
+  stage = 'http-content';
   await new Promise((done, reject) => {
     const req = http.get({ host: allowed, port: 80, path: '/', agent: false }, res => {
       let data = ''; res.on('data', chunk => { data += chunk; }); res.on('error', reject);
@@ -53,5 +64,5 @@ try {
     req.setTimeout(2000, () => req.destroy(new Error('Fixture timeout'))); req.once('error', reject);
   });
   process.stdout.write(JSON.stringify({ phase: after ? 'after' : 'before', allowedConnections: 2, forbiddenConnections: denied.length, cannotAlterRules: true }));
-} catch { process.stderr.write('Controlled firewall probe failed.\n'); process.exitCode = 1; }
+} catch { process.stderr.write(`Controlled firewall probe failed: ${stage}.\n`); process.exitCode = 1; }
 finally { clearTimeout(deadline); }

@@ -101,7 +101,16 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
         await command(['start', origin.name], signal);
       }
       const probe = await createFirewallContainer(command, resources, `container:${ns.id}`, 'probe', ['firewall/probe.mjs', 'before', 'pinned'], signal);
-      const proof = JSON.parse(await command(['start', '--attach', probe.name], signal, 20000));
+      let raw: string;
+      try { raw = await command(['start', '--attach', probe.name], signal, 20000); }
+      catch (error) {
+        // Only the controlled probe's fixed stage labels may enter test logs.
+        const stderr = (error as {stderr?: unknown}).stderr;
+        const stage = typeof stderr === 'string' ? stderr.match(/Controlled firewall probe failed: (identity|fixture-readiness|allowed-tls|firewall-canaries|capability-denial|http-content)\./)?.[1] : undefined;
+        if (stage) console.info(`Controlled network setup failed at ${stage}`);
+        throw error;
+      }
+      const proof = JSON.parse(raw);
       assert.equal(proof.phase, 'before'); assert.equal(proof.allowedConnections, 2); assert.equal(proof.forbiddenConnections, 5);
       return ns;
     },
