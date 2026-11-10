@@ -1,3 +1,4 @@
+import { navigationRejection, redirectMessage } from '../../scanner/gateway/navigation.mjs';
 import { readScanCoverage } from '../../shared/scanCoverage.js';
 import { readDiagnostic, classifyFailure } from '../../scanner/gateway/diagnostics.mjs';
 import { randomUUID } from 'node:crypto';
@@ -11,6 +12,7 @@ export function mapPublicReport(raw: unknown, requestedUrl?: string) {
   const report = mapWorkerReport(raw, 'public');
   const result = raw as { url?: unknown; coverage?: { blockedRequests?: unknown; failedRequests?: unknown; omittedRules?: unknown; omittedNodes?: unknown } };
   const finalUrl = validatePublicUrl(result.url);
+  if (requestedUrl && navigationRejection(requestedUrl, finalUrl)) throw new Error('Invalid final page.');
   const coverage = readScanCoverage(result.coverage);
   if (!coverage) throw new Error('Invalid scan coverage.');
   return { ...report, mode: 'public' as const, coverage, url: finalUrl, ...(requestedUrl ? { requestedUrl: validatePublicUrl(requestedUrl) } : {}), limitations: [
@@ -46,9 +48,10 @@ export function createPublicSiteScanner({ enabled = () => PUBLIC_SCANNING_ENABLE
     } catch (error) {
       if (error instanceof ScannerError && error.code !== 'SCAN_FAILED') throw error;
       // Never expose raw DNS, browser, Docker or worker error text to the caller.
-      throw new ScannerError('SCAN_FAILED', 'The website scan failed or timed out. No report was produced.',
-        readDiagnostic(error instanceof ScannerError ? error.diagnostic : undefined)
-          ?? (stage==='worker-result' ? {stage,code:'INVALID_OUTPUT'} : classifyFailure(error,stage,signal)));
+      const diagnostic = readDiagnostic(error instanceof ScannerError ? error.diagnostic : undefined)
+        ?? (stage==='worker-result' ? {stage,code:'INVALID_OUTPUT'} : classifyFailure(error,stage,signal));
+      const explanation = diagnostic?.stage === 'page-loading' ? redirectMessage(diagnostic.code) : undefined;
+      throw new ScannerError('SCAN_FAILED', explanation ?? 'The website scan failed or timed out. No report was produced.', diagnostic);
     }
   };
 }

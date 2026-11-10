@@ -34,3 +34,17 @@ test('missing and malformed coverage stays unknown; built-in and demo reports ge
   assert.equal(scanCoverageFeedback({mode:'fixture',coverage}),undefined);
   assert.equal(scanCoverageFeedback({mode:'demo',coverage}),undefined);
 });
+
+test('redirect failures explain the policy using only validated fixed diagnostics', () => {
+  for (const [code, pattern] of [['REDIRECT_HOST_CHANGED',/hostname/],['REDIRECT_PATH_CHANGED',/path or query/],
+    ['REDIRECT_DOWNGRADE',/HTTPS to HTTP/],['REDIRECT_LOOP',/loop/],['REDIRECT_LIMIT',/limit/]] as const) {
+    const message=scanErrorMessage({code:'SCAN_FAILED',error:'PRIVATE_SENTINEL',diagnostic:{stage:'page-loading',code}},503);
+    assert.match(message,pattern); assert.doesNotMatch(message,/PRIVATE_SENTINEL/);
+  }
+  for (const diagnostic of [{stage:'dns',code:'REDIRECT_HOST_CHANGED'},
+    {stage:'page-loading',code:'REDIRECT_HOST_CHANGED',url:'PRIVATE_SENTINEL'},
+    {stage:'page-loading',code:'constructor'}]) {
+    assert.equal(scanErrorMessage({code:'SCAN_FAILED',diagnostic},503),'The scan could not finish. No report was created. Try again.');
+  }
+  assert.match(scanErrorMessage({code:'SCANNER_CLEANUP_FAILED',diagnostic:{stage:'page-loading',code:'REDIRECT_LOOP'}},503),/safely/);
+});

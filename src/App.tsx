@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { navigationRejection } from '../scanner/gateway/navigation.mjs';
 import { websiteUrl } from '../scanner/gateway/url.mjs';
 import { fixtureTitle, isFixture } from '../shared/fixtures';
 import type { FixtureId } from '../shared/fixtures';
@@ -93,9 +94,10 @@ export function App() {
       if (mode === 'public') {
         let matches = false;
         try {
-          // The request must match; the server may approve a different public redirect host.
+          // Bind the request and allow only the agreed single-page URL changes.
           const requested = websiteUrl(value), scanned = websiteUrl(data.url);
-          matches = data.requestedUrl === requested.href && data.url === scanned.href;
+          matches = data.requestedUrl === requested.href && data.url === scanned.href
+            && !navigationRejection(requested.href, scanned.href);
         } catch { /* Reject missing or malformed report URLs without displaying their contents. */ }
         if (!matches) throw new Error('The report did not match the requested website. Try again.');
         if ((publicCaptureEnabled && !hasMatchingSitePreview(data)) || (!publicCaptureEnabled && data.sitePreview !== undefined)) {

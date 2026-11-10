@@ -21,13 +21,13 @@ test('reports, exports and isolated previews work in Chromium, Firefox and WebKi
   const report = await scanFixture('barriers');
   const clearReport = await scanFixture('clear');
   const demoReport = createDemoReport(new URL('https://example.com'));
-  const sitePreview = mapSitePreview({url:'https://example.org/final',capturedAt:new Date().toISOString(),omittedSubtrees:0,omittedText:0,omittedStyles:0,nodes:[
+  const sitePreview = mapSitePreview({url:'https://www.example.com/start',capturedAt:new Date().toISOString(),omittedSubtrees:0,omittedText:0,omittedStyles:0,nodes:[
     {tag:'h1',attributes:{},style:{},hover:{},children:[{text:'Captured website marker'}]},
     {tag:'a',attributes:{},style:{color:'rgb(0, 0, 0)'},hover:{color:'rgb(255, 0, 0)'},children:[{text:'Captured link'}]},
     {tag:'form',attributes:{},style:{},hover:{},children:[{tag:'input',attributes:{},style:{},hover:{},children:[]},
       {tag:'button',attributes:{},style:{},hover:{},children:[{text:'Inactive captured button'}]}]},
     {tag:'aside',attributes:{},style:{},hover:{},children:[{text:'Static captured advertisement'}]},
-  ]},{scanId:'11111111-1111-4111-8111-111111111111',requestedUrl:'https://example.com/start',url:'https://example.org/final'});
+  ]},{scanId:'11111111-1111-4111-8111-111111111111',requestedUrl:'https://example.com/start',url:'https://www.example.com/start'});
   const qualityPreviews=Object.fromEntries(Object.entries({empty:[],whitespace:[{text:' \n\t '}],sparse:[{text:'Short page'}],
     text:[{text:'Captured page content. '.repeat(12)}]}).map(([key,nodes])=>[key,mapSitePreview({
       url:sitePreview.url,capturedAt:new Date().toISOString(),omittedSubtrees:0,omittedText:0,omittedStyles:0,nodes,

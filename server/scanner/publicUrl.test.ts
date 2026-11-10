@@ -10,7 +10,7 @@ import { createWorkerRunner, ScannerError } from './dockerWorker.js';
 import { PUBLIC_SCANNING_ENABLED } from './publicPolicy.js';
 import { scanInNamespace } from './publicTransport.js';
 
-const raw = { fixture: 'public', url: 'https://example.com/final', engine: 'controlled', violations: [], incomplete: [],
+const raw = { fixture: 'public', url: 'https://www.example.com/start', engine: 'controlled', violations: [], incomplete: [],
   passes: 2, inapplicable: 0, coverage: { blockedRequests: 0, failedRequests: 0, omittedRules: 0, omittedNodes: 0 } };
 const plan = (target: string, signal: AbortSignal) => createDestinationPlan(target, async () => [{ address: '93.184.216.34', family: 4 }], signal);
 const emptySession = async () => ({ command: async () => '', dispose: async () => {} });
@@ -116,4 +116,19 @@ test('capture defaults stay disabled and captured data is accepted only by an ex
   const first=await scan('https://example.com/start'),second=await scan('https://example.com/start');
   assert.equal(first.sitePreview?.scanId,first.scanId); assert.equal(first.sitePreview?.requestedUrl,first.requestedUrl);
   assert.equal(first.sitePreview?.url,first.url); assert.notEqual(first.scanId,second.scanId);
+});
+
+test('public result validation accepts only the submitted page or its permitted canonical URL', async () => {
+  for (const url of ['https://example.org/start','https://example.com/other','https://example.com/start?q=1','http://example.com/start']) {
+    await assert.rejects(createPublicSiteScanner({enabled:()=>true,worker:async()=>({...raw,url})})('https://example.com/start'), error => {
+      assert.ok(error instanceof ScannerError);
+      assert.equal(error.code,'SCAN_FAILED');
+      assert.deepEqual(error.diagnostic,{stage:'worker-result',code:'INVALID_OUTPUT'});
+      return true;
+    });
+  }
+  for (const url of ['http://example.com/start','https://example.com/start','https://www.example.com/start']) {
+    const report=await createPublicSiteScanner({enabled:()=>true,worker:async()=>({...raw,url})})('http://example.com/start');
+    assert.equal(report.requestedUrl,'http://example.com/start'); assert.equal(report.url,url);
+  }
 });

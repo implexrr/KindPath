@@ -15,7 +15,7 @@ try {
   let activeReport = data.report;
   let apiRequests = 0;
   let publicCapabilities = false, publicCalls = 0, captureCapabilities = false;
-  const publicReport = { ...data.report, mode: 'public', requestedUrl: 'https://example.com/start', url: 'https://example.org/final',
+  const publicReport = { ...data.report, mode: 'public', requestedUrl: 'https://example.com/start', url: 'https://www.example.com/start',
     coverage: {blockedRequests:2,failedRequests:3,omittedRules:1,omittedNodes:4},
     scanner: { ...data.report.scanner, fixture: 'public' }, limitations: ['Controlled URL-report UI response; no public site fetched.'] };
   let publicResponse = publicReport, publicStatus = 200;
@@ -494,6 +494,11 @@ try {
   await page.getByLabel('Your website URL').fill(publicReport.requestedUrl);
   for (const wrong of [{ ...publicReport, requestedUrl: 'https://example.com/old' },
     { ...publicReport, url: 'http://127.0.0.1/' },
+    { ...publicReport, url: 'https://example.org/start' },
+    { ...publicReport, url: 'https://www.www.example.com/start' },
+    { ...publicReport, url: 'https://example.com/other' },
+    { ...publicReport, url: 'https://example.com/start?changed=1' },
+    { ...publicReport, url: 'http://example.com/start' },
     { ...publicReport, url: 'http://printer.local/' },
     { ...publicReport, url: 'https://user:pass@example.org/' },
     { ...publicReport, url: 'https://example.org:8443/' }, data.demoReport]) {
@@ -508,6 +513,11 @@ try {
     await page.getByRole('alert').filter({ hasText: status === 429 ? 'Another scan is still finishing' : 'The scan could not finish' }).waitFor();
     assert.equal(await page.locator('.results').count(), 0);
   }
+  publicStatus = 503; publicResponse = {code:'SCAN_FAILED',error:'PRIVATE_SENTINEL',diagnostic:{stage:'page-loading',code:'REDIRECT_PATH_CHANGED'}};
+  await publicButton.click();
+  await page.getByRole('alert').filter({hasText:'different path or query'}).waitFor();
+  assert.equal(await page.locator('.results').count(),0);
+  assert.equal(await page.getByText('PRIVATE_SENTINEL').count(),0);
   publicStatus = 200; publicResponse = publicReport;
   delayPublic = true;
   const publicStarted = new Promise(resolve => { notifyPublic = resolve; });
