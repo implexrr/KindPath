@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { once } from 'node:events';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
+import { connect } from 'node:net';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { createProductionApp, productionConfig } from './productionApp.js';
+import { createProductionApp, createProductionServer, productionConfig } from './productionApp.js';
 
 const origin = 'https://staging.example.test';
 const host = new URL(origin).host;
@@ -34,6 +36,10 @@ test('staging protects the frontend and API, then limits authenticated POST requ
   await writeFile(join(staticRoot, 'index.html'), '<title>Staging</title>');
   await writeFile(join(staticRoot, 'assets', 'index.js'), 'console.log("staging")');
   await writeFile(join(staticRoot, 'private.txt'), 'excluded from routes');
+  const linkedAsset = join(staticRoot, 'assets', 'linked.txt');
+  await symlink('../private.txt', linkedAsset);
+  assert.throws(() => createProductionApp(productionConfig(settings), staticRoot), /only regular files/);
+  await rm(linkedAsset);
   let time = 0;
   const app = createProductionApp(productionConfig(settings), staticRoot, () => time);
   const server = app.listen(0, '127.0.0.1');
@@ -79,6 +85,7 @@ test('staging protects the frontend and API, then limits authenticated POST requ
 
   const post = { ...auth, Origin: origin };
   const scanPath = '/api/scan-public';
+  assert.equal((await send('/assets/index.js', post, 'POST', '{')).status, 404);
   assert.equal((await send(scanPath, auth, 'POST')).status, 403);
   assert.equal((await send(scanPath, { ...auth, Origin: 'https://other.example.test' }, 'POST')).status, 403);
   assert.equal((await send(scanPath, { Origin: origin }, 'POST')).status, 401);
@@ -94,4 +101,36 @@ test('staging protects the frontend and API, then limits authenticated POST requ
   assert.equal((await send('/api/health', auth)).status, 200);
   time = 60_000;
   assert.equal((await send(scanPath, post, 'POST', '{')).status, 400);
+});
+
+test('staging drains an active request and rejects pipelined work during shutdown', { timeout: 5000 }, async (t) => {
+  let finishActive: (() => void) | undefined;
+  let started = 0;
+  const { server, stop } = createProductionServer((_req, res) => {
+    started++;
+    finishActive = () => res.end('completed');
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(stop);
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  const socket = connect(address.port, '127.0.0.1');
+  t.after(() => socket.destroy());
+  await once(socket, 'connect');
+  let raw = '';
+  socket.setEncoding('utf8').on('data', chunk => { raw += chunk; });
+
+  const rejected = once(server, 'request').then(() => {
+    assert.ok(finishActive);
+    stop();
+    socket.write('GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n');
+    return once(server, 'request');
+  });
+  socket.write('GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n');
+  await rejected;
+  finishActive?.();
+  await once(socket, 'close');
+  assert.equal(started, 1);
+  assert.match(raw, /HTTP\/1.1 200 OK[\s\S]*completed[\s\S]*HTTP\/1.1 503 Service Unavailable/);
 });

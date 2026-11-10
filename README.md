@@ -106,8 +106,10 @@ The frontend and API both require the shared credential. API POST requests
 require the configured origin and share a limit of six requests per rolling
 minute across testers. The scanner admits one scan at a time. The proxy
 should keep responses uncached and exclude credentials and request bodies from
-logs. Run the app under a supervisor that allows active requests and scanner
-cleanup to drain during shutdown.
+logs. Keep the installed release files read-only to the service account.
+Have the supervisor run `node server/production.js` directly from the release
+directory and give active requests and scanner cleanup time to drain during
+shutdown.
 
 Build the worker and firewall from the same reviewed checkout with
 `npm run scanner:build -- --runtime`. The app uses `/usr/bin/docker` and the

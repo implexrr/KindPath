@@ -1,4 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { lstatSync, readdirSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { RequestListener } from 'node:http';
 import { join } from 'node:path';
 import express from 'express';
 import type { RequestHandler } from 'express';
@@ -71,14 +74,43 @@ function stagePostLimit(now: () => number): RequestHandler {
 export function createProductionApp(
   config: ReturnType<typeof productionConfig>, staticRoot: string, now = () => performance.now(),
 ) {
+  const assets = join(staticRoot, 'assets');
+  if (!lstatSync(staticRoot).isDirectory() || !lstatSync(join(staticRoot, 'index.html')).isFile() ||
+      !lstatSync(assets).isDirectory()) {
+    throw new Error('The staging frontend must contain regular release files.');
+  }
+  const entries = readdirSync(assets, { withFileTypes: true });
+  if (!entries.length || entries.some(entry => !entry.isFile())) {
+    throw new Error('The staging assets must contain only regular files.');
+  }
+
   const app = express();
   app.disable('x-powered-by');
   app.set('env', 'production');
   app.use(stageRequests(config));
   app.use(createApp(stagePostLimit(now)));
   app.get('/', (_req, res) => { res.sendFile(join(staticRoot, 'index.html')); });
-  app.use('/assets', express.static(join(staticRoot, 'assets'), {
+  app.use('/assets', express.static(assets, {
     index: false, redirect: false, cacheControl: false,
   }));
   return app;
+}
+
+export function createProductionServer(app: RequestListener) {
+  let draining = false;
+  const server = createServer((req, res) => {
+    if (draining) {
+      res.writeHead(503, { Connection: 'close', 'Cache-Control': 'no-store' }).end();
+      return;
+    }
+    app(req, res);
+  });
+  return {
+    server,
+    stop() {
+      if (draining) return;
+      draining = true;
+      server.close();
+    },
+  };
 }

@@ -11,7 +11,7 @@ export function createApp(apiRequests: RequestHandler = localRequests) {
   const app = express();
   app.disable('x-powered-by');
   app.use('/api', apiRequests);
-  app.use(express.json({ limit: '4kb' }));
+  app.use('/api', express.json({ limit: '4kb' }));
   app.get('/api/health', (_req, res) => { res.json({ status: 'ok', mode: PUBLIC_SCANNING_ENABLED?'local':'demo' }); });
 
   // Preserve the existing API response instead of the router's automatic OPTIONS reply.
