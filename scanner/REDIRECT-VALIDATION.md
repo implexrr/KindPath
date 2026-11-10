@@ -1,12 +1,12 @@
 # Single-page redirect validation
 
-Status: three approved report-only attempts completed on November 9, 2026. All three returned reports, displayed in the interface, and matched their JSON downloads. Scanning is restored to disabled; capture remained disabled throughout.
+Status: three approved report-only attempts completed on November 9, 2026. All three returned reports, displayed in the interface, and matched their JSON download payloads. Scanning is restored to disabled; capture remained disabled throughout.
 
 ## Bounded scope
 
 Validate the existing website-entry -> default local API -> isolated Chromium/axe worker -> JSON report/download flow under the single-page redirect policy. This is an anonymous, report-only check, without crawling, sign-in, preview capture, deployment or a paid service. No new runtime feature or dependency is planned.
 
-Approved scope: one attempt each for `https://example.com/`, `http://github.com/` and `https://martinfowler.com/`. An expected HTTPS upgrade is a test hypothesis, not a recorded observation. This approval covers only this batch; further live requests require separate approval.
+Approved scope: one attempt each for `https://example.com/`, `http://github.com/` and `https://martinfowler.com/`. The protocol anticipated an HTTPS final URL for HTTP GitHub; the observed final URL is recorded below without inferring an upgrade mechanism. This approval covers only this batch; further live requests require separate approval.
 
 ## Checks and stop conditions
 
@@ -32,7 +32,7 @@ Production source: `c74eb08`; validation documentation before execution: `b55581
 | `http://github.com/` | `https://github.com/` | 200 | 0 | 2 | 63 / 64 | 5 |
 | `https://martinfowler.com/` | `https://martinfowler.com/` | 200 | 5 | 1 | 1 / 1 | 2 |
 
-Exactly one attempt was made per submitted URL, sequentially. Every report used public mode, retained the submitted and permitted final URLs, and had a scan identity and valid timestamp. The interface displayed each actual response, matched the returned confirmed/inconclusive rule counts, and focused the result. Its JSON download preserved URLs, timestamp, findings, scanner metadata, manual checks, coverage and server limitations. As designed, the export excluded captured HTML and ephemeral scan identity. No preview snapshot or iframe was returned/displayed. No previous or demo report was substituted.
+Exactly one attempt was made per submitted URL, sequentially. Every report used public mode, retained the submitted and permitted final URLs, and had a scan identity and valid timestamp. The interface displayed each actual response, matched the returned confirmed/inconclusive rule counts, and focused the result. The payload behind its JSON download link preserved URLs, timestamp, findings, scanner metadata, manual checks, coverage and server limitations. The live harness read that payload directly; it did not trigger a browser file-save event for these responses. As designed, the export excluded captured HTML and ephemeral scan identity. No preview snapshot or iframe was returned/displayed. No previous or demo report was substituted.
 
 The HTTP GitHub input produced an HTTPS final report URL with unchanged hostname/path/query. The experiment did not record the redirect chain or determine whether this upgrade came from a server redirect or browser upgrade behavior. Do not infer that mechanism. These three live visits did not exercise a www change or a rejected redirect; those boundaries retain their separate controlled-test evidence.
 
