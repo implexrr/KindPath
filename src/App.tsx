@@ -123,7 +123,7 @@ export function App() {
   return <>
     {report && <PrintableReport report={report}/>}
     <a className="skip-link" href="#main">Skip to content</a>
-    <header className="site-header"><a className="brand" href="#"><span className="brand-icon" aria-hidden="true">k<span>↗</span></span>KindPath<span className="beta">LOCAL PREVIEW</span></a><nav aria-label="Main"><a href="#how-it-works">How it works <span aria-hidden="true">↗</span></a><a href="/mockups/index.html">Design mockups <span aria-hidden="true">↗</span></a></nav></header>
+    <header className="site-header"><a className="brand" href="#"><span className="brand-icon" aria-hidden="true">k<span>↗</span></span>KindPath{import.meta.env.DEV && <span className="beta">LOCAL PREVIEW</span>}</a><nav aria-label="Main"><a href="#how-it-works">How it works <span aria-hidden="true">↗</span></a>{import.meta.env.DEV && <a href="/mockups/index.html">Design mockups <span aria-hidden="true">↗</span></a>}</nav></header>
     <main id="main">
       <section className="hero"><div className="hero-copy"><div className="eyebrow"><span className="tiny-sun" aria-hidden="true">✳</span> A MORE INCLUSIVE INTERNET STARTS HERE</div><h1>A clearer web.<br/><em>For everyone.</em></h1><p>See your website from a different perspective.<br className="desktop-break"/> Find accessibility barriers, understand their impact,<br className="desktop-break"/> and take the next step toward a more welcoming web.</p>
       <WebsiteForm activity={busy ? lastAttempt?.mode === 'demo' ? 'Preparing an example report…' : 'Checking the page and preparing your report…' : !capabilitiesReady ? 'Checking scanner availability…' : cancelled ? 'Request cancelled. You can try again shortly.' : report ? 'Report ready.' : ''}

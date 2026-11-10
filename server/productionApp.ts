@@ -28,6 +28,7 @@ function stageRequests({ origin, passwordHash }: ReturnType<typeof productionCon
     res.set('Cache-Control', 'no-store');
     res.set('X-Content-Type-Options', 'nosniff');
     res.set('X-Frame-Options', 'DENY');
+    res.set('Cross-Origin-Resource-Policy', 'same-origin');
 
     const requestOrigin = req.get('Origin');
     if (req.get('Host') !== origin.host ||
@@ -72,6 +73,7 @@ export function createProductionApp(
 ) {
   const app = express();
   app.disable('x-powered-by');
+  app.set('env', 'production');
   app.use(stageRequests(config));
   app.use(createApp(stagePostLimit(now)));
   app.get('/', (_req, res) => { res.sendFile(join(staticRoot, 'index.html')); });
