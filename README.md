@@ -246,6 +246,12 @@ A failed scan can return an optional allowlisted stage/code and, for a rejected 
 
 A [twenty-site local validation](scanner/WEBSITE-PREVIEW-VALIDATION.md) completed one explicitly approved anonymous scan-and-capture attempt per homepage. Sixteen returned reports and snapshots with matching identities; four failed without partial results. The returned captures passed isolation, effect-control and report/export checks, but six contained no rendered text and others were sparse. These results validate observed boundaries and flow, not broadly useful preview fidelity. Both public features were restored to disabled; further live execution requires approval.
 
+## Preview content quality
+
+Prepared website capture retains ordinary `b`, `i`, `pre`, `code` and `time` text markup. Component hosts with rendered light-DOM content become inert `div`/`span` wrappers; their source tag names, event handlers and resource attributes are not copied. Shadow-tree content is not traversed, and unrendered light content behind the controlled shadow-root cases is excluded. Body background, text colour, spacing and supported typography pass through the same bounded CSS validation as descendant styles.
+
+Controlled fixtures verify recognizable component text, code formatting and a dark page's light-text contrast. Images/media and unsupported content remain omitted, and the existing capture budgets and inert iframe restrictions are unchanged. These fixes have not been retried on public sites and do not establish general visual fidelity. See [the retention record](scanner/CONTENT-RETENTION.md).
+
 ## Preview content retention
 
 The capture skips short, collapsible formatting whitespace beside supported block elements that pass the existing visibility checks so indentation does not crowd later text out of the existing node budget. Spacing near omitted or hidden content, inline separators, preformatted whitespace, nonbreaking spaces and spacing beside out-of-flow elements are preserved. A [controlled regression](scanner/CONTENT-RETENTION.md) now retains a later heading; a larger fixture still truncates at the existing limit. No resource budget or allowed content was expanded, and no live-site improvement is claimed. Public scanning and capture remain disabled.
