@@ -187,7 +187,9 @@ for (const scenario of ['multi-host','private-redirect','late-policy-failure']) 
     calls.set(host,(calls.get(host)??0)+1);
     if(host==='late.example.net')await lateDns;
     // Rebinding or DNS-private resource answers must never create a connection.
-    const address=host==='blocked.example.org'||host==='rebind.example.net'&&calls.get(host)!==1?'127.0.0.1':host==='example.com'?'93.184.216.34':'93.184.216.36';
+    const address = host === 'blocked.example.org' || host === 'rebind.example.net' && calls.get(host) !== 1 ? '127.0.0.1'
+      : host === 'example.com' ? '93.184.216.34'
+      : failLate && host === 'late.example.net' ? '93.184.216.37' : '93.184.216.36';
     return [{address,family:4}];
    },signal),
    openSession:async()=>{
@@ -222,7 +224,9 @@ for (const scenario of ['multi-host','private-redirect','late-policy-failure']) 
    for(const host of ['example.com','www.example.com','static.example.net','rebind.example.net','blocked.example.org','late.example.net'])assert.equal(calls.get(host),1,host);
    assert.ok(report.limitations.some(text=>text.includes('requests failed')));
   }
-  if(!privateRedirect)assert.ok(capturedCommands.some(args=>args.includes('replace')),'Additional public host must require a verified firewall update');
+  const replacements = capturedCommands.filter(args => args.includes('firewall/control.mjs') && args.includes('replace'));
+  if (!privateRedirect) assert.ok(replacements.length >= 1, 'New addresses must require a firewall replacement');
+  if (scenario === 'multi-host') assert.equal(replacements.length, 1, 'Hosts sharing approved IPs must reuse the verified policy');
   if(failLate)assert.equal(injectedFailure,true,'The late policy failure must be exercised after browser completion');
   assert.equal(calls.get('blocked.example.org'),privateRedirect?undefined:1);
   const session=await openLocalDockerSession();

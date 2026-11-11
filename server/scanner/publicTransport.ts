@@ -70,9 +70,15 @@ export async function scanInNamespace(command: Command, resources: Resources, ns
     const started = new Promise<void>((resolve,reject) => {ready=resolve;unavailable=reject;});
     const approve = createDestinationApprover(plan, approvals.planTarget, async addresses => {
       await atScanStage('network-setup',async () => {
-        await firewallControl(command,resources,ns,'verify',operation);
-        ns.addresses = addresses;
-        await firewallControl(command,resources,ns,'replace',operation);
+        const unchanged = addresses.length === ns.addresses.length &&
+          addresses.every((address, index) => address === ns.addresses[index]);
+        if (!unchanged) {
+          // The replacement helper checks the previous hash before writing.
+          ns.addresses = addresses;
+          await firewallControl(command,resources,ns,'replace',operation);
+        }
+        // Verify the active policy before granting the hostname even if its
+        // pinned IPs were already present and no replacement was necessary.
         await firewallControl(command,resources,ns,'verify',operation);
       },operation);
     }, operation);
