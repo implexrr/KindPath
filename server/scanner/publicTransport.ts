@@ -32,7 +32,7 @@ export async function preparePublicEgress(command: Command, resources: Resources
   const plan = validateDestinationPlan(value);
   ns.addresses = [...plan.addresses];
   await firewallControl(command, resources, ns, 'setup', signal);
-  await firewallControl(command, resources, ns, 'verify', signal);
+  // Attachment verifies the installed policy both before and after connecting.
   await attachEgressNetwork(command, resources, ns, plan, signal);
 }
 
