@@ -131,7 +131,7 @@ restart the service gracefully.
 
 The scanner has no host-file mounts or forwarded credentials. It uses non-root containers, a read-only root filesystem, Chromium sandboxing, bounded memory/CPU/processes and temporary container storage. The browser has no external network interface; its gateway uses an independently verified firewall and pinned public destinations. Private, loopback and link-local destinations are rejected. Downloads, WebSockets and service workers are disabled.
 
-Per-scan admission, cancellation and verified cleanup remain authoritative. Container-removal errors are not treated as successful cleanup. Unconfirmed resources block new scans. Existing bounds include 16 destination hosts, 64 public IPv4 addresses, 250 browser resource requests, ten document requests, a 15-second loading deadline and a 60-second orchestration deadline. These limits can make resource-heavy sites incomplete. Results disclose request failures and omitted findings; they do not promise full coverage.
+A public scan’s Chromium container has a two-CPU quota by default. Set `KINDPATH_PUBLIC_BROWSER_CPUS=1` if Docker has only one CPU available. Only one scan can run at a time. Per-scan admission, cancellation and verified cleanup remain authoritative. Container-removal errors are not treated as successful cleanup. Unconfirmed resources block new scans. Existing bounds include 16 destination hosts, 64 public IPv4 addresses, 250 browser resource requests, ten document requests, a 15-second loading deadline and a 60-second orchestration deadline. These limits can make resource-heavy sites incomplete. Results disclose request failures and omitted findings; they do not promise full coverage.
 
 ## Checks
 

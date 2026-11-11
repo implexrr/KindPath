@@ -23,8 +23,33 @@ export async function capturePageImage(page) {
     }
     return boxes;
   },{width,height});
-  let image=await page.screenshot({fullPage:true,type:'jpeg',quality:80,clip:{x:0,y:0,width,height},caret:'hide',timeout:5000});
-  if(image.length>1500000)image=await page.screenshot({fullPage:true,type:'jpeg',quality:50,clip:{x:0,y:0,width,height},caret:'hide',timeout:5000});
+  // Capture the bounded document rectangle directly. The normal full-page
+  // helper waits for fonts and measures the full document before taking a clip.
+  const session = await page.context().newCDPSession(page);
+  async function screenshot(quality) {
+    let timer;
+    try {
+      const { data } = await Promise.race([
+        session.send('Page.captureScreenshot', {
+          format: 'jpeg', quality, captureBeyondViewport: true,
+          clip: { x: 0, y: 0, width, height, scale: 1 },
+        }),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Screenshot timed out')), 5000);
+        }),
+      ]);
+      return Buffer.from(data, 'base64');
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  let image;
+  try {
+    image = await screenshot(80);
+    if (image.length > 1500000) image = await screenshot(50);
+  } finally {
+    await session.detach().catch(() => {});
+  }
   if(image.length>1500000)throw new Error('Preview image exceeds its byte limit');
   const size=jpegSize(image);
   if(!size||size.width!==width||size.height!==height)throw new Error('Page layout changed during screenshot');

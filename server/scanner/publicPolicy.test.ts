@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PUBLIC_SCANNING_ENABLED, validatePublicUrl, assertPublicIsolation } from './publicPolicy.js';
+import { PUBLIC_BROWSER_CPUS, PUBLIC_SCANNING_ENABLED, validatePublicUrl, assertPublicIsolation } from './publicPolicy.js';
 import { scanPublicSite, mapPublicReport } from './publicScanner.js';
 
 test('public scanning remains disabled for otherwise eligible public targets', async () => {
@@ -13,12 +13,12 @@ test('host preflight permits public website hostnames and standard ports', () =>
   for (const url of ['file:///etc/passwd','http://127.0.0.1/','https://example.com:8080/','https://user:pass@example.com/','https://example.com.attacker.invalid/']) assert.throws(()=>validatePublicUrl(url));
 });
 test('the browser can mount only the private, read-only socket volume', () => {
-  const c: any = {State:{Running:false},Config:{User:'1000:1000'},Mounts:[{Type:'volume',Name:'owned-volume',Destination:'/run/kindpath',RW:false}],HostConfig:{NetworkMode:'none',Privileged:false,ReadonlyRootfs:true,AutoRemove:true,IpcMode:'private',CapDrop:['ALL'],Memory:536870912,NanoCpus:1000000000,PidsLimit:256,Tmpfs:{'/tmp':'rw,nosuid,nodev,noexec,size=134217728'},SecurityOpt:['no-new-privileges:true','seccomp={"defaultAction":"SCMP_ACT_ERRNO"}']}};
+  const c: any = {State:{Running:false},Config:{User:'1000:1000'},Mounts:[{Type:'volume',Name:'owned-volume',Destination:'/run/kindpath',RW:false}],HostConfig:{NetworkMode:'none',Privileged:false,ReadonlyRootfs:true,AutoRemove:true,IpcMode:'private',CapDrop:['ALL'],Memory:536870912,NanoCpus:PUBLIC_BROWSER_CPUS * 1_000_000_000,PidsLimit:256,Tmpfs:{'/tmp':'rw,nosuid,nodev,noexec,size=134217728'},SecurityOpt:['no-new-privileges:true','seccomp={"defaultAction":"SCMP_ACT_ERRNO"}']}};
   assert.doesNotThrow(()=>assertPublicIsolation([c],'browser','owned-volume'));
   for (const mutate of [
     (v:any)=>{v.Mounts[0].Type='bind';}, (v:any)=>{v.Mounts[0].RW=true;},
     (v:any)=>{v.Mounts[0].Name='unowned-volume';},(v:any)=>{v.HostConfig.NetworkMode='bridge';},
-    (v:any)=>{v.HostConfig.CapAdd=['SYS_ADMIN'];},(v:any)=>{v.Mounts.push({Type:'bind',Destination:'/host'});},
+    (v:any)=>{v.HostConfig.NanoCpus=3000000000;}, (v:any)=>{v.HostConfig.CapAdd=['SYS_ADMIN'];},(v:any)=>{v.Mounts.push({Type:'bind',Destination:'/host'});},
   ]) {const copy=structuredClone(c);mutate(copy);assert.throws(()=>assertPublicIsolation([copy],'browser','owned-volume'));}
 });
 
