@@ -636,18 +636,39 @@ try {
     await page.getByRole('alert').filter({ hasText: 'report did not match' }).waitFor();
     assert.equal(await page.locator('.results').count(), 0);
   }
-  for (const [status, code] of [[429, 'SCANNER_BUSY'], [503, 'SCAN_FAILED']]) {
-    publicStatus = status; publicResponse = { error: 'Controlled unavailable scan', code };
+  const scanRetry = page.getByRole('button', { name: 'Try again', exact: true });
+  const submittedEntry = '  example.com/start  ';
+  await websiteEntry.fill(submittedEntry);
+  for (const [diagnostic, explanation] of [
+    [{ stage: 'page-loading', code: 'HTTP_STATUS', httpStatus: 403 }, 'Access to the page was refused (HTTP 403)'],
+    [{ stage: 'page-loading', code: 'REDIRECT_HOST_CHANGED' }, 'hostname'],
+    [undefined, 'The scan could not finish'],
+  ]) {
+    publicStatus = 503;
+    publicResponse = { code: 'SCAN_FAILED', error: 'PRIVATE_SENTINEL', diagnostic };
     await publicButton.click();
-    await page.getByRole('alert').filter({ hasText: status === 429 ? 'Another scan is still finishing' : 'The scan could not finish' }).waitFor();
+    const failure = page.getByRole('alert').filter({ hasText: explanation });
+    await failure.waitFor();
+    assert.equal(await failure.evaluate(node => node === document.activeElement), true);
+    assert.equal(await websiteEntry.inputValue(), submittedEntry);
+    assert.equal(await scanRetry.count(), 0);
     assert.equal(await page.locator('.results').count(), 0);
+    assert.equal(await page.getByText('PRIVATE_SENTINEL').count(), 0);
   }
-  publicStatus = 503; publicResponse = {code:'SCAN_FAILED',error:'PRIVATE_SENTINEL',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus:403}};
+  await websiteEntry.fill('example.com/edited');
+  assert.equal(await page.getByRole('alert').count(), 0);
+  await websiteEntry.fill(submittedEntry);
+  publicStatus = 429; publicResponse = { code: 'SCANNER_BUSY' };
   await publicButton.click();
-  await page.getByRole('alert').filter({hasText:'Access to the page was refused (HTTP 403)'}).waitFor();
-  assert.equal(await page.locator('.results').count(),0);
-  assert.equal(await page.getByText('PRIVATE_SENTINEL').count(),0);
+  await page.getByRole('alert').filter({ hasText: 'Another scan is still finishing' }).waitFor();
+  assert.equal(await scanRetry.evaluate(node => node === document.activeElement), true);
+  assert.equal(await websiteEntry.inputValue(), submittedEntry);
+  const retryRequest = page.waitForRequest(request => request.url().endsWith('/api/scan-public'));
   publicStatus = 200; publicResponse = publicReport;
+  await scanRetry.click();
+  assert.deepEqual((await retryRequest).postDataJSON(), { url: publicReport.requestedUrl });
+  await page.locator('.results').waitFor();
+  assert.equal(await scanRetry.count(), 0);
   delayPublic = true;
   const publicStarted = new Promise(resolve => { notifyPublic = resolve; });
   await publicButton.click();

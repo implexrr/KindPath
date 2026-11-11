@@ -3,24 +3,51 @@ import { redirectMessage } from '../../scanner/gateway/navigation.mjs';
 import type { Report } from '../../shared/types';
 import { readScanCoverage } from '../../shared/scanCoverage';
 
-const messages = new Map([
-  ['SCAN_RATE_LIMITED','Too many requests. Wait up to a minute and try again.'],
-  ['SCANNER_BUSY','Another scan is still finishing. Try again shortly.'],
-  ['SCANNER_CLEANUP_FAILED','The previous scan could not finish safely. Scanning is unavailable until cleanup is verified.'],
-  ['SCANNER_UNAVAILABLE','The scanner is unavailable. Try again later.'],
-  ['PUBLIC_SCANNING_DISABLED','Website scanning is not available yet. Scan a built-in page or explore an example.'],
-  ['SCAN_FAILED','The scan could not finish. No report was created. Try again.'],
+export interface ScanFailureFeedback {
+  message: string;
+  retryable: boolean;
+}
+
+const failures = new Map<string, ScanFailureFeedback>([
+  ['SCAN_RATE_LIMITED', { message: 'Too many requests. Wait up to a minute and try again.', retryable: true }],
+  ['SCANNER_BUSY', { message: 'Another scan is still finishing. Try again shortly.', retryable: true }],
+  ['SCANNER_CLEANUP_FAILED', { message: 'The previous scan could not finish safely. Scanning is unavailable until cleanup is verified.', retryable: false }],
+  ['SCANNER_UNAVAILABLE', { message: 'The scanner is unavailable. Check that the local scanner is running.', retryable: false }],
+  ['PUBLIC_SCANNING_DISABLED', { message: 'Website scanning is not available yet. Scan a built-in page or explore an example.', retryable: false }],
+  ['SCAN_FAILED', { message: 'The scan could not finish. No report was created.', retryable: false }],
 ]);
-export function scanErrorMessage(value: unknown, status: number): string {
-  const data = value && typeof value === 'object' ? value as Record<string,unknown> : {};
+
+const temporaryHttpStatuses = new Set([408, 429, 500, 502, 503, 504]);
+const temporaryDiagnostics = new Set([
+  'TIMEOUT', 'EAI_AGAIN', 'ETIMEDOUT', 'ECONNRESET', 'ERR_CONNECTION_RESET',
+  'ERR_CONNECTION_TIMED_OUT', 'ERR_TIMED_OUT',
+]);
+
+export function scanFailureFeedback(value: unknown, status: number): ScanFailureFeedback {
+  const data = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   if (data.code === 'SCAN_FAILED') {
     const diagnostic = readDiagnostic(data.diagnostic);
-    const explanation = diagnostic?.stage === 'page-loading' ? (diagnostic.code === 'HTTP_STATUS' ? httpStatusMessage(diagnostic.httpStatus) : redirectMessage(diagnostic.code)) : undefined;
-    if (explanation) return explanation;
+    if (diagnostic?.stage === 'page-loading') {
+      const redirect = redirectMessage(diagnostic.code);
+      if (redirect) return { message: redirect + ' Check the address and submit an eligible public page.', retryable: false };
+      if (diagnostic.code === 'HTTP_STATUS' && typeof diagnostic.httpStatus === 'number') {
+        const message = httpStatusMessage(diagnostic.httpStatus);
+        if (message) return {
+          message: diagnostic.httpStatus === 403 ? message + ' If you have a public address for this page, enter it above.' : message,
+          retryable: temporaryHttpStatuses.has(diagnostic.httpStatus),
+        };
+      }
+    }
+    if (diagnostic && temporaryDiagnostics.has(diagnostic.code)) {
+      return { message: 'The scan was interrupted or timed out. No report was created. Try again shortly.', retryable: true };
+    }
   }
-  if (typeof data.code === 'string' && messages.has(data.code)) return messages.get(data.code)!;
-  if (status === 400 && typeof data.error === 'string' && data.error.length <= 500) return data.error;
-  return 'The request could not finish. No report was created. Try again.';
+  const known = typeof data.code === 'string' ? failures.get(data.code) : undefined;
+  if (known) return known;
+  if (status === 400 && typeof data.error === 'string' && data.error.length <= 500) {
+    return { message: data.error, retryable: false };
+  }
+  return { message: 'The request could not finish. No report was created.', retryable: temporaryHttpStatuses.has(status) };
 }
 
 export function scanCoverageFeedback(report: Pick<Report, 'mode' | 'coverage' | 'pageLoadIncomplete'>) {
