@@ -77,7 +77,7 @@ export function App() {
     setBusy(true); setFailure(null); setReport(null); setView('findings'); setCancelled(false);
     setLastAttempt({value,mode});
     const fixture = mode === 'fixture';
-    let requestStarted = false;
+    let timeout: AbortSignal | undefined;
     try {
       if (!fixture) {
         value = normalizeWebsiteEntry(value);
@@ -86,18 +86,18 @@ export function App() {
         setLastAttempt({value,mode});
       }
       if(mode==='public'&&!publicEnabled)throw new Error('Website scanning is unavailable. Start the local API or use the explicitly labelled example.');
-      requestStarted = true;
+      timeout = AbortSignal.timeout(mode === 'demo' ? 10000 : 90000);
       const response = await fetch(mode === 'fixture' ? '/api/scan-fixture' : mode === 'public' ? '/api/scan-public' : '/api/analyze', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fixture ? { fixture: value } : { url: value }),
-        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(mode === 'demo' ? 10000 : 90000)]),
+        signal: AbortSignal.any([abort.signal, timeout]),
       });
       let data;
       try { data = await response.json(); }
       catch (cause) {
-        if (cause instanceof Error && cause.name === 'TimeoutError') throw cause;
+        if (timeout.aborted) throw cause;
         if (abort.signal.aborted || analysisRequest.current !== abort) return;
         const { retryable } = scanFailureFeedback(undefined, response.status);
-        setFailure({ message: 'The response could not be read. No report was created.', retryable });
+        setFailure({ message: 'The response could not be read. No report was received.', retryable });
         return;
       }
       if (abort.signal.aborted || analysisRequest.current !== abort) return;
@@ -128,14 +128,14 @@ export function App() {
       setReport(data); setView('findings');
     } catch (cause) {
       if (abort.signal.aborted || analysisRequest.current !== abort) return;
-      if (requestStarted && cause instanceof Error && cause.name === 'TimeoutError') {
+      if (timeout?.aborted) {
         setFailure({ message: 'The request timed out. Try again shortly.', retryable: true });
-      } else if (requestStarted && cause instanceof TypeError) {
+      } else if (timeout && cause instanceof TypeError) {
         setFailure({ message: 'KindPath could not reach the scanner. Check your connection and try again.', retryable: true });
       } else {
         setFailure({
           message: cause instanceof Error ? cause.message : 'The scan could not finish. No report was created.',
-          retryable: requestStarted && mode !== 'public',
+          retryable: timeout !== undefined && mode !== 'public',
         });
       }
     } finally {
