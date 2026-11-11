@@ -6,9 +6,24 @@ import { PUBLIC_LABEL } from './publicPolicy.js';
 
 export type Resources = { containers: string[]; volumes: string[]; networks: string[] };
 const failure = () => new ScannerError('SCANNER_CLEANUP_FAILED', 'Scanner resource cleanup could not be verified. No new worker will start until Docker confirms cleanup.', {stage:'cleanup',code:'UNCONFIRMED'});
+async function remainingContainers(command: Command, names: string[]): Promise<string[]> {
+  const ordered = [...names].reverse();
+  if (ordered.length < 2 || !ordered.every(name => /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(name))) return ordered;
+  try {
+    // The owned helpers use --rm. One exact-name query confirms which have
+    // already disappeared, including any that failed before they were created.
+    const output = await command([
+      'ps', '--all', '--format', '{{.Names}}', '--filter', `name=^/(${ordered.join('|')})$`,
+    ], undefined, 3000);
+    const present = output.trim() ? output.trim().split('\n') : [];
+    if (present.every(name => ordered.includes(name))) return ordered.filter(name => present.includes(name));
+  } catch { /* Retry through individual removal and verified absence. */ }
+  return ordered;
+}
+
 export async function cleanResources(command: Command, resources: Resources) {
   let failed = false;
-  for (const name of [...resources.containers].reverse()) {
+  for (const name of await remainingContainers(command, resources.containers)) {
     try { await removeAndConfirm(command, name); } catch { failed = true; }
   }
   if (failed) throw failure();

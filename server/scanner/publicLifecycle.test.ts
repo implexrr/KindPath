@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createResourceRunner } from './resources.js';
+import { cleanResources, createResourceRunner } from './resources.js';
 import { ScannerError } from './dockerWorker.js';
 import type { Resources } from './resources.js';
 import type { Command } from './dockerWorker.js';
@@ -24,6 +24,7 @@ function daemon() {
     if (args[0] === 'rm') { containers.delete(args[2]); return ''; }
     if (args[0] === 'ps') {
       const filter = args.at(-1)!;
+      if (args.includes('{{.Names}}')) return [...containers].filter(name => new RegExp(filter.slice(5)).test('/'+name)).join('\n');
       if (filter.startsWith('name=')) return [...containers].filter(name => filter === `name=^/${name}$`).join('\n');
       return filter === 'label=kindpath.scanner=public' ? [...containers].join('\n') : '';
     }
@@ -87,4 +88,36 @@ test('worker cancellation plus network cleanup failure blocks subsequent work', 
   await assert.rejects(docker.run('fixture'), failed);
   await assert.rejects(docker.run('fixture'), failed); assert.equal(docker.created, 2);
   docker.startFails = false; docker.removalFails = undefined; await docker.run('fixture');
+});
+
+
+test('one daemon listing skips removal of absent helpers and retains live containers', async () => {
+  const calls: string[][] = [];
+  await cleanResources(async args => {
+    calls.push(args);
+    if (args.includes('{{.Names}}')) {
+      assert.equal(args.at(-1), 'name=^/(owned-helper|owned-gateway)$');
+      return 'owned-gateway\n';
+    }
+    return '';
+  }, { containers: ['owned-gateway', 'owned-helper'], networks: [], volumes: [] });
+  assert.deepEqual(calls.slice(1), [
+    ['rm', '--force', 'owned-gateway'],
+    ['ps', '--all', '--quiet', '--filter', 'name=^/owned-gateway$'],
+  ]);
+});
+
+test('an unusable batch listing falls back to per-container verified cleanup', async () => {
+  for (const queryFails of [false, true]) {
+    const removed: string[] = [];
+    await cleanResources(async args => {
+      if (args.includes('{{.Names}}')) {
+        if (queryFails) throw new Error('Daemon listing failed');
+        return 'unexpected-name\n';
+      }
+      if (args[0] === 'rm') removed.push(args[2]);
+      return '';
+    }, { containers: ['owned-gateway', 'owned-helper'], networks: [], volumes: [] });
+    assert.deepEqual(removed, ['owned-helper', 'owned-gateway']);
+  }
 });

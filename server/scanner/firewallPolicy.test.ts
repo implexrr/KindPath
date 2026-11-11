@@ -56,6 +56,7 @@ for (const failure of ['setup', 'verify']) {
       calls.push(args);
       if (args[0] === 'ps') {
         const name = args.at(-1)!;
+        if (args.includes('{{.Names}}')) return [...containers.keys()].filter(key => new RegExp(name.slice(5)).test('/'+key)).join('\n');
         return [...containers.keys()].filter(key => name === `name=^/${key}$` || name === 'label=kindpath.scanner=public').join('\n');
       }
       if (args[0] === 'volume') return '';
