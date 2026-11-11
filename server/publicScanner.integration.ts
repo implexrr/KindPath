@@ -72,6 +72,9 @@ for (const scenario of [
   {path:'/indented-content',final:'/indented-content'}, {path:'/indented-budget',final:'/indented-budget'},
   {path:'/components',final:'/components'}, {path:'/body-contrast',final:'/body-contrast'},
   {path:'/pending-script',final:'/pending-script'}, {path:'/slow-script',final:'/slow-script'}, {path:'/script-pending-load',final:'/pending-script'}, {path:'/pending-document',final:'/pending-document'},
+  {path:'/verification-screen',final:'/verification-screen'},
+  {path:'/sign-in-screen',final:'/sign-in-screen'},
+  {path:'/ordinary-sign-in-link',final:'/ordinary-sign-in-link'},
   {path:'/forms',final:'/forms'}, {path:'/raster',final:'/raster'}, {path:'/missing',final:'/missing'},
   {path:'/same-url-history',final:'/same-url-history'}, {path:'/same-url-reload',final:'/same-url-reload'},
 ]) {
@@ -142,6 +145,10 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
     }
     assert.equal(report.mode, 'public'); assert.equal(report.requestedUrl, target); assert.equal(report.url,'http://'+(scenario.path==='/redirect'?'www.example.com':'example.com')+scenario.final);
     if (scenario.path === '/redirect') for (const id of ['image-alt','label','button-name']) assert.ok(report.findings.some((finding: {id:string}) => finding.id === id));
+    const pageNotice = scenario.path === '/verification-screen' ? 'browser-verification'
+      : scenario.path === '/sign-in-screen' ? 'sign-in' : undefined;
+    assert.equal(report.pageNotice, pageNotice);
+    if (pageNotice) assert.ok(report.limitations.some((text: string) => text.includes('describe that screen')));
     assert.ok(report.limitations.some((text: string) => /requests were blocked by policy/.test(text)));
     assert.equal(lookups, scenario.path==='/redirect'?2:1); assert.equal(PUBLIC_SCANNING_ENABLED, false);
     const { PUBLIC_CAPTURE_ENABLED } = await import('./scanner/publicPolicy.js'); assert.equal(PUBLIC_CAPTURE_ENABLED,false);

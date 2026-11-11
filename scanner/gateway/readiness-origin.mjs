@@ -44,6 +44,18 @@ function handle(req,res){
     const blocks=Array.from({length:count},(_,index)=>`<p>Controlled paragraph ${index}</p>`).join('\n');
     res.writeHead(200,{'Content-Type':'text/html'});res.end(retentionPage.replace('<!-- retention-blocks -->',blocks));return;
   }
+  const noticePage = {
+    '/verification-screen': '<main><p>example.com is verifying your browser…</p></main>',
+    '/sign-in-screen': '<main><h1 hidden>Welcome</h1><h1>Sign in</h1><form hidden><input type="password"></form><form><label>Password<input type="password"></label><button>Sign in</button></form></main>',
+    '/ordinary-sign-in-link': '<nav><a href="/sign-in-screen">Sign in</a></nav><main><h1>Checking your browser</h1><p>' +
+      'Learn how to check your browser version.' +
+      '</p><form hidden><input type="password"></form></main>',
+  }[path];
+  if (typeof noticePage === 'string') {
+    res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
+    res.end('<!doctype html><html lang="en"><title>Controlled scan</title>' + noticePage);
+    return;
+  }
   if(path==='/missing'){res.writeHead(404,{'Content-Type':'text/plain'});res.end('Controlled missing page');return;}
   if(path==='/redirect' && req.headers.host==='example.com'){res.writeHead(302,{Location:'http://www.example.com/redirect'});res.end();return;}
   if(path==='/blocked-redirect'||path==='/subresource-redirect'){res.writeHead(302,{Location:'http://10.0.0.1/private'});res.end();return;}

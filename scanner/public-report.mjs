@@ -26,3 +26,28 @@ export function summarizeRules(rules) {
     })),
   };
 }
+
+// Runs inside the guarded browser. Return only a fixed code, never page text.
+export function detectScanPageNotice() {
+  const normalize = text => text.trim().replace(/\s+/g, ' ').toLowerCase();
+  const visible = element => element.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+  const main = document.querySelector('main, [role="main"]') ?? document.body;
+  if (!main || !visible(main)) return undefined;
+
+  const heading = [...main.querySelectorAll('h1')].find(visible);
+  const headingText = heading ? normalize(heading.innerText) : '';
+  const verification = /^(?:checking your browser|verify (?:that )?you are human|verifying (?:your browser|that you are human)|(?:[a-z0-9.-]+ )?is verifying your browser)[.!…]*$/;
+  const rendered = main.innerText;
+  if (rendered.length <= 200) {
+    const text = normalize(rendered);
+    const supportingText = text.startsWith(headingText) ? text.slice(headingText.length).trim() : '';
+    if (verification.test(text) || (verification.test(headingText) && /^(?:please wait|this may take a few seconds)\b/.test(supportingText))) {
+      return 'browser-verification';
+    }
+  }
+
+  if (/^(?:sign in|log in|login)(?: to (?:your account|[a-z0-9][a-z0-9 .&'-]{0,60}))?[.!]?$/.test(headingText)) {
+    if ([...main.querySelectorAll('form input[type="password"]')].some(visible)) return 'sign-in';
+  }
+  return undefined;
+}

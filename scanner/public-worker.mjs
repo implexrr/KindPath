@@ -9,7 +9,7 @@ import { chromium } from 'playwright';
 import { validateTarget } from './gateway/policy.mjs';
 import { navigationRejection } from './gateway/navigation.mjs';
 import { installNavigationGuard } from './gateway/navigation-guard.mjs';
-import { analyzePublicPage, summarizeRules } from './public-report.mjs';
+import { analyzePublicPage, detectScanPageNotice, summarizeRules } from './public-report.mjs';
 
 const socketPath = '/run/kindpath/egress.sock';
 const allowed = JSON.parse(process.env.KINDPATH_ALLOWED_HOSTS ?? '[]');
@@ -170,6 +170,7 @@ try {
     validateTarget(scannedUrl, allowed);
     const scannedDocument=await page.evaluateHandle(()=>document);
     stage = 'accessibility-analysis';
+    const pageNotice = await page.evaluate(detectScanPageNotice).catch(() => undefined);
     const result = await analyzePublicPage(page);
     // Do not label findings from one document with another URL, including same-URL reloads.
     if (navigationGuard.failed || navigationGuard.failure || redirectFailure || pageChanged || page.url() !== scannedUrl || result.url !== scannedUrl || !(await page.evaluate(original=>original===document,scannedDocument))) {
@@ -184,7 +185,7 @@ try {
     stage = 'worker-result';
     const violations = summarizeRules(result.violations);
     const incomplete = summarizeRules(result.incomplete);
-    process.stdout.write(JSON.stringify({ fixture: 'public', url: scannedUrl, ...(pageLoadIncomplete?{pageLoadIncomplete:true}:{}), ...(preview ? {preview} : {}),...(captureFailure ? {captureFailure} : {}),
+    process.stdout.write(JSON.stringify({ fixture: 'public', url: scannedUrl, ...(pageNotice ? { pageNotice } : {}), ...(pageLoadIncomplete?{pageLoadIncomplete:true}:{}), ...(preview ? {preview} : {}),...(captureFailure ? {captureFailure} : {}),
       coverage: { blockedRequests, failedRequests, omittedRules: violations.omittedRules + incomplete.omittedRules,
         omittedNodes: violations.omittedNodes + incomplete.omittedNodes },
       engine: result.testEngine.version, violations: violations.rules, incomplete: incomplete.rules,
