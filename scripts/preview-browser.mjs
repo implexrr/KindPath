@@ -814,9 +814,10 @@ try {
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.setViewportSize({width:1280,height:900});await assertDownload(publicResponse);
   publicResponse={...publicReport,scanId:data.imagePreview.scanId,previewUnavailable:true};
-  await publicButton.click();await page.locator('.results').waitFor();await assertDownload(publicResponse);
+  await publicButton.click();await page.locator('.results').waitFor();
   await page.getByRole('button',{name:/Visual preview/}).click();
-  await page.getByText('The website image could not be captured. Your accessibility report and JSON download are still available. Try another scan to request a new image.',{exact:true}).waitFor();
+  await page.getByText('The website image could not be captured. Your accessibility report and JSON download are still available.',{exact:true}).waitFor();
+  await assertDownload(publicResponse);
   assert.equal(await page.locator('iframe').count(),0);
   for(const scanId of [undefined,'old']){
     publicResponse={...publicReport,scanId,previewUnavailable:true};
