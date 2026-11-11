@@ -24,7 +24,11 @@ interface WebsiteFormProps {
 
 export function WebsiteForm({ url, activity, onCancel, onRetry, canRetry, cancelled, busy, error, onUrlChange, onSubmit, onExample, onFixtureScan, fixture, onFixtureChange, publicScanningEnabled, capabilitiesLoading }: WebsiteFormProps) {
   const retryButton=useRef<HTMLButtonElement>(null);
-  useLayoutEffect(()=>{ if((cancelled || error) && canRetry)retryButton.current?.focus(); },[cancelled,error,canRetry]);
+  const errorMessage = useRef<HTMLParagraphElement>(null);
+  useLayoutEffect(() => {
+    if ((cancelled || error) && canRetry) retryButton.current?.focus();
+    else if (error) errorMessage.current?.focus();
+  }, [cancelled, error, canRetry]);
   return <>
     <form onSubmit={onSubmit} aria-busy={busy}>
       <label htmlFor="website">Your website URL</label>
@@ -45,7 +49,7 @@ export function WebsiteForm({ url, activity, onCancel, onRetry, canRetry, cancel
       <p className="form-note" role="status" aria-live="polite">{activity}</p>
       {busy && <button type="button" className="secondary" onClick={onCancel}>Cancel request</button>}
       {canRetry && <button ref={retryButton} type="button" className="secondary" onClick={onRetry}>Try again</button>}
-      {error && <p role="alert" id="url-error" className="error">{error}</p>}
+      {error && <p ref={errorMessage} tabIndex={-1} role="alert" id="url-error" className="error">{error}</p>}
     </form>
     <button className="text-button" disabled={busy} onClick={onExample}>
       Just exploring? Try an example <span aria-hidden="true">↗</span>

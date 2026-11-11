@@ -1,13 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { scanErrorMessage, scanCoverageFeedback } from './scanFeedback.js';
+import { scanFailureFeedback, scanCoverageFeedback } from './scanFeedback.js';
+const scanErrorMessage = (value: unknown, status: number) => scanFailureFeedback(value, status).message;
+
 test('scan failures give bounded guidance without exposing internal diagnostics',()=>{
   assert.match(scanErrorMessage({code:'SCANNER_BUSY',error:'private diagnostic'},429),/finishing/);
   assert.match(scanErrorMessage({code:'SCANNER_CLEANUP_FAILED'},503),/safely/);
   assert.match(scanErrorMessage({code:'PUBLIC_SCANNING_DISABLED'},503),/built-in page/);
-  assert.equal(scanErrorMessage({error:'Use a public HTTP/HTTPS URL.'},400),'Use a public HTTP/HTTPS URL.');
+  assert.deepEqual(scanFailureFeedback({error:'PRIVATE_SENTINEL'},400), {
+    message: 'The scan request was rejected. Check the address or built-in page selection.', retryable: false,
+  });
   for(const value of [{code:'constructor',error:'private diagnostic'}, {code:'__proto__'}, {error:'private diagnostic'}, null]) {
-    assert.equal(scanErrorMessage(value,503),'The request could not finish. No report was created. Try again.');
+    assert.equal(scanErrorMessage(value,503),'The request could not finish. No report was created.');
   }
   assert.doesNotMatch(scanErrorMessage({error:'x'.repeat(501)},400),/xxx/);
 });
@@ -44,19 +48,35 @@ test('redirect failures explain the policy using only validated fixed diagnostic
   for (const diagnostic of [{stage:'dns',code:'REDIRECT_HOST_CHANGED'},
     {stage:'page-loading',code:'REDIRECT_HOST_CHANGED',url:'PRIVATE_SENTINEL'},
     {stage:'page-loading',code:'constructor'}]) {
-    assert.equal(scanErrorMessage({code:'SCAN_FAILED',diagnostic},503),'The scan could not finish. No report was created. Try again.');
+    assert.equal(scanErrorMessage({code:'SCAN_FAILED',diagnostic},503),'The scan could not finish. No report was created.');
   }
   assert.match(scanErrorMessage({code:'SCANNER_CLEANUP_FAILED',diagnostic:{stage:'page-loading',code:'REDIRECT_LOOP'}},503),/safely/);
 });
 
 test('HTTP refusals explain the observed response without echoing URLs or guessing its cause',()=>{
-  assert.equal(scanErrorMessage({code:'SCAN_FAILED',error:'PRIVATE_SENTINEL',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus:403}},503),'Access to the page was refused (HTTP 403). No report was created.');
+  assert.equal(scanErrorMessage({code:'SCAN_FAILED',error:'PRIVATE_SENTINEL',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus:403}},503),'Access to the page was refused (HTTP 403). No report was created. If you have a public address for this page, enter it above.');
   assert.match(scanErrorMessage({code:'SCAN_FAILED',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus:429}},503),/limiting requests/);
-  for(const httpStatus of ['403',403.5,999,'PRIVATE_SENTINEL'])assert.equal(scanErrorMessage({code:'SCAN_FAILED',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus}},503),'The scan could not finish. No report was created. Try again.');
+  for(const httpStatus of ['403',403.5,999,'PRIVATE_SENTINEL'])assert.equal(scanErrorMessage({code:'SCAN_FAILED',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus}},503),'The scan could not finish. No report was created.');
   assert.match(scanErrorMessage({code:'SCANNER_CLEANUP_FAILED',diagnostic:{stage:'page-loading',code:'HTTP_STATUS',httpStatus:403}},503),/safely/);
 });
 
 test('partially loaded pages stay visibly limited even with zero failure counts',()=>{
   const feedback=scanCoverageFeedback({mode:'public',pageLoadIncomplete:true,coverage:{blockedRequests:0,failedRequests:0,omittedRules:0,omittedNodes:0}})!;
   assert.equal(feedback.title,'Scan coverage is limited');assert.match(feedback.details.join(' '),/Unfinished loads were stopped.*partial report/);
+});
+
+
+test('retry guidance distinguishes temporary failures from policy and access failures', () => {
+  const scan = (diagnostic: unknown) => scanFailureFeedback({ code: 'SCAN_FAILED', diagnostic }, 503);
+  for (const [httpStatus, retryable] of [[401, false], [403, false], [404, false], [429, true], [503, true]]) {
+    assert.equal(scan({ stage: 'page-loading', code: 'HTTP_STATUS', httpStatus }).retryable, retryable);
+  }
+  assert.equal(scan({ stage: 'page-loading', code: 'REDIRECT_HOST_CHANGED' }).retryable, false);
+  assert.equal(scan({ stage: 'page-loading', code: 'TIMEOUT' }).retryable, true);
+  assert.equal(scan({ stage: 'dns', code: 'ENOTFOUND' }).retryable, false);
+  assert.equal(scan(undefined).retryable, false);
+  assert.equal(scanFailureFeedback({ code: 'SCANNER_BUSY' }, 429).retryable, true);
+  assert.equal(scanFailureFeedback({ code: 'SCANNER_CLEANUP_FAILED' }, 503).retryable, false);
+  assert.equal(scanFailureFeedback(null, 502).retryable, true);
+  assert.equal(scanFailureFeedback(null, 403).retryable, false);
 });
