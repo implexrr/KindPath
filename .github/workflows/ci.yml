@@ -37,9 +37,8 @@ jobs:
       - name: Run API tests
         run: npm test
 
-      # The build script also runs TypeScript checks for frontend and backend.
-      - name: Check types and build
-        run: npm run build
+      - name: Check types and assemble the production release
+        run: npm run build:production
 
       - name: Audit production and development dependencies
         run: npm audit --include=dev --audit-level=low
@@ -63,7 +62,9 @@ jobs:
         run: npm run test:firewall
 
       - name: Verify fixture snapshot preview in an isolated browser
-        run: npm run test:preview
+        run: |
+          npm run build
+          npm run test:preview
 
       - name: Diagnose owned resources after failure
         if: failure()

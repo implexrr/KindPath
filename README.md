@@ -64,7 +64,68 @@ Images are independently validated and embedded in sandboxed, opaque-origin ifra
 
 A successful real scan has `mode: "public"`, `requestedUrl`, final `url`, `scanId`, findings, scanner metadata and coverage. `sitePreview` contains the same identity, `kind: "image"`, dimensions, truncation flag, capture timestamp, guarded HTML and limitations. If capture alone fails, `previewUnavailable: true` replaces `sitePreview`; the report limitations explain this. Cleanup failure overrides successful results and capture/status explanations.
 
-Both servers bind to loopback. API Host/Origin checks are local-development protections, not production authentication. Public hosting, deployment, authentication and multi-user operation require a separate review.
+## Invite-only staging
+
+`npm run build:production` prints the path to a fresh release under
+`build/production-*`. The release contains the built UI, compiled API, scanner
+runtime policy files, and npm manifests. Install and run it from that directory:
+
+```sh
+npm ci --omit=dev --ignore-scripts
+npm start
+```
+
+Provide these settings to the service process. Startup requires each one.
+
+| Setting | Value |
+| --- | --- |
+| `KINDPATH_STAGE_ORIGIN` | The exact browser-facing HTTPS origin, for example `https://staging.example.test`, without a trailing slash |
+| `KINDPATH_STAGE_PASSWORD_SHA256` | The SHA-256 digest of a 64-character lowercase hexadecimal password |
+| `KINDPATH_PUBLIC_SCANNING` | `true` or `false` |
+| `KINDPATH_PUBLIC_CAPTURE` | `true` or `false`. Capture is available with real scanning enabled |
+
+Generate the password from 32 random bytes using a trusted password manager
+or cryptographic random generator. Hash the 64-character password as text
+without a trailing newline. Keep the digest in protected service configuration
+outside the release, and share the password with testers privately. The
+browser prompts for the username `kindpath` and the password.
+
+The app listens on `127.0.0.1:3002`. Run one instance on a dedicated Linux host
+and put an HTTPS reverse proxy on the same host. Preserve the browser-facing
+`Host`, `Origin`, and `Authorization` headers. For example, the
+[Caddy reverse proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy)
+configuration for your staging hostname is:
+
+```caddyfile
+staging.example.test {
+  reverse_proxy 127.0.0.1:3002
+}
+```
+
+The frontend and API both require the shared credential. API POST requests
+require the configured origin and share a limit of six requests per rolling
+minute across testers. The scanner admits one scan at a time. The proxy
+should keep responses uncached and exclude credentials and request bodies from
+logs. Keep the installed release files read-only to the service account.
+Have the supervisor run `node server/production.js` directly from the release
+directory and give active requests and scanner cleanup time to drain during
+shutdown.
+
+Build the worker and firewall from the same reviewed checkout with
+`npm run scanner:build -- --runtime`. The app uses `/usr/bin/docker` and the
+local Unix socket on Linux. Keep the Docker socket and backend port private.
+Socket access gives the service substantial control over the host, so use a
+dedicated host with no personal files, unrelated credentials, or private
+workloads. See [Docker Engine security](https://docs.docker.com/engine/security/).
+
+Before inviting testers, record the exact runtime image digests and review
+their advisories on the target architecture. Run the controlled scanner and
+firewall checks on that host. Start with both feature flags set to `false` and
+verify that the proxy requires credentials over HTTPS. After approval to
+enable the flags, verify one approved URL through the browser, including the
+JSON report and preview presets, and check that a private destination is
+rejected. To suspend real scans and capture, set both flags to `false` and
+restart the service gracefully.
 
 ## Isolation and limits
 
@@ -76,12 +137,13 @@ Per-scan admission, cancellation and verified cleanup remain authoritative. Cont
 
 ```sh
 npm test
-npm run build
+npm run build:production
 npm run scanner:build
 npm run test:scanner
 npm run test:gateway:unit
 npm run test:gateway
 npm run test:firewall
+npm run build
 npm run test:preview
 npm audit --include=dev --audit-level=low
 npm --prefix scanner audit --audit-level=low
