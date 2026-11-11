@@ -8,7 +8,7 @@ import { createDestinationApprover } from './destinationApproval.js';
 import type { PlanTarget } from './destinationApproval.js';
 import type { Exchange } from './dockerExchange.js';
 import { createGatewayApprovalHandler } from './gatewayApproval.js';
-import { PUBLIC_LABEL, assertPublicIsolation } from './publicPolicy.js';
+import { PUBLIC_BROWSER_CPUS, PUBLIC_LABEL, assertPublicIsolation } from './publicPolicy.js';
 import { validateDestinationPlan } from './destinationSnapshot.js';
 import type { DestinationPlan } from './destinationSnapshot.js';
 import { attachEgressNetwork, firewallControl } from './firewallDocker.js';
@@ -20,7 +20,7 @@ function args(name: string, volume: string, role: 'browser' | 'gateway', namespa
   return ['create', '--pull=never', '--rm', '--name', name, '--label', PUBLIC_LABEL,
     `--network=${browser ? 'none' : `container:${namespace}`}`, '--read-only', '--user=1000:1000', '--cap-drop=ALL',
     '--security-opt=no-new-privileges:true', ...(browser ? [`--security-opt=seccomp=${profile}`] : []),
-    `--memory=${browser ? '512m' : '128m'}`, `--cpus=${browser ? '1' : '0.5'}`, `--pids-limit=${browser ? '256' : '64'}`,
+    `--memory=${browser ? '512m' : '128m'}`, `--cpus=${browser ? PUBLIC_BROWSER_CPUS : 0.5}`, `--pids-limit=${browser ? '256' : '64'}`,
     '--ipc=private', '--shm-size=128m', '--tmpfs=/tmp:rw,nosuid,nodev,noexec,size=134217728', '--init',
     `--mount=type=volume,src=${volume},dst=/run/kindpath,volume-nocopy${browser ? ',readonly' : ''}`,
     '--env=HOME=/tmp/kindpath-home', `--env=KINDPATH_ALLOWED_HOSTS=${JSON.stringify(dynamic ? null : plan ? Object.keys(plan.destinations) : ['example.com'])}`,

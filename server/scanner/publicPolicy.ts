@@ -9,6 +9,11 @@ function localFlag(name: 'KINDPATH_PUBLIC_SCANNING' | 'KINDPATH_PUBLIC_CAPTURE')
 export const PUBLIC_SCANNING_ENABLED = localFlag('KINDPATH_PUBLIC_SCANNING');
 export const PUBLIC_CAPTURE_ENABLED = localFlag('KINDPATH_PUBLIC_CAPTURE');
 export const PUBLIC_LABEL = 'kindpath.scanner=public';
+const browserCpus = process.env.KINDPATH_PUBLIC_BROWSER_CPUS ?? '2';
+if (browserCpus !== '1' && browserCpus !== '2') {
+  throw new Error('KINDPATH_PUBLIC_BROWSER_CPUS must be 1 or 2.');
+}
+export const PUBLIC_BROWSER_CPUS = Number(browserCpus);
 
 export const validatePublicUrl = (value: unknown): string => websiteUrl(value).href;
 
@@ -26,7 +31,7 @@ export function assertPublicIsolation(value: unknown, role: 'browser' | 'gateway
     || Object.keys(h.PortBindings ?? {}).length || Object.keys(c.Config?.Volumes ?? {}).length
     || !h.SecurityOpt?.some((s: string) => s === 'no-new-privileges:true' || s === 'no-new-privileges')
     || h.Memory !== (role === 'browser' ? 536870912 : 134217728)
-    || h.NanoCpus !== (role === 'browser' ? 1000000000 : 500000000)
+    || h.NanoCpus !== (role === 'browser' ? PUBLIC_BROWSER_CPUS * 1_000_000_000 : 500_000_000)
     || h.PidsLimit !== (role === 'browser' ? 256 : 64)
     || h.Tmpfs?.['/tmp'] !== 'rw,nosuid,nodev,noexec,size=134217728'
     || !Array.isArray(mounts) || mounts.length !== 1

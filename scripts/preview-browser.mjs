@@ -10,6 +10,31 @@ assert.ok(browserType, 'Choose a fixed browser engine');
 const browser = await browserType.launch({ headless: true, ...(engine === 'chromium' ? { chromiumSandbox: true } : {}) });
 try {
   if (engine === 'chromium') {
+    const { default: AxeBuilder } = await import('@axe-core/playwright');
+    const { analyzePublicPage, summarizeRules } = await import('./public-report.mjs');
+    const { readFile } = await import('node:fs/promises');
+    const markup = await readFile('./fixtures/barriers.html', 'utf8');
+    const analyzeFixture = async analyze => {
+      const context = await browser.newContext();
+      try {
+        const fixture = await context.newPage();
+        await fixture.setContent(markup);
+        return await analyze(fixture);
+      } finally {
+        await context.close();
+      }
+    };
+    const full = await analyzeFixture(page => new AxeBuilder({ page }).options({ iframes: false }).analyze());
+    const compact = await analyzeFixture(analyzePublicPage);
+    for (const group of ['violations', 'incomplete']) {
+      assert.deepEqual(summarizeRules(compact[group]), summarizeRules(full[group]));
+    }
+    for (const group of ['passes', 'inapplicable']) {
+      assert.deepEqual(compact[group].map(rule => rule.id), full[group].map(rule => rule.id));
+    }
+    assert.ok(full.passes.some(rule => rule.nodes.length > 1));
+    assert.ok(compact.passes.every(rule => rule.nodes.length <= 1));
+
     const { installNavigationGuard } = await import('./gateway/navigation-guard.mjs');
     for (const analyzing of [false, true]) {
       const guardPage = await browser.newPage({serviceWorkers:'block'});
