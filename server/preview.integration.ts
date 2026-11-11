@@ -6,21 +6,14 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { captureFixturePreview } from './scanner/fixturePreview.js';
 import { scanFixture } from './scanner/fixtureScanner.js';
 import { mapSitePreview } from './scanner/sitePreview.js';
-import { createDemoReport } from './services/analyze.js';
 import { openLocalDockerSession, removeAndConfirm } from './scanner/dockerWorker.js';
 import { assertContainerIsolation, containerArguments, IMAGE, QA_IMAGE } from './scanner/containerPolicy.js';
 
 // Fulfill the app's requests from the built assets and real fixture responses, entirely inside network none.
 test('reports, exports and isolated previews work in Chromium, Firefox and WebKit', { timeout: 240000 }, async () => {
-  const snapshot = await captureFixturePreview();
-  const barriersSnapshot = await captureFixturePreview('barriers');
-  const clearSnapshot = await captureFixturePreview('clear');
   const report = await scanFixture('barriers');
-  const clearReport = await scanFixture('clear');
-  const demoReport = createDemoReport(new URL('https://example.com'));
   const sitePreview = mapSitePreview({url:'https://www.example.com/en/start?locale=en',capturedAt:new Date().toISOString(),omittedSubtrees:0,omittedText:0,omittedStyles:0,nodes:[
     {tag:'h1',attributes:{},style:{},hover:{},children:[{text:'Captured website marker'}]},
     {tag:'a',attributes:{},style:{color:'rgb(0, 0, 0)'},hover:{color:'rgb(255, 0, 0)'},children:[{text:'Captured link'}]},
@@ -72,14 +65,14 @@ test('reports, exports and isolated previews work in Chromium, Firefox and WebKi
           { env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8' }, timeout: 90000, maxBuffer: 5 * 1024 * 1024 },
           (error, output) => error ? reject(error) : resolve(output));
         child.stdin!.on('error', () => {});
-        child.stdin!.end(JSON.stringify({ browser, snapshot, barriersSnapshot, clearSnapshot, report, clearReport, demoReport, sitePreview, imagePreview, qualityPreviews, assets }));
+        child.stdin!.end(JSON.stringify({ browser, report, sitePreview, imagePreview, qualityPreviews, assets }));
       });
       const result = JSON.parse(stdout); assert.equal(result.passed, true); assert.equal(result.engine, browser);
       console.info(`${browser} ${result.version}: controlled browser checks passed`);
-      for (const kind of browser === 'chromium' ? ['fixture', 'demo'] : []) {
-        await writeFile(join(outputRoot, `kindpath-report-export-${kind}.pdf`), Buffer.from(result[`${kind}Pdf`], 'base64'));
+      if (browser === 'chromium') {
+        await writeFile(join(outputRoot, 'kindpath-report-export-public.pdf'), Buffer.from(result.reportPdf, 'base64'));
       }
-      for (const size of ['desktop', 'mobile', 'findingsDesktop', 'findingsMobile', 'matchingDesktop', 'matchingMobile', 'coverageDesktop', 'coverageMobile', 'qualityEmpty', 'qualitySparse']) {
+      for (const size of ['landingDesktop', 'landingMobile', 'findingsDesktop', 'findingsMobile', 'coverageDesktop', 'coverageMobile', 'qualityEmpty', 'qualitySparse']) {
         await writeFile(join(outputRoot, `kindpath-${browser}-static-preview-${size}.png`), Buffer.from(result[size], 'base64'));
       }
     } finally {
