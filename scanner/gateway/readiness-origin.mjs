@@ -31,6 +31,8 @@ function handle(req,res){
   // rather than only the gateway's shorter per-request timeout.
   if(path==='/delayed-module.js'){setTimeout(()=>{res.writeHead(200,{'Content-Type':'application/javascript'});res.end('import "/unfinished-script.js";');},6000);return;}
   if(path==='/unfinished-script.js'){res.writeHead(200,{'Content-Type':'application/javascript'});res.flushHeaders();return;}
+  if(path==='/slow-script'){res.writeHead(200,{'Content-Type':'text/html'});res.end(html.replace('</head>','<script type="module" src="/slow-module.js"></script></head>'));return;}
+  if(path==='/slow-module.js'){setTimeout(()=>{res.writeHead(200,{'Content-Type':'application/javascript'});res.end('export {};');},8000);return;}
   if(path==='/script-pending-load'){res.writeHead(200,{'Content-Type':'text/html'});res.end('<!doctype html><script>location.replace("/pending-script")</script>');return;}
   if(path==='/pending-document'){res.writeHead(200,{'Content-Type':'text/html'});res.write('<!doctype html><html><body><h1>Unfinished main document</h1>');return;}
   if(path==='/raster'){res.writeHead(200,{'Content-Type':'text/html'});res.end(awaitRaster);return;}

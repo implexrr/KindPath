@@ -101,28 +101,37 @@ try {
       onPageChange: () => { pageChanged = true; },
     });
     stage = 'page-loading';
-    const loadingDeadline=Date.now()+15_000;
+    const loadingDeadline = Date.now() + 15_000;
+    const earlyPartialAfterMs = 5_000;
     let response;
     let pageLoadIncomplete=false;
-    const stopIncompleteLoad=async error=>{
+    const stopIncompleteLoad = async (early = false) => {
       // Require the complete successful main response and parsed HTML before
       // stopping pending resources. Preserve the final navigation/document proof.
       const latest=latestDocumentRequest;
       if(navigationGuard.failure||navigationGuard.failed||!latest||!completedRequests.has(latest)
-        ||Date.now()-lastMainRequestAt<300)throw error;
+        ||Date.now()-lastMainRequestAt<300)return false;
       const received=await latest.response();
-      if(!received?.ok()||navigationRejection(target,page.url(),navigationGuard.lastUrl))throw error;
-      const parsed=await page.evaluate(()=>document.readyState!=='loading'&&Boolean(document.body));
-      if(!parsed||latest!==latestDocumentRequest)throw error;
+      if(!received?.ok()||navigationRejection(target,page.url(),navigationGuard.lastUrl))return false;
+      let parsed;
+      try {
+        parsed = await page.evaluate(early => document.readyState !== 'loading' && Boolean(document.body)
+          && (!early || (document.readyState !== 'complete' && Boolean(document.body.innerText.trim()))), early);
+      } catch {
+        if (early) return false; // A replacement may be committing.
+        throw new Error('Could not confirm the final document');
+      }
+      if(!parsed||latest!==latestDocumentRequest)return false;
       await navigationGuard.stopLoading();
-      if(latest!==latestDocumentRequest)throw error;
+      if(latest!==latestDocumentRequest)throw new Error('Document changed while stopping the load');
       pageLoadIncomplete=true;
+      return true;
     };
-    try { response=await page.goto(target,{waitUntil:'load',timeout:15_000}); }
+    try { response=await page.goto(target,{waitUntil:'commit',timeout:15_000}); }
     catch(error){
       // Script/meta replacements can abort goto. Both the original navigation
       // and a permitted replacement may need the same bounded partial fallback.
-      if(error?.name==='TimeoutError')await stopIncompleteLoad(error);
+      if(error?.name==='TimeoutError'){if(!await stopIncompleteLoad())throw error;}
       else if(!/^page\.goto:\s*net::ERR_ABORTED\b/.test(error?.message??''))throw error;
     }
     // goto may return the entry response while a permitted replacement is loading.
@@ -139,10 +148,13 @@ try {
       }
       if(Date.now()>=loadingDeadline){
         const error=new Error('Page loading timed out');error.name='TimeoutError';
-        if(pageLoadIncomplete)throw error;
-        await stopIncompleteLoad(error);
+        if(pageLoadIncomplete||!await stopIncompleteLoad())throw error;
         continue;
       }
+      // Give a newly committed replacement its own settling time within the
+      // overall load deadline. Empty shells retain the full loading window.
+      if (!loaded && !pageLoadIncomplete && latest && completedRequests.has(latest)
+        && Date.now()-lastMainRequestAt>=earlyPartialAfterMs && await stopIncompleteLoad(true)) continue;
       await new Promise(resolve=>setTimeout(resolve,50));
     }
     if (!response) {missingResponse=true;throw new Error('Navigation failed');}

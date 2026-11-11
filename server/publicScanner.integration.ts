@@ -71,7 +71,7 @@ for (const scenario of [
   {path:'/redirect',final:'/redirect'}, {path:'/content',final:'/content'},
   {path:'/indented-content',final:'/indented-content'}, {path:'/indented-budget',final:'/indented-budget'},
   {path:'/components',final:'/components'}, {path:'/body-contrast',final:'/body-contrast'},
-  {path:'/pending-script',final:'/pending-script'}, {path:'/script-pending-load',final:'/pending-script'}, {path:'/pending-document',final:'/pending-document'},
+  {path:'/pending-script',final:'/pending-script'}, {path:'/slow-script',final:'/slow-script'}, {path:'/script-pending-load',final:'/pending-script'}, {path:'/pending-document',final:'/pending-document'},
   {path:'/forms',final:'/forms'}, {path:'/raster',final:'/raster'}, {path:'/missing',final:'/missing'},
   {path:'/same-url-history',final:'/same-url-history'}, {path:'/same-url-reload',final:'/same-url-reload'},
 ]) {
@@ -132,7 +132,14 @@ test(`URL scan/capture handles controlled ${scenario.path} without public access
     } else {
     const report = await response.json();
     assert.equal(response.status,200,JSON.stringify({code:report.code,diagnostic:report.diagnostic}));
-    if(scenario.path==='/pending-script'||scenario.path==='/script-pending-load'){assert.equal(report.pageLoadIncomplete,true);assert.ok(report.limitations.some((text:string)=>text.includes('partial report')));}
+    const partial = ['/pending-script', '/script-pending-load', '/slow-script'].includes(scenario.path);
+    if (partial) {
+      assert.equal(report.pageLoadIncomplete, true);
+      assert.ok(report.limitations.some((text: string) => text.includes('partial report')));
+      assert.ok(report.findings.some((finding: {id: string}) => finding.id === 'image-alt'));
+    } else if (scenario.path === '/content') {
+      assert.equal(report.pageLoadIncomplete, undefined);
+    }
     assert.equal(report.mode, 'public'); assert.equal(report.requestedUrl, target); assert.equal(report.url,'http://'+(scenario.path==='/redirect'?'www.example.com':'example.com')+scenario.final);
     if (scenario.path === '/redirect') for (const id of ['image-alt','label','button-name']) assert.ok(report.findings.some((finding: {id:string}) => finding.id === id));
     assert.ok(report.limitations.some((text: string) => /requests were blocked by policy/.test(text)));
