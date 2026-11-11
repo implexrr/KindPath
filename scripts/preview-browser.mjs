@@ -676,7 +676,7 @@ try {
   }
   publicResponse={...publicReport,pageLoadIncomplete:true,sitePreview:data.sitePreview};
   await publicButton.click();await page.locator('.results').waitFor();
-  await page.getByRole('region',{name:'Scan coverage',exact:true}).getByText(/Unfinished loads were stopped; this partial report/).waitFor();
+  await page.getByRole('region',{name:'Scan coverage',exact:true}).getByText(/Unfinished loads were stopped, so this partial report/).waitFor();
   await assertDownload(publicResponse);
   // Browser-rendered previews: decoded pixels, fitting, scroll access, filters and inert hover areas.
   publicResponse={...publicReport,scanId:data.imagePreview.scanId,sitePreview:data.imagePreview};
