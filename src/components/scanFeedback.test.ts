@@ -58,5 +58,5 @@ test('HTTP refusals explain the observed response without echoing URLs or guessi
 
 test('partially loaded pages stay visibly limited even with zero failure counts',()=>{
   const feedback=scanCoverageFeedback({mode:'public',pageLoadIncomplete:true,coverage:{blockedRequests:0,failedRequests:0,omittedRules:0,omittedNodes:0}})!;
-  assert.equal(feedback.title,'Scan coverage is limited');assert.match(feedback.details.join(' '),/15 seconds.*partial report/);
+  assert.equal(feedback.title,'Scan coverage is limited');assert.match(feedback.details.join(' '),/Unfinished loads were stopped.*partial report/);
 });

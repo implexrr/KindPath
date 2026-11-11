@@ -17,7 +17,7 @@ export function mapPublicReport(raw: unknown, requestedUrl?: string) {
   const coverage = readScanCoverage(result.coverage);
   if (!coverage) throw new Error('Invalid scan coverage.');
   return { ...report, ...(result.pageLoadIncomplete===true?{pageLoadIncomplete:true as const}:{}), mode: 'public' as const, coverage, url: finalUrl, ...(requestedUrl ? { requestedUrl: validatePublicUrl(requestedUrl) } : {}), limitations: [
-    ...(result.pageLoadIncomplete===true?['The page did not finish loading within 15 seconds. Unfinished loads were stopped; this partial report covers only the rendered content.']:[]),
+    ...(result.pageLoadIncomplete===true?['Some page resources were still loading when the scan began. Unfinished loads were stopped, so this partial report covers only the rendered content.']:[]),
     'Only the initial top-level page at the default viewport was scanned; embedded frames and interactive states are excluded.',
     `${coverage.blockedRequests} requests were blocked by policy and ${coverage.failedRequests} requests failed (including gateway denials). Missing resources can change the result.`,
     ...(Number(coverage.omittedRules) || Number(coverage.omittedNodes) ? [
