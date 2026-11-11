@@ -253,7 +253,7 @@ try {
   const slider = name => page.getByRole('slider', { name, exact: true });
   const names = ['Colour strength', 'Contrast reduction', 'Blur strength', 'Peripheral restriction'];
   assert.equal(await page.getByRole('slider').count(), 4);
-  assert.equal(await slider('Colour strength').inputValue(), '65');
+  assert.equal(await slider('Colour strength').inputValue(), '100');
   for (const name of names.slice(1)) assert.equal(await slider(name).inputValue(), '0');
   const modifiedBody = page.frameLocator('iframe').nth(1).locator('body');
   const matrix = page.frameLocator('iframe').nth(1).locator('feColorMatrix');
@@ -278,12 +278,12 @@ try {
   const presets = page.getByRole('group', {name:'Vision presets',exact:true});
   const selectedPreset = () => presets.getByRole('button', {pressed:true});
   const presetCases = [
-    ['Original',[0,0,0,0]], ['Red–green colour vision',[65,0,0,0]],
-    ['Blue–yellow colour vision',[65,0,0,0]], ['Blurred vision',[0,0,50,0]],
+    ['Original',[0,0,0,0]], ['Protanopia',[100,0,0,0]],
+    ['Deuteranopia',[100,0,0,0]], ['Tritanopia',[100,0,0,0]], ['Blurred vision',[0,0,50,0]],
     ['Reduced peripheral vision',[0,0,0,65]],
   ];
-  assert.equal(await presets.getByRole('button').count(),5);
-  assert.equal(await selectedPreset().innerText(),'Red–green colour vision');
+  assert.equal(await presets.getByRole('button').count(),6);
+  assert.equal(await selectedPreset().innerText(),'Deuteranopia');
   const callsBeforePresets = apiRequests;
   const frameAddressesBeforePresets = page.frames().map(frame=>frame.url());
   for (const [name,strengths] of presetCases) {
@@ -301,7 +301,7 @@ try {
       assert.equal(await waitForModifiedDocument(),'');assert.equal(await page.locator('.field-mask').evaluate(element=>element.style.opacity),'0.65');
     } else {
       assert.match(await waitForModifiedDocument(),/url\(/);
-      assert.equal(await page.getByLabel('Colour preset',{exact:true}).inputValue(),name.startsWith('Red')?'red-green':'blue-yellow');
+      assert.equal(await page.getByLabel('Colour preset',{exact:true}).inputValue(),name.toLowerCase());
     }
   }
   await page.getByRole('button',{name:'Apply visual effects',exact:true}).press('Space');
@@ -314,10 +314,15 @@ try {
   assert.equal(apiRequests,callsBeforePresets,'Preset changes must not fetch or recapture a page');
   assert.deepEqual(page.frames().map(frame=>frame.url()),frameAddressesBeforePresets);
   await page.getByRole('button',{name:'Reset effects',exact:true}).press('Enter');
-  assert.equal(await selectedPreset().innerText(),'Red–green colour vision');
-  const redGreen = await matrixValues();
-  await page.getByLabel('Colour preset', { exact: true }).selectOption('blue-yellow');
-  assert.notEqual(await matrixValues(), redGreen);
+  assert.equal(await selectedPreset().innerText(),'Deuteranopia');
+  await slider('Colour strength').press('ArrowLeft');
+  assert.equal(await slider('Colour strength').inputValue(), '99');
+  assert.equal((await matrixValues()).split(' ')[0], '0.369885');
+  assert.equal(await selectedPreset().count(),0);
+  await slider('Colour strength').press('End');
+  const deuteranopia = await matrixValues();
+  await page.getByLabel('Colour preset', { exact: true }).selectOption('tritanopia');
+  assert.notEqual(await matrixValues(), deuteranopia);
   await page.getByLabel('Colour preset', { exact: true }).selectOption('grayscale');
   await slider('Colour strength').press('End');
   const gray = (await matrixValues()).split(' ').map(Number);
@@ -346,8 +351,8 @@ try {
     assert.equal(await page.getByLabel('Colour preset', { exact: true }).inputValue(), 'grayscale');
   }
   await page.getByRole('button', { name: 'Reset effects' }).press('Enter');
-  assert.equal(await page.getByLabel('Colour preset', { exact: true }).inputValue(), 'red-green');
-  assert.equal(await slider('Colour strength').inputValue(), '65');
+  assert.equal(await page.getByLabel('Colour preset', { exact: true }).inputValue(), 'deuteranopia');
+  assert.equal(await slider('Colour strength').inputValue(), '100');
   for (const name of names.slice(1)) assert.equal(await slider(name).inputValue(), '0');
   assert.equal(await toggle.getAttribute('aria-pressed'), 'true');
   for (const name of names) await slider(name).press('Home');
@@ -364,11 +369,11 @@ try {
   assert.notDeepEqual(combinedPixels, blurPixels, 'Colour must still affect pixels when combined with blur');
 
   await page.getByRole('button', { name: 'Mild', exact: true }).click();
-  await page.getByLabel('Colour preset', { exact: true }).selectOption('blue-yellow');
+  await page.getByLabel('Colour preset', { exact: true }).selectOption('tritanopia');
   await page.getByRole('button', { name: /Accessibility findings/ }).click();
   await page.getByRole('button', { name: /Visual preview/ }).click();
   assert.equal(previews, 2, 'Tab switches must retain the snapshot');
-  assert.equal(await page.getByLabel('Colour preset', { exact: true }).inputValue(), 'blue-yellow');
+  assert.equal(await page.getByLabel('Colour preset', { exact: true }).inputValue(), 'tritanopia');
   for (const name of names) assert.equal(await slider(name).inputValue(), '25');
   await page.getByRole('button', { name: 'Refresh fixture snapshot' }).click();
   await page.getByRole('button', { name: 'Refresh fixture snapshot' }).waitFor();
@@ -724,7 +729,7 @@ try {
     assert.equal(await frame.locator('body').evaluate(()=>{try{void parent.document;return false;}catch{return true;}}),true);
   }
   const imageOriginalStyle=await imageFrames.first().getAttribute('style');
-  for(const name of ['Original','Red–green colour vision','Blue–yellow colour vision','Blurred vision','Reduced peripheral vision']){
+  for(const name of ['Original','Protanopia','Deuteranopia','Tritanopia','Blurred vision','Reduced peripheral vision']){
     await page.getByRole('group',{name:'Vision presets',exact:true}).getByRole('button',{name,exact:true}).click();
     assert.equal(await imageFrames.first().getAttribute('style'),imageOriginalStyle);
   }
@@ -749,12 +754,16 @@ try {
   const originalPixels=await imageFrames.first().screenshot();
   const unfilteredPixels=await imageFrames.nth(1).screenshot();
   assertPixel(await visiblePixel(0),[192,32,64]);
-  for(const [name,expected] of [['Red–green colour vision',[147,90,59]],['Blue–yellow colour vision',[187,44,54]]]){
+  for(const [name,expected] of [['Protanopia',[82,78,64]],['Deuteranopia',[122,111,59]],['Tritanopia',[211,0,47]]]){
     await imagePresets.getByRole('button',{name,exact:true}).click();
     assertPixel(await visiblePixel(1),expected);
     assertPixel(await visiblePixel(0),[192,32,64]);
     assert.equal(await imageFrames.nth(1).evaluate(el=>el.style.filter),'','No parent filter may cross the opaque iframe boundary');
   }
+  await page.getByLabel('Colour preset',{exact:true}).selectOption('grayscale');
+  assertPixel(await visiblePixel(1),[68,68,68]);
+  await slider('Colour strength').press('Home');
+  assertPixel(await visiblePixel(1),[192,32,64]);
   await imagePresets.getByRole('button',{name:'Blurred vision',exact:true}).click();
   assert.notDeepEqual(await imageFrames.nth(1).screenshot(),unfilteredPixels,'Blur must change the raster preview');
   assert.deepEqual(await imageFrames.first().screenshot(),originalPixels,'The original image must remain visually unchanged');

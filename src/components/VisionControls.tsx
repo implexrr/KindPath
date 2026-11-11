@@ -23,7 +23,7 @@ export function VisionControls({ settings, onChange }: { settings: VisionSetting
           <button type="button" className="secondary" key={key} aria-pressed={activePreset === key}
             onClick={() => onChange(applyVisionPreset(key))}>{visionPresets[key].name}</button>)}
       </div>
-      <p id="vision-presets-note" className="vision-note">Illustrative approximations; individual vision varies. Selecting a preset turns effects on and replaces the current strengths. You can adjust them below.</p>
+      <p id="vision-presets-note" className="vision-note">Selecting a preset turns effects on and sets the sliders below.</p>
     </div>
     <div className="intensity-presets" role="group" aria-label="Intensity presets">
       <span>Starting points</span>
@@ -31,21 +31,21 @@ export function VisionControls({ settings, onChange }: { settings: VisionSetting
         <button type="button" className="secondary" key={key} aria-pressed={settings.enabled && Object.values(settings.strengths).every(strength => strength === value.strength)}
           onClick={() => onChange(applyIntensity(settings, key))}>{value.name}</button>)}
     </div>
-    <p className="vision-note">Intensity presets turn effects on and set all four strengths. Percentages describe visual settings, not measured vision loss.</p>
+    <p className="vision-note">Intensity presets turn effects on and set all four strengths.</p>
     <div className="colour-choice">
       <label htmlFor="colour-preset">Colour preset</label>
       <select id="colour-preset" value={settings.colourPreset} aria-describedby="colour-preset-note"
         onChange={event => onChange({ ...settings, colourPreset: event.target.value as ColourPreset })}>
         {Object.entries(colourPresets).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
       </select>
-      <p id="colour-preset-note">Illustrative colour mixes; individual colour vision varies.</p>
+      <p id="colour-preset-note">The named colour filters use the Machado model. Use Colour strength for milder simulations, with 100% showing the named form. Individual colour vision varies.</p>
     </div>
     <div className="effect-grid">
       {(Object.keys(effects) as Effect[]).map(key => <div className="effect-control" key={key}>
         <div className="effect-label"><label htmlFor={`${key}-strength`}>{sliderLabels[key]}</label>
           <output htmlFor={`${key}-strength`} aria-hidden="true">{settings.strengths[key]}%</output></div>
         <input id={`${key}-strength`} type="range" min="0" max="100" value={settings.strengths[key]}
-          aria-describedby={`${key}-description`} aria-valuetext={`${settings.strengths[key]} percent`}
+          aria-describedby={key === 'colour' ? 'colour-description colour-preset-note' : `${key}-description`} aria-valuetext={`${settings.strengths[key]} percent`}
           onChange={event => onChange({ ...settings, strengths: { ...settings.strengths, [key]: clampStrength(Number(event.target.value)) } })}/>
         <p id={`${key}-description`}>{effects[key].description}</p>
       </div>)}
