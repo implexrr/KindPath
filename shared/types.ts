@@ -1,3 +1,4 @@
+import type { ScanPageNotice } from './scanPageNotice';
 import type { PreviewFixtureId } from './fixtures';
 
 export interface FindingElement {
@@ -19,6 +20,7 @@ export interface ScanCoverage {
 }
 export interface Report {
   pageLoadIncomplete?: true;
+  pageNotice?: ScanPageNotice;
   coverage?: ScanCoverage;
   mode: 'demo' | 'fixture' | 'public';
   requestedUrl?: string;

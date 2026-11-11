@@ -86,6 +86,7 @@ try {
     assert.equal(exported.report.generatedAt, expected.generatedAt);
     assert.deepEqual(exported.report.coverage,coverage ?? undefined);
     assert.equal(exported.report.pageLoadIncomplete,expected.pageLoadIncomplete);
+    assert.equal(exported.report.pageNotice,expected.pageNotice);
     assert.deepEqual(exported.report.findings, expected.findings);
     assert.deepEqual(exported.report.scanner, expected.scanner);
     assert.deepEqual(exported.report.manualChecks, expected.manualChecks);
@@ -708,10 +709,20 @@ try {
   await publicButton.click();await page.locator('.results').waitFor();
   await page.getByRole('region',{name:'Scan coverage',exact:true}).getByText(/Unfinished loads were stopped, so this partial report/).waitFor();
   await assertDownload(publicResponse);
+  for (const [pageNotice, screen] of [['browser-verification', 'browser verification'], ['sign-in', 'sign-in']]) {
+    publicResponse = {...publicReport, pageNotice, sitePreview: data.sitePreview};
+    await publicButton.click();
+    const notice = page.getByRole('status').filter({hasText: `KindPath received a ${screen} screen. The findings and any preview describe that screen.`});
+    await notice.waitFor();
+    await page.getByRole('button', {name: /Visual preview/}).click();
+    await notice.waitFor();
+    await assertDownload(publicResponse);
+  }
   // Browser-rendered previews: decoded pixels, fitting, scroll access, filters and inert hover areas.
   publicResponse={...publicReport,scanId:data.imagePreview.scanId,sitePreview:data.imagePreview};
   await publicButton.click();await page.locator('.results').waitFor();
   await page.getByRole('button',{name:/Visual preview/}).click();
+  assert.equal(await page.getByRole('status').filter({hasText: /KindPath received a .* screen/}).count(), 0);
   const imageFrames=page.locator('iframe');
   for(let i=0;i<2;i++){
     const frame=page.frameLocator('iframe').nth(i);

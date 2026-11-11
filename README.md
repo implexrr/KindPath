@@ -62,6 +62,8 @@ Images are independently validated and embedded in sandboxed, opaque-origin ifra
 | POST | `/api/scan-fixture` | Scan a fixed built-in page |
 | POST | `/api/analyze` | Explicit illustrative example; never fetches its URL |
 
+For successful scans, KindPath labels clearly identifiable browser verification and sign-in screens in the report and preview. The API and JSON download include an optional `pageNotice` code and a plain-language limitation. Detection uses the rendered page and can miss unfamiliar screens. Findings and previews describe the page KindPath received.
+
 A successful real scan has `mode: "public"`, `requestedUrl`, final `url`, `scanId`, findings, scanner metadata and coverage. `sitePreview` contains the same identity, `kind: "image"`, dimensions, truncation flag, capture timestamp, guarded HTML and limitations. If capture alone fails, `previewUnavailable: true` replaces `sitePreview`; the report limitations explain this. Cleanup failure overrides successful results and capture/status explanations.
 
 ## Invite-only staging

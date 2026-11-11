@@ -54,3 +54,19 @@ test('partial page loading is explicit and malformed loading markers are rejecte
   assert.equal(mapPublicReport(raw).pageLoadIncomplete,undefined);
   for(const value of [false,null,'true',1,{}])assert.throws(()=>mapPublicReport({...raw,pageLoadIncomplete:value}));
 });
+
+
+test('public report page notices accept only fixed own codes', () => {
+  const raw = { fixture: 'public', url: 'https://example.com/', engine: 'test', violations: [],
+    incomplete: [], passes: 1, inapplicable: 0, coverage: { blockedRequests: 0, failedRequests: 0, omittedRules: 0, omittedNodes: 0 } };
+  assert.equal(mapPublicReport(raw).pageNotice, undefined);
+  for (const pageNotice of ['sign-in', 'browser-verification']) {
+    const report = mapPublicReport({ ...raw, pageNotice });
+    assert.equal(report.pageNotice, pageNotice);
+    assert.ok(report.limitations.some(text => text.includes('describe that screen')));
+  }
+  for (const pageNotice of ['constructor', '__proto__', '<script>', null, {}]) {
+    assert.throws(() => mapPublicReport({ ...raw, pageNotice }), /Invalid scanned page notice/);
+  }
+  assert.throws(() => mapPublicReport(Object.assign(Object.create({ pageNotice: 'sign-in' }), raw)), /Invalid scanned page notice/);
+});

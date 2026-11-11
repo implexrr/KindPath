@@ -1,3 +1,4 @@
+import { readScanPageNotice, scanPageNoticeText } from '../../shared/scanPageNotice';
 import { readScanCoverage } from '../../shared/scanCoverage';
 import { fixtureTitle, isFixture } from '../../shared/fixtures';
 import type { Finding, Report } from '../../shared/types';
@@ -25,8 +26,11 @@ function copyFinding(finding: Finding): Finding {
 export function createReportExport(report: Report) {
   const source = reportSource(report);
   const coverage = report.mode === 'public' ? readScanCoverage(report.coverage) : undefined;
+  const pageNotice = report.mode === 'public' ? readScanPageNotice(report.pageNotice) : undefined;
+  const noticeText = scanPageNoticeText(pageNotice);
   const limitations = [...new Set([
     source.description,
+    ...(noticeText ? [noticeText] : []),
     'Automated checks do not establish accessibility conformance. Keyboard, screen reader, and usability review remain essential.',
     ...(report.mode === 'fixture' ? ['Scanner output is bounded to 100 rules per category and 20 elements per rule. Counts describe returned results.'] : []),
     ...(report.limitations ?? []),
@@ -34,6 +38,7 @@ export function createReportExport(report: Report) {
   const exported: Report = {
     mode: report.mode, url: report.url, generatedAt: report.generatedAt,
     ...(coverage ? { coverage } : {}),
+    ...(pageNotice ? { pageNotice } : {}),
     ...(report.mode==='public'&&report.pageLoadIncomplete===true?{pageLoadIncomplete:true as const}:{}),
     ...(report.mode === 'public' && report.requestedUrl ? { requestedUrl: report.requestedUrl } : {}),
     manualChecks: [...report.manualChecks], findings: report.findings.map(copyFinding), limitations,

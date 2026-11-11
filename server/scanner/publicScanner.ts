@@ -1,4 +1,5 @@
 import { navigationRejection, redirectMessage } from '../../scanner/gateway/navigation.mjs';
+import { readScanPageNotice, scanPageNoticeText } from '../../shared/scanPageNotice.js';
 import { readScanCoverage } from '../../shared/scanCoverage.js';
 import { httpStatusMessage, readDiagnostic, classifyFailure } from '../../scanner/gateway/diagnostics.mjs';
 import { randomUUID } from 'node:crypto';
@@ -10,13 +11,19 @@ import { mapWorkerReport } from './fixtureScanner.js';
 
 export function mapPublicReport(raw: unknown, requestedUrl?: string) {
   const report = mapWorkerReport(raw, 'public');
-  const result = raw as { pageLoadIncomplete?: unknown; url?: unknown; coverage?: { blockedRequests?: unknown; failedRequests?: unknown; omittedRules?: unknown; omittedNodes?: unknown } };
+  const result = raw as { pageLoadIncomplete?: unknown; pageNotice?: unknown; url?: unknown; coverage?: { blockedRequests?: unknown; failedRequests?: unknown; omittedRules?: unknown; omittedNodes?: unknown } };
   if(result.pageLoadIncomplete!==undefined&&result.pageLoadIncomplete!==true)throw new Error('Invalid page loading state.');
+  const pageNotice = readScanPageNotice(result.pageNotice);
+  if (result.pageNotice !== undefined && (!Object.hasOwn(result, 'pageNotice') || !pageNotice)) {
+    throw new Error('Invalid scanned page notice.');
+  }
+  const noticeText = scanPageNoticeText(pageNotice);
   const finalUrl = validatePublicUrl(result.url);
   if (requestedUrl && navigationRejection(requestedUrl, finalUrl)) throw new Error('Invalid final page.');
   const coverage = readScanCoverage(result.coverage);
   if (!coverage) throw new Error('Invalid scan coverage.');
-  return { ...report, ...(result.pageLoadIncomplete===true?{pageLoadIncomplete:true as const}:{}), mode: 'public' as const, coverage, url: finalUrl, ...(requestedUrl ? { requestedUrl: validatePublicUrl(requestedUrl) } : {}), limitations: [
+  return { ...report, ...(pageNotice ? { pageNotice } : {}), ...(result.pageLoadIncomplete===true?{pageLoadIncomplete:true as const}:{}), mode: 'public' as const, coverage, url: finalUrl, ...(requestedUrl ? { requestedUrl: validatePublicUrl(requestedUrl) } : {}), limitations: [
+    ...(noticeText ? [noticeText] : []),
     ...(result.pageLoadIncomplete===true?['Some page resources were still loading when the scan began. Unfinished loads were stopped, so this partial report covers only the rendered content.']:[]),
     'Only the initial top-level page at the default viewport was scanned; embedded frames and interactive states are excluded.',
     `${coverage.blockedRequests} requests were blocked by policy and ${coverage.failedRequests} requests failed (including gateway denials). Missing resources can change the result.`,
