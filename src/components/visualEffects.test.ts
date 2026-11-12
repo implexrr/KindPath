@@ -29,33 +29,30 @@ test('Machado presets use distinct published endpoints and interpolate nearby se
   }
 });
 
-test('effects compose independently and pause removes every visible transformation', () => {
+test('effects compose independently and zero strengths remove every visible transformation', () => {
   const settings = defaultVisionSettings();
   settings.strengths = { colour: 40, blur: 50, contrast: 75, peripheral: 60 };
   assert.equal(snapshotFilter(settings, 'local-colour'), 'url(#local-colour) contrast(0.5) blur(2px)');
   assert.equal(peripheralMask(settings)?.opacity, 0.6);
-  assert.equal(snapshotFilter({ ...settings, enabled: false }, 'local-colour'), undefined);
-  assert.equal(peripheralMask({ ...settings, enabled: false }), undefined);
   assert.deepEqual(settings.strengths, { colour: 40, blur: 50, contrast: 75, peripheral: 60 });
-  assert.equal(snapshotFilter({ ...settings, strengths: { colour: 0, blur: 0, contrast: 0, peripheral: 0 } }, 'local-colour'), undefined);
+  const original = applyVisionPreset('original');
+  assert.equal(snapshotFilter(original, 'local-colour'), undefined);
+  assert.equal(peripheralMask(original), undefined);
 });
-test('intensity presets enable all sliders without changing the colour choice or mutating prior settings', () => {
-  const initial = defaultVisionSettings(); initial.enabled = false; initial.colourPreset = 'tritanopia';
+test('intensity presets set all sliders without changing the colour choice or mutating prior settings', () => {
+  const initial = defaultVisionSettings(); initial.colourPreset = 'tritanopia';
   const preset = applyIntensity(initial, 'strong');
-  assert.equal(preset.enabled, true); assert.equal(preset.colourPreset, 'tritanopia');
+  assert.equal(preset.colourPreset, 'tritanopia');
   assert.deepEqual(Object.values(preset.strengths), [80,80,80,80]);
-  assert.equal(initial.strengths.blur, 0); assert.equal(initial.enabled, false);
+  assert.equal(initial.strengths.blur, 0);
   initial.strengths.blur = 99; assert.equal(defaultVisionSettings().strengths.blur, 0);
 });
 
 test('vision presets replace mixed effects and return independent editable settings', () => {
   const combined = applyIntensity(defaultVisionSettings(), 'strong');
-  combined.enabled = false;
   const blur = applyVisionPreset('blurred');
-  assert.equal(blur.enabled, true);
   assert.equal(snapshotFilter(blur, 'colour'), 'blur(2px)');
   assert.equal(peripheralMask(blur), undefined);
-  assert.equal(combined.enabled, false);
   assert.equal(combined.strengths.colour, 80);
   const original = applyVisionPreset('original');
   assert.equal(snapshotFilter(original, 'colour'), undefined);
@@ -66,11 +63,10 @@ test('vision presets replace mixed effects and return independent editable setti
   assert.equal(snapshotFilter(applyVisionPreset('peripheral'), 'colour'), undefined);
   assert.equal(peripheralMask(applyVisionPreset('peripheral'))?.opacity, 0.65);
 });
-test('active preset follows visible settings, custom adjustments and pause state', () => {
+test('active preset follows visible settings and custom adjustments', () => {
   assert.equal(activeVisionPreset(defaultVisionSettings()), 'deuteranopia');
   const blue = applyVisionPreset('tritanopia');
   assert.equal(activeVisionPreset(blue), 'tritanopia');
-  assert.equal(activeVisionPreset({...blue,enabled:false}), undefined);
   assert.equal(activeVisionPreset({...blue,strengths:{...blue.strengths,blur:1}}), undefined);
   assert.equal(activeVisionPreset(applyIntensity(blue, 'mild')), undefined);
   assert.equal(activeVisionPreset({...applyVisionPreset('blurred'),colourPreset:'grayscale'}), 'blurred');

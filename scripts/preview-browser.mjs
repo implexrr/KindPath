@@ -372,7 +372,12 @@ try {
   await assertDownload(publicResponse);
   await printablePdf(publicResponse);
   await page.getByRole('button', {name:/Visual preview/}).click();
-  await page.getByRole('heading', {name:'Scanned website snapshot',exact:true}).waitFor();
+  const captureTime = page.locator('.snapshot-captured time');
+  await captureTime.waitFor();
+  assert.equal(await captureTime.getAttribute('datetime'), data.sitePreview.capturedAt);
+  assert.equal(await page.locator('.snapshot-captured').textContent(), 'Captured at ' + await captureTime.textContent());
+  assert.equal(await page.getByText(/Educational approximations|Custom visual settings are applied/).count(), 0);
+  assert.equal(await page.getByRole('button',{name:'Apply visual effects',exact:true}).count(), 0);
   await reportSupportFollows(page.locator('.preview-workspace'));
   const captured = page.frameLocator('iframe').first();
   await captured.getByText('Captured website marker',{exact:true}).waitFor();
@@ -388,8 +393,6 @@ try {
   await capturedLink.dispatchEvent('click');
   assert.equal(page.frames().slice(1).every(frame=>frame.url()==='about:srcdoc'),true);
   await captured.getByText('Static captured advertisement',{exact:true}).waitFor();
-  await page.getByRole('button',{name:'Apply visual effects',exact:true}).click();
-  assert.equal(await page.getByRole('heading',{name:'Effects paused — original appearance',exact:true}).count(),1);
   const oldFrame = await page.locator('iframe').first().elementHandle();
   const nextId='22222222-2222-4222-8222-222222222222';
   publicResponse={...publicResponse,scanId:nextId,sitePreview:{...data.sitePreview,scanId:nextId,html:data.sitePreview.html.replace('Captured website marker','New captured page marker')}};
@@ -495,6 +498,11 @@ try {
   await imagePresets.getByRole('button',{name:'Blurred vision',exact:true}).click();
   assert.notDeepEqual(await imageFrames.nth(1).screenshot(),unfilteredPixels,'Blur must change the raster preview');
   assert.deepEqual(await imageFrames.first().screenshot(),originalPixels,'The original image must remain visually unchanged');
+  await page.getByRole('button',{name:'Reset effects',exact:true}).click();
+  assert.equal(await slider('Blur strength').inputValue(), '0');
+  assert.equal(await slider('Colour strength').inputValue(), '100');
+  assertPixel(await visiblePixel(1),[122,111,59]);
+  assertPixel(await visiblePixel(0),[192,32,64]);
   const hotspot=page.frameLocator('iframe').first().locator('.kp-link').first();await hotspot.hover();
   assert.equal(await hotspot.evaluate(node=>getComputedStyle(node).outlineStyle),'solid');await hotspot.dispatchEvent('click');
   assert.equal(page.frames().slice(1).every(frame=>frame.url()==='about:srcdoc'),true);assert.equal(page.context().pages().length,1);
@@ -537,7 +545,7 @@ try {
       await feedback.getByRole('heading',{name:'Website preview unavailable',exact:true}).waitFor();
       assert.match(await feedback.textContent(),/findings and report exports are still available/);
       assert.equal(await page.locator('iframe').count(),0);
-      assert.equal(await page.getByRole('button',{name:'Apply visual effects',exact:true}).count(),0);
+      assert.equal(await page.getByRole('button',{name:'Reset effects',exact:true}).count(),0);
       if(kind==='empty') {
         await page.setViewportSize({width:390,height:844});
         assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
@@ -547,7 +555,7 @@ try {
       }
     }else {
       assert.equal(await page.locator('iframe').count(),2);
-      assert.equal(await page.getByRole('button',{name:'Apply visual effects',exact:true}).count(),1);
+      assert.equal(await page.getByRole('button',{name:'Reset effects',exact:true}).count(),1);
       if(kind==='sparse') {
         await page.frameLocator('iframe').first().getByText('Short page',{exact:true}).waitFor();
         await feedback.getByRole('heading',{name:'Limited preview detail',exact:true}).waitFor();

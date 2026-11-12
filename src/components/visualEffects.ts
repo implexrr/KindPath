@@ -10,7 +10,7 @@ export const effects: Record<Effect, { name: string; description: string }> = {
 
 type MachadoPreset = keyof typeof machadoMatrices;
 export type ColourPreset = MachadoPreset | 'grayscale';
-export type VisionSettings = { enabled: boolean; colourPreset: ColourPreset; strengths: Record<Effect, number> };
+export type VisionSettings = { colourPreset: ColourPreset; strengths: Record<Effect, number> };
 export type IntensityPreset = 'mild' | 'moderate' | 'strong';
 export const colourPresets: Record<ColourPreset, string> = {
   protanopia: 'Protanopia', deuteranopia: 'Deuteranopia', tritanopia: 'Tritanopia', grayscale: 'Grayscale',
@@ -29,10 +29,9 @@ export const visionPresets: Record<VisionPreset, { name: string; colourPreset: C
 };
 export function applyVisionPreset(preset: VisionPreset): VisionSettings {
   const value = visionPresets[preset];
-  return { enabled: true, colourPreset: value.colourPreset, strengths: { ...value.strengths } };
+  return { colourPreset: value.colourPreset, strengths: { ...value.strengths } };
 }
 export function activeVisionPreset(settings: VisionSettings): VisionPreset | undefined {
-  if (!settings.enabled) return undefined;
   return (Object.keys(visionPresets) as VisionPreset[]).find(key => {
     const value = visionPresets[key];
     return (Object.keys(effects) as Effect[]).every(effect => settings.strengths[effect] === value.strengths[effect])
@@ -46,7 +45,7 @@ export function defaultVisionSettings(): VisionSettings {
 }
 export function applyIntensity(settings: VisionSettings, preset: IntensityPreset): VisionSettings {
   const strength = intensityPresets[preset].strength;
-  return { enabled: true, colourPreset: settings.colourPreset, strengths: { colour: strength, contrast: strength, blur: strength, peripheral: strength } };
+  return { colourPreset: settings.colourPreset, strengths: { colour: strength, contrast: strength, blur: strength, peripheral: strength } };
 }
 
 const identity = [1, 0, 0, 0, 1, 0, 0, 0, 1];
@@ -74,7 +73,6 @@ export function colourMatrix(preset: ColourPreset, strength: number): number[] {
   return [...values, 0, 0, 0, 1, 0];
 }
 export function snapshotFilter(settings: VisionSettings, colourId: string): string | undefined {
-  if (!settings.enabled) return undefined;
   const { colour, contrast, blur } = settings.strengths;
   const filters = [
     clampStrength(colour) > 0 ? `url(#${colourId})` : '',
@@ -85,7 +83,7 @@ export function snapshotFilter(settings: VisionSettings, colourId: string): stri
 }
 export function peripheralMask(settings: VisionSettings) {
   const strength = clampStrength(settings.strengths.peripheral);
-  if (!settings.enabled || strength === 0) return undefined;
+  if (strength === 0) return undefined;
   return { opacity: strength / 100,
     background: `radial-gradient(ellipse at center, transparent ${48 - strength * .35}%, rgba(12,20,16,.96) ${85 - strength * .35}%)` };
 }
