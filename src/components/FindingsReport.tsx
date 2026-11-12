@@ -40,8 +40,7 @@ export function FindingsReport({ report }: { report: Report }) {
         <p className="finding-status" role="status">Showing {visible.length} of {report.findings.length} {report.mode === 'demo' ? 'example rules' : 'rules with violations'}.</p>
         {report.findings.length === 0 ? <p className="findings-empty">No automated violations were reported. This does not establish accessibility conformance; review the checks below and test manually.</p>
           : visible.length === 0 ? <p className="findings-empty">No violations match this severity. Other findings are still in this report.</p>
-          : visible.map((finding, index) => <article className="finding" key={finding.id}>
-            <div className="finding-number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</div>
+          : visible.map(finding => <article className="finding" key={finding.id}>
             <div>
               <span className={`severity ${finding.severity.toLowerCase()}`}>{finding.severity}</span>
               <h4>{finding.title}</h4>
@@ -64,7 +63,6 @@ export function FindingsReport({ report }: { report: Report }) {
       <span aria-hidden="true">✳</span>
       <h3>People complete<br/>the picture.</h3>
       <p>Automated checks are a starting point. Make room for manual review and feedback from disabled people.</p>
-      {report.scanner && <p>axe-core {report.scanner.engineVersion} · {report.scanner.passedChecks} checks passed. Zero findings would not establish accessibility conformance.</p>}
       {report.limitations && <><h4>Scan limitations</h4><ul>{report.limitations.map(limit => <li key={limit}>{limit}</li>)}</ul></>}
       <h4>Try these checks</h4>
       <ul>{report.manualChecks.map(check => <li key={check}>{check}</li>)}</ul>

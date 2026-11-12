@@ -166,7 +166,11 @@ try {
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'main');
   await page.keyboard.press('Tab');
   assert.equal(await websiteEntry.evaluate(node => node === document.activeElement), true);
-  await websiteEntry.blur();
+  const urlField = page.locator('.url-field');
+  const focusedBorder = await urlField.evaluate(node => getComputedStyle(node).borderColor);
+  await page.getByRole('heading', { name: 'A clearer web. For everyone.' }).click();
+  assert.equal(await websiteEntry.evaluate(node => node === document.activeElement), false);
+  assert.notEqual(await urlField.evaluate(node => getComputedStyle(node).borderColor), focusedBorder);
   const landing = page.locator('.hero');
   const panes = landing.locator('.landing-comparison-page');
   assert.equal(await panes.count(), 2);
@@ -201,8 +205,8 @@ try {
       const instructions = await landing.getByText('Scan a public webpage', {exact:false}).boundingBox();
       const comparison = await landing.locator('figure').boundingBox();
       const footer = await page.getByRole('contentinfo').boundingBox();
-      assert.ok(comparison.y >= heading.y + heading.height);
-      assert.ok(comparison.y + comparison.height <= instructions.y);
+      assert.ok(comparison.x >= form.x + form.width);
+      assert.ok(heading.y + heading.height <= instructions.y);
       assert.ok(instructions.y + instructions.height <= form.y);
       assert.ok(footer.height <= 38, 'The desktop footer must remain a compact row');
       assert.ok(footer.y + footer.height <= height, 'The compact landing page must fit the desktop viewport');
@@ -210,11 +214,12 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     landingImages[size] = (await page.screenshot({fullPage:true})).toString('base64');
   }
-  for (const width of [760, 761]) {
+  for (const width of [899, 900]) {
     await page.setViewportSize({width,height:800});
     const comparison = await landing.locator('figure').boundingBox();
     const form = await landing.locator('form').boundingBox();
-    assert.equal(comparison.y < form.y, width > 760);
+    if (width < 900) assert.ok(comparison.y >= form.y + form.height);
+    else assert.ok(comparison.x >= form.x + form.width);
   }
   await page.setViewportSize({width:320,height:740});
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
@@ -229,6 +234,7 @@ try {
   for(const entry of ['javascript:alert(1)','https:/example.com','https:///example.com','user@example.com','https://user:pass@example.com']) {
     const before=apiRequests;await websiteEntry.fill(entry);await websiteEntry.press('Enter');
     await page.getByRole('alert').waitFor();assert.equal(apiRequests,before);
+    assert.equal(await websiteEntry.getAttribute('aria-invalid'), 'true');
     assert.equal(await page.locator('.results').count(),0);
   }
   await websiteEntry.fill('');
@@ -249,14 +255,59 @@ try {
   for(const entry of ['127.0.0.1','printer.local','example.com:8443','https://example.com/#section']) {
     const before=apiRequests;await websiteEntry.fill(entry);await publicButton.click();
     await page.getByRole('alert').waitFor();assert.equal(apiRequests,before);
+    assert.equal(await websiteEntry.getAttribute('aria-invalid'), 'true');
     assert.equal(await page.locator('.results').count(),0);
   }
   await websiteEntry.fill('  example.com/start  ');
+  const landingPositions = () => page.evaluate(() => [
+    ...Array.from(document.querySelectorAll('.hero h1, .url-field, .url-field button, .landing-comparison'), node => {
+      const {x, y, width, height} = node.getBoundingClientRect();
+      return [x, y, width, height];
+    }),
+    scrollY,
+  ]);
+  const beforeScan = await landingPositions();
+  delayPublic = true;
+  const heldScan = new Promise(resolve => { notifyPublic = resolve; });
   await publicButton.click();
+  await heldScan;
+  await page.getByRole('button', {name: 'Cancel request'}).waitFor();
+  assert.deepEqual(await landingPositions(), beforeScan, 'Starting a scan must keep the landing controls in place');
+  delayPublic = false;
+  releasePublic();
   await page.locator('.results').getByText('Scanned page: ' + publicReport.url, { exact: true }).waitFor();
   assert.equal(await websiteEntry.inputValue(),publicReport.requestedUrl);
   await page.locator('.results').getByText('Requested URL: ' + publicReport.requestedUrl, { exact: true }).waitFor();
-  await page.waitForFunction(() => document.activeElement?.matches('.results'));
+  const viewReport = page.getByRole('button', {name: 'View report'});
+  assert.deepEqual(await landingPositions(), beforeScan, 'Receiving a report must keep the viewport and landing controls in place');
+  assert.equal(await viewReport.evaluate(node => node === document.activeElement), true);
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.locator('.results').evaluate(node => {
+    const scroll = node.scrollIntoView.bind(node);
+    node.scrollIntoView = options => {
+      node.dataset.scrollBehavior = options.behavior;
+      scroll(options);
+    };
+  });
+  await viewReport.press('Enter');
+  await page.waitForFunction(() => document.activeElement?.matches('.results') && window.scrollY > 0);
+  assert.equal(await page.locator('.results').getAttribute('data-scroll-behavior'), 'smooth');
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await viewReport.press('Enter');
+  assert.equal(await page.locator('.results').getAttribute('data-scroll-behavior'), 'instant');
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  assert.equal(await page.locator('.results .manual-card').getByText(/axe-core/).count(), 0);
+  const reportSupportFollows = async content => {
+    const bottom = await content.evaluate(node => node.getBoundingClientRect().bottom);
+    const top = await content.evaluate(node => node.getBoundingClientRect().top);
+    assert.ok(await page.locator('.results .report-exports').evaluate(node => node.getBoundingClientRect().bottom) <= top);
+    for (const block of [
+      page.locator('.results').getByText('Automated results for the final scanned page only. Manual review is still required.', {exact:true}),
+      page.locator('.results .scan-coverage'),
+    ]) assert.ok(await block.evaluate(node => node.getBoundingClientRect().top) >= bottom);
+  };
+  await reportSupportFollows(page.locator('.results .findings-layout'));
+
   assert.equal(await page.getByText('Automated page scan', { exact: true }).count(), 1);
   const coverageNotice=page.locator('.results').getByRole('region',{name:'Scan coverage',exact:true});
   await coverageNotice.getByText('Scan coverage is limited',{exact:true}).waitFor();
@@ -357,11 +408,17 @@ try {
   await page.getByLabel('Your website URL').fill(publicReport.requestedUrl);
   await publicButton.click();
   await page.locator('.results').getByText('Requested URL: ' + publicReport.requestedUrl, {exact:true}).waitFor();
-  await page.waitForFunction(() => document.activeElement?.matches('.results'));
+  await viewReport.waitFor();
   await assertDownload(publicResponse);
   await printablePdf(publicResponse);
   await page.getByRole('button', {name:/Visual preview/}).click();
-  await page.getByRole('heading', {name:'Scanned website snapshot',exact:true}).waitFor();
+  const captureTime = page.locator('.snapshot-captured time');
+  await captureTime.waitFor();
+  assert.equal(await captureTime.getAttribute('datetime'), data.sitePreview.capturedAt);
+  assert.equal(await page.locator('.snapshot-captured').textContent(), 'Captured at ' + await captureTime.textContent());
+  await page.getByText('Educational approximations. Individual experiences vary.', {exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Apply visual effects',exact:true}).count(), 0);
+  await reportSupportFollows(page.locator('.preview-workspace'));
   const captured = page.frameLocator('iframe').first();
   await captured.getByText('Captured website marker',{exact:true}).waitFor();
   assert.equal(await page.locator('iframe').count(),2);
@@ -376,8 +433,6 @@ try {
   await capturedLink.dispatchEvent('click');
   assert.equal(page.frames().slice(1).every(frame=>frame.url()==='about:srcdoc'),true);
   await captured.getByText('Static captured advertisement',{exact:true}).waitFor();
-  await page.getByRole('button',{name:'Apply visual effects',exact:true}).click();
-  assert.equal(await page.getByRole('heading',{name:'Effects paused — original appearance',exact:true}).count(),1);
   const oldFrame = await page.locator('iframe').first().elementHandle();
   const nextId='22222222-2222-4222-8222-222222222222';
   publicResponse={...publicResponse,scanId:nextId,sitePreview:{...data.sitePreview,scanId:nextId,html:data.sitePreview.html.replace('Captured website marker','New captured page marker')}};
@@ -386,7 +441,7 @@ try {
   await page.getByRole('button',{name:/Visual preview/}).click();
   await page.frameLocator('iframe').first().getByText('New captured page marker',{exact:true}).waitFor();
   assert.equal(await oldFrame.evaluate(node=>node.isConnected),false);
-  assert.equal(await page.getByRole('heading',{name:'With visual effects',exact:true}).count(),1);
+  assert.equal(await page.getByRole('heading',{name:/Simulated preview/}).count(),1);
   for(const bad of [undefined,{...data.sitePreview,scanId:nextId},{...data.sitePreview,url:'https://example.com/old'}]) {
     publicResponse={...publicReport,scanId:data.sitePreview.scanId,sitePreview:bad};
     await publicButton.click();
@@ -476,6 +531,9 @@ try {
     assertPixel(await visiblePixel(0),[192,32,64]);
     assert.equal(await imageFrames.nth(1).evaluate(el=>el.style.filter),'','No parent filter may cross the opaque iframe boundary');
   }
+  const fineTuning = page.getByText('Fine-tune effects', {exact:true});
+  assert.equal(await slider('Colour strength').isVisible(), false);
+  await fineTuning.press('Enter');
   await page.getByLabel('Colour preset',{exact:true}).selectOption('grayscale');
   assertPixel(await visiblePixel(1),[68,68,68]);
   await slider('Colour strength').press('Home');
@@ -483,6 +541,11 @@ try {
   await imagePresets.getByRole('button',{name:'Blurred vision',exact:true}).click();
   assert.notDeepEqual(await imageFrames.nth(1).screenshot(),unfilteredPixels,'Blur must change the raster preview');
   assert.deepEqual(await imageFrames.first().screenshot(),originalPixels,'The original image must remain visually unchanged');
+  await page.getByRole('button',{name:'Reset effects',exact:true}).click();
+  assert.equal(await slider('Blur strength').inputValue(), '0');
+  assert.equal(await slider('Colour strength').inputValue(), '100');
+  assertPixel(await visiblePixel(1),[122,111,59]);
+  assertPixel(await visiblePixel(0),[192,32,64]);
   const hotspot=page.frameLocator('iframe').first().locator('.kp-link').first();await hotspot.hover();
   assert.equal(await hotspot.evaluate(node=>getComputedStyle(node).outlineStyle),'solid');await hotspot.dispatchEvent('click');
   assert.equal(page.frames().slice(1).every(frame=>frame.url()==='about:srcdoc'),true);assert.equal(page.context().pages().length,1);
@@ -493,8 +556,21 @@ try {
   assert.ok(scroll.x>0&&scroll.y>0,'Actual size must allow access to the right and lower image');
   await page.getByLabel('Preview size',{exact:true}).selectOption('fit');
   await page.setViewportSize({width:390,height:844});
-  await page.frameLocator('iframe').first().locator('img').evaluate(img=>img.decode());
-  assert.ok(await page.frameLocator('iframe').first().locator('img').evaluate(img=>img.getBoundingClientRect().width<=innerWidth));
+  const mobileViews = page.getByRole('group', {name:'Snapshot view'});
+  const mobileOriginal = mobileViews.getByRole('button', {name:'Original',exact:true});
+  const mobileSimulated = mobileViews.getByRole('button', {name:'Simulated',exact:true});
+  assert.equal(await imageFrames.first().isVisible(), false);
+  await page.getByLabel('Preview size',{exact:true}).selectOption('actual');
+  const scroller = page.getByRole('region', {name:'Snapshot images'});
+  await scroller.evaluate(node => { node.scrollLeft = 150; node.scrollTop = 300; });
+  await mobileOriginal.press('Enter');
+  assert.equal(await imageFrames.first().isVisible(), true);
+  assert.equal(await imageFrames.nth(1).isVisible(), false);
+  assert.deepEqual(await scroller.evaluate(node => [node.scrollLeft, node.scrollTop]), [150, 300]);
+  await mobileSimulated.press('Enter');
+  assert.deepEqual(await scroller.evaluate(node => [node.scrollLeft, node.scrollTop]), [150, 300]);
+  await page.getByLabel('Preview size',{exact:true}).selectOption('fit');
+  assert.ok(await page.frameLocator('iframe').nth(1).locator('img').evaluate(img=>img.getBoundingClientRect().width<=innerWidth));
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.setViewportSize({width:1280,height:900});await assertDownload(publicResponse);
   publicResponse={...publicReport,scanId:data.imagePreview.scanId,previewUnavailable:true};
@@ -525,7 +601,7 @@ try {
       await feedback.getByRole('heading',{name:'Website preview unavailable',exact:true}).waitFor();
       assert.match(await feedback.textContent(),/findings and report exports are still available/);
       assert.equal(await page.locator('iframe').count(),0);
-      assert.equal(await page.getByRole('button',{name:'Apply visual effects',exact:true}).count(),0);
+      assert.equal(await page.getByRole('button',{name:'Reset effects',exact:true}).count(),0);
       if(kind==='empty') {
         await page.setViewportSize({width:390,height:844});
         assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
@@ -535,7 +611,7 @@ try {
       }
     }else {
       assert.equal(await page.locator('iframe').count(),2);
-      assert.equal(await page.getByRole('button',{name:'Apply visual effects',exact:true}).count(),1);
+      assert.equal(await page.getByRole('button',{name:'Reset effects',exact:true}).count(),1);
       if(kind==='sparse') {
         await page.frameLocator('iframe').first().getByText('Short page',{exact:true}).waitFor();
         await feedback.getByRole('heading',{name:'Limited preview detail',exact:true}).waitFor();
@@ -591,8 +667,7 @@ try {
   for (const item of await page.getByRole('list', { name: 'Violation counts by severity' }).getByRole('listitem').all()) {
     assert.equal(await item.locator('strong').textContent(), '1');
   }
-  // Report completion schedules focus in requestAnimationFrame; observe it before sending keys.
-  await page.waitForFunction(() => document.activeElement?.matches('.results'));
+  await viewReport.waitFor();
   await filter.focus(); await filter.press('Home'); await filter.press('ArrowDown');
   assert.equal(await filter.inputValue(), 'Critical');
   assert.equal(await violations.locator('article').count(), 1);
@@ -642,10 +717,13 @@ try {
   publicResponse = {...publicReport, previewUnavailable: true, generatedAt: '2026-11-08T01:00:00.000Z'};
   delayPublic = true;
   const heldCancellation = new Promise(resolve => { notifyPublic = resolve; });
+  await publicButton.scrollIntoViewIfNeeded();
+  const beforeMobileScan = await landingPositions();
   await publicButton.click();
   await heldCancellation;
   assert.equal(publicHeld, true);
-  assert.equal(await websiteEntry.isDisabled(), true);
+  assert.equal(await websiteEntry.getAttribute('readonly'), '');
+  assert.deepEqual(await landingPositions(), beforeMobileScan, 'A pending scan must also keep the mobile landing controls in place');
   await page.getByRole('button', {name:'Cancel request',exact:true}).click();
   await page.getByRole('status').filter({hasText:'Request cancelled'}).waitFor();
   assert.equal(await page.locator('.results').count(), 0);
@@ -662,9 +740,14 @@ try {
   await scanRetry.click();
   await page.locator('.results').waitFor();
   await assertDownload(publicResponse);
-  // Editing a URL clears the prior report instead of showing it under a new address.
-  await page.getByLabel('Your website URL').fill('https://example.com/new-request');
-  assert.equal(await page.locator('.results').count(),0);
+  // The draft URL and the already-completed report are independent.
+  await page.getByRole('button', { name: /Visual preview/ }).click();
+  const callsBeforeEdit = publicCalls;
+  await websiteEntry.fill('https://example.com/new-request');
+  assert.equal(publicCalls, callsBeforeEdit);
+  await page.locator('.results').getByText('Requested URL: ' + publicResponse.requestedUrl, { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: /Visual preview/ }).getAttribute('aria-pressed'), 'true');
+  await assertDownload(publicResponse);
   assert.deepEqual(unexpected, []);
   process.stdout.write(JSON.stringify({ passed: true, engine, version: browser.version(), landingDesktop: landingImages.desktop, landingMobile: landingImages.mobile, findingsDesktop, findingsMobile, coverageDesktop, coverageMobile, qualityEmpty, qualitySparse, reportPdf }));
 } finally { await browser.close(); }

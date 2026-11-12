@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { navigationRejection } from '../scanner/gateway/navigation.mjs';
 import { websiteUrl } from '../scanner/gateway/url.mjs';
@@ -40,15 +40,15 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [lastAttempt,setLastAttempt] = useState<string | null>(null);
   const [cancelled,setCancelled] = useState(false);
+  const [fieldError, setFieldError] = useState('');
   const [failure, setFailure] = useState<ScanFailureFeedback | null>(null);
   const [view, setView] = useState<'findings' | 'preview'>('findings');
   const results = useRef<HTMLElement>(null);
-  // Focus only after React has committed the new report and its result element exists.
-  useLayoutEffect(() => {
-    if (!report) return;
-    results.current?.focus();
-    results.current?.scrollIntoView({ behavior: 'instant', block: 'start' });
-  }, [report]);
+  function viewReport() {
+    results.current?.focus({ preventScroll: true });
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    results.current?.scrollIntoView({ behavior: reduceMotion ? 'instant' : 'smooth', block: 'start' });
+  }
 
   const analysisRequest = useRef<AbortController | null>(null);
   useEffect(() => () => analysisRequest.current?.abort(), []);
@@ -58,18 +58,24 @@ export function App() {
     setBusy(false); setReport(null); setFailure(null); setCancelled(true);
   }
   function changeUrl(value: string) {
-    setUrl(value); setReport(null); setFailure(null); setCancelled(false); setLastAttempt(null); setView('findings');
+    setUrl(value); setFailure(null); setFieldError(''); setCancelled(false); setLastAttempt(null);
   }
   async function analyze(value: string) {
     if (analysisRequest.current || !capabilitiesReady) return;
+    setFieldError('');
+    try {
+      value = websiteUrl(normalizeWebsiteEntry(value)).href;
+    } catch (cause) {
+      setFailure(null); setCancelled(false); setLastAttempt(null);
+      setFieldError(cause instanceof Error ? cause.message : 'Enter a valid public website URL.');
+      return;
+    }
     const abort = new AbortController();
     analysisRequest.current = abort;
     setBusy(true); setFailure(null); setReport(null); setView('findings'); setCancelled(false);
     setLastAttempt(value);
     let timeout: AbortSignal | undefined;
     try {
-      value = websiteUrl(normalizeWebsiteEntry(value)).href;
-      setLastAttempt(value);
       if (!publicEnabled) throw new Error('Website scanning is unavailable.');
       timeout = AbortSignal.timeout(90000);
       const response = await fetch('/api/scan-public', {
@@ -134,15 +140,16 @@ export function App() {
     </header>
     <main id="main" tabIndex={-1}>
       <section className="hero" aria-labelledby="landing-title">
-        <h1 id="landing-title">A clearer web.<br/><em>For everyone.</em></h1>
         <div className="hero-copy">
+          <h1 id="landing-title">A clearer web.<br/><em>For everyone.</em></h1>
           <p>Scan a public webpage for accessibility issues and see how it looks with different vision settings.</p>
           <WebsiteForm
             activity={busy ? 'Checking the page and preparing your report…' : cancelled ? 'Request cancelled. You can try again shortly.' : report ? 'Report ready.' : ''}
+            reportReady={report !== null} onViewReport={viewReport}
             onCancel={cancel} cancelled={cancelled} canRetry={!busy && !!lastAttempt && (failure?.retryable === true || cancelled)}
             onRetry={() => { if (lastAttempt) void analyze(lastAttempt); }}
             capabilitiesLoading={!capabilitiesReady} publicScanningEnabled={publicEnabled}
-            url={url} busy={busy} error={failure?.message ?? ''} onUrlChange={changeUrl} onSubmit={submit}
+            url={url} busy={busy} fieldError={fieldError} scanError={failure?.message ?? ''} onUrlChange={changeUrl} onSubmit={submit}
           />
         </div>
         <LandingComparison/>
@@ -156,9 +163,7 @@ export function App() {
           </div>
           <span className="demo-badge">Automated page scan</span>
         </div>
-        <div className="notice">Automated results for the final scanned page only. Manual review is still required.</div>
         {pageNotice && <p className="notice" role="status">{pageNotice}</p>}
-        <ScanCoverageNotice report={report}/>
         <ReportExports key={`${report.scanId}:${report.generatedAt}`} report={report}/>
         <div className="view-switch" role="group" aria-label="Report view">
           <button aria-pressed={view === 'findings'} onClick={() => setView('findings')}>Accessibility findings <span>{report.findings.length}</span></button>
@@ -171,11 +176,13 @@ export function App() {
               {report.previewUnavailable ? 'The website image could not be captured.' : 'Website image capture is disabled.'} Your accessibility report and JSON download are still available.
             </div>}
         </div>
+        <div className="notice">Automated results for the final scanned page only. Manual review is still required.</div>
+        <ScanCoverageNotice report={report}/>
       </section>}
     </main>
     <footer>
       <span>© 2026 Chenhao Wang</span>
-      <a href="https://github.com/implexrr/KindPath">GitHub repository <span aria-hidden="true">↗</span></a>
+      <a href="https://github.com/implexrr/KindPath"><span>GitHub repository <span aria-hidden="true">↗</span></span></a>
     </footer>
   </>;
 }

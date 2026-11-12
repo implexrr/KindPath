@@ -4,18 +4,14 @@ import type { ColourPreset, Effect, IntensityPreset, VisionPreset, VisionSetting
 const sliderLabels: Record<Effect, string> = {
   colour: 'Colour strength', contrast: 'Contrast reduction', blur: 'Blur strength', peripheral: 'Peripheral restriction',
 };
-export function VisionControls({ settings, onChange }: { settings: VisionSettings; onChange: (value: VisionSettings) => void }) {
+interface VisionControlsProps {
+  settings: VisionSettings;
+  onChange: (value: VisionSettings) => void;
+}
+
+export function VisionPresetControls({ settings, onChange }: VisionControlsProps) {
   const activePreset = activeVisionPreset(settings);
-  const hasEffects = Object.values(settings.strengths).some(value => value > 0);
-  return <section className="vision-controls" aria-labelledby="vision-controls-title">
-    <div className="vision-toolbar">
-      <div><h3 id="vision-controls-title">Adjust the modified preview</h3><p>Combine effects or explore one at a time. The original snapshot stays unchanged.</p></div>
-      <div className="vision-actions">
-        <button type="button" className="secondary" aria-pressed={settings.enabled} onClick={() => onChange({ ...settings, enabled: !settings.enabled })}>Apply visual effects</button>
-        <span className="vision-toggle-status" aria-hidden="true">{settings.enabled ? 'On' : 'Off'}</span>
-        <button type="button" className="secondary" onClick={() => onChange(defaultVisionSettings())}>Reset effects</button>
-      </div>
-    </div>
+  return <section className="vision-controls vision-preset-controls" aria-label="Preview effects">
     <div className="vision-presets" role="group" aria-label="Vision presets" aria-describedby="vision-presets-note">
       <h4>Choose a vision preset</h4>
       <div className="vision-preset-buttons">
@@ -23,15 +19,22 @@ export function VisionControls({ settings, onChange }: { settings: VisionSetting
           <button type="button" className="secondary" key={key} aria-pressed={activePreset === key}
             onClick={() => onChange(applyVisionPreset(key))}>{visionPresets[key].name}</button>)}
       </div>
-      <p id="vision-presets-note" className="vision-note">Selecting a preset turns effects on and sets the sliders below.</p>
+      <p id="vision-presets-note" className="vision-note">Educational approximations. Individual experiences vary.</p>
     </div>
+    <button type="button" className="secondary" onClick={() => onChange(defaultVisionSettings())}>Reset effects</button>
+  </section>;
+}
+
+export function VisionFineTuning({ settings, onChange }: VisionControlsProps) {
+  return <details className="vision-controls vision-fine-tuning">
+    <summary>Fine-tune effects</summary>
     <div className="intensity-presets" role="group" aria-label="Intensity presets">
       <span>Starting points</span>
       {(Object.entries(intensityPresets) as [IntensityPreset, { name: string; strength: number }][]).map(([key, value]) =>
-        <button type="button" className="secondary" key={key} aria-pressed={settings.enabled && Object.values(settings.strengths).every(strength => strength === value.strength)}
+        <button type="button" className="secondary" key={key} aria-pressed={Object.values(settings.strengths).every(strength => strength === value.strength)}
           onClick={() => onChange(applyIntensity(settings, key))}>{value.name}</button>)}
     </div>
-    <p className="vision-note">Intensity presets turn effects on and set all four strengths.</p>
+    <p className="vision-note">Intensity presets set all four strengths.</p>
     <div className="colour-choice">
       <label htmlFor="colour-preset">Colour preset</label>
       <select id="colour-preset" value={settings.colourPreset} aria-describedby="colour-preset-note"
@@ -50,11 +53,5 @@ export function VisionControls({ settings, onChange }: { settings: VisionSetting
         <p id={`${key}-description`}>{effects[key].description}</p>
       </div>)}
     </div>
-    <p className="vision-application-status" role="status" aria-live="polite">{!settings.enabled
-      ? 'Effects paused. Your slider settings are retained.'
-      : hasEffects ? activePreset
-        ? `${visionPresets[activePreset].name} preset is applied to the modified snapshot only.`
-        : 'Custom visual settings are applied to the modified snapshot only.'
-      : 'All strengths are zero. Both snapshots show the original appearance.'}</p>
-  </section>;
+  </details>;
 }
