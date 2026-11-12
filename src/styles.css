@@ -107,9 +107,9 @@ html{scrollbar-gutter:stable}
   66.666%,100%{clip-path:inset(0)}
 }
 @media (prefers-reduced-motion:no-preference){
-  /* Both sprite strips contain 30 frames. End on the resting frame. */
+  /* Both sprite strips contain 30 frames. */
   .landing-frog-celebrate{animation:landing-sprite-frames 1.5s steps(29,end)}
-  .scan-sprout{animation:landing-sprite-frames 2.4s steps(29,end) 2}
+  .scan-sprout{animation:landing-sprite-frames 2.4s steps(29,end) infinite}
 }
 @keyframes landing-sprite-frames{to{background-position:100% 0}}
 .hero h1{font:400 clamp(44px,5.2vw,64px)/1.04 Georgia,serif;letter-spacing:-3px;margin:0}

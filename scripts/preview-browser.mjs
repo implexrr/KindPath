@@ -315,6 +315,15 @@ try {
   assert.equal(await frog.evaluate(node => getComputedStyle(node).animationName), 'none');
   assert.equal(await sprout.getAttribute('aria-hidden'), 'true');
   assert.equal(await sprout.evaluate(node => getComputedStyle(node).animationName), 'landing-sprite-frames');
+  const sproutFrames = await sprout.evaluate(node => {
+    const animation = node.getAnimations()[0];
+    animation.pause();
+    return [5400, 6000].map(time => {
+      animation.currentTime = time;
+      return getComputedStyle(node).backgroundPositionX;
+    });
+  });
+  assert.notEqual(sproutFrames[0], sproutFrames[1], 'Little Sprout must keep moving past two cycles');
   await page.emulateMedia({reducedMotion:'reduce'});
   assert.equal(await dots.evaluate(node => getComputedStyle(node).animationName), 'none');
   for (const sprite of [frog, sprout]) {
