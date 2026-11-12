@@ -59,7 +59,10 @@ export function WebsiteForm({ url, activity, reportReady, onViewReport, onCancel
         {!publicScanningEnabled && <p id="scanner-note">
           {capabilitiesLoading ? 'Checking scanner availability…' : 'Website scanning is currently unavailable.'}
         </p>}
-        <p role="status">{activity}</p>
+        <div className="scan-activity">
+          {busy && <span className="landing-sprite scan-sprout" aria-hidden="true"/>}
+          <p role="status">{activity}{busy && <span className="scan-dots" aria-hidden="true">...</span>}</p>
+        </div>
         {scanError && <p ref={errorMessage} tabIndex={-1} role="alert" id="scan-error">{scanError}</p>}
       </div>
       {busy && <button type="button" className="secondary" onClick={onCancel}>Cancel request</button>}
