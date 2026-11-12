@@ -17,7 +17,13 @@ export function VisionPresetControls({ settings, onChange }: VisionControlsProps
       <div className="vision-preset-buttons">
         {(Object.keys(visionPresets) as VisionPreset[]).map(key =>
           <button type="button" className="secondary" key={key} aria-pressed={activePreset === key}
-            onClick={() => onChange(applyVisionPreset(key))}>{visionPresets[key].name}</button>)}
+            onClick={() => onChange(applyVisionPreset(key))}>
+            <svg className="preset-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/>
+              <circle cx="12" cy="12" r="3"/>
+              <path className="preset-eye-slash" d="m3 3 18 18" pathLength="1" strokeLinecap="butt"/>
+            </svg>{visionPresets[key].name}
+          </button>)}
       </div>
       <p id="vision-presets-note" className="vision-note">Educational approximations. Individual experiences vary.</p>
     </div>
@@ -37,10 +43,12 @@ export function VisionFineTuning({ settings, onChange }: VisionControlsProps) {
     <p className="vision-note">Intensity presets set all four strengths.</p>
     <div className="colour-choice">
       <label htmlFor="colour-preset">Colour preset</label>
-      <select id="colour-preset" value={settings.colourPreset} aria-describedby="colour-preset-note"
-        onChange={event => onChange({ ...settings, colourPreset: event.target.value as ColourPreset })}>
-        {Object.entries(colourPresets).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
-      </select>
+      <div className="select-field">
+        <select id="colour-preset" value={settings.colourPreset} aria-describedby="colour-preset-note"
+          onChange={event => onChange({ ...settings, colourPreset: event.target.value as ColourPreset })}>
+          {Object.entries(colourPresets).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
+        </select>
+      </div>
       <p id="colour-preset-note">The named colour filters use the Machado model. Use Colour strength for milder simulations, with 100% showing the named form. Individual colour vision varies.</p>
     </div>
     <div className="effect-grid">

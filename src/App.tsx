@@ -136,15 +136,18 @@ export function App() {
     {report && <PrintableReport report={report}/>}
     <a className="skip-link" href="#main">Skip to content</a>
     <header className="site-header">
-      <a className="brand" href="#"><span className="brand-icon" aria-hidden="true">k<span>↗</span></span>KindPath</a>
+      <a className="brand" href="#">KindPath</a>
     </header>
     <main id="main" tabIndex={-1}>
       <section className="hero" aria-labelledby="landing-title">
         <div className="hero-copy">
-          <h1 id="landing-title">A clearer web.<br/><em>For everyone.</em></h1>
+          <div className="hero-heading">
+            <h1 id="landing-title">A clearer web.<br/><em>For everyone.</em></h1>
+            <span className={report ? "landing-sprite landing-frog landing-frog-celebrate" : "landing-sprite landing-frog"} aria-hidden="true"/>
+          </div>
           <p>Scan a public webpage for accessibility issues and see how it looks with different vision settings.</p>
           <WebsiteForm
-            activity={busy ? 'Checking the page and preparing your report…' : cancelled ? 'Request cancelled. You can try again shortly.' : report ? 'Report ready.' : ''}
+            activity={busy ? 'Checking the page and preparing your report' : cancelled ? 'Request cancelled. You can try again shortly.' : report ? 'Report ready.' : ''}
             reportReady={report !== null} onViewReport={viewReport}
             onCancel={cancel} cancelled={cancelled} canRetry={!busy && !!lastAttempt && (failure?.retryable === true || cancelled)}
             onRetry={() => { if (lastAttempt) void analyze(lastAttempt); }}

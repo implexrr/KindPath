@@ -172,6 +172,16 @@ try {
   assert.equal(await websiteEntry.evaluate(node => node === document.activeElement), false);
   assert.notEqual(await urlField.evaluate(node => getComputedStyle(node).borderColor), focusedBorder);
   const landing = page.locator('.hero');
+  const frog = landing.locator('.landing-frog');
+  const sprout = landing.locator('.scan-sprout');
+  assert.equal(await frog.isVisible(), true);
+  assert.equal(await sprout.count(), 0);
+  assert.equal(await frog.getAttribute('aria-hidden'), 'true');
+  assert.equal(await frog.evaluate(node => getComputedStyle(node).animationName), 'none');
+  assert.equal(await page.getByRole('link', {name:'KindPath',exact:true}).textContent(), 'KindPath');
+  const comparisonPanes = landing.locator('.landing-comparison-panes');
+  assert.ok(await comparisonPanes.evaluate(node => parseFloat(getComputedStyle(node).padding) >= 8));
+  await landing.getByText('Same page, with a deuteranopia + blurred vision simulation on the right.', {exact:true}).waitFor();
   const panes = landing.locator('.landing-comparison-page');
   assert.equal(await panes.count(), 2);
   const filterId = await panes.nth(1).locator('filter').getAttribute('id');
@@ -199,6 +209,17 @@ try {
     assert.ok(link.height >= (size === 'mobile' ? 44 : 24), 'The link must have a usable target height');
     assert.equal(left.top, right.top);
     assert.ok(left.right < right.left);
+    for (const pane of await panes.all()) {
+      assert.equal(await pane.locator('svg').evaluate(svg => {
+        const bounds = svg.getBoundingClientRect();
+        const matrix = svg.getScreenCTM();
+        const box = svg.viewBox.baseVal;
+        const start = new DOMPoint(box.x, box.y).matrixTransform(matrix);
+        const end = new DOMPoint(box.x + box.width, box.y + box.height).matrixTransform(matrix);
+        return start.x >= bounds.left - 1 && start.y >= bounds.top - 1
+          && end.x <= bounds.right + 1 && end.y <= bounds.bottom + 1;
+      }), true, 'Each landing artwork should fit in full inside its pane');
+    }
     if (size === 'mobile') assert.ok(left.top > form.y + form.height);
     else {
       const heading = await landing.getByRole('heading', {level:1}).boundingBox();
@@ -209,11 +230,14 @@ try {
       assert.ok(heading.y + heading.height <= instructions.y);
       assert.ok(instructions.y + instructions.height <= form.y);
       assert.ok(footer.height <= 38, 'The desktop footer must remain a compact row');
-      assert.ok(footer.y + footer.height <= height, 'The compact landing page must fit the desktop viewport');
+      assert.ok(Math.abs(footer.y + footer.height - height) <= 1, 'The footer should sit at the bottom of the desktop viewport');
     }
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     landingImages[size] = (await page.screenshot({fullPage:true})).toString('base64');
   }
+  await page.setViewportSize({width:1280,height:1000});
+  assert.equal(await page.evaluate(() => document.querySelector('footer').getBoundingClientRect().bottom), 1000);
+  const appBackground = await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor);
   for (const width of [899, 900]) {
     await page.setViewportSize({width,height:800});
     const comparison = await landing.locator('figure').boundingBox();
@@ -260,12 +284,13 @@ try {
   }
   await websiteEntry.fill('  example.com/start  ');
   const landingPositions = () => page.evaluate(() => [
-    ...Array.from(document.querySelectorAll('.hero h1, .url-field, .url-field button, .landing-comparison'), node => {
+    ...Array.from(document.querySelectorAll('.hero h1, .landing-frog, .url-field, .url-field button, .scan-feedback, .landing-comparison'), node => {
       const {x, y, width, height} = node.getBoundingClientRect();
       return [x, y, width, height];
     }),
     scrollY,
   ]);
+  await page.emulateMedia({reducedMotion:'no-preference'});
   const beforeScan = await landingPositions();
   delayPublic = true;
   const heldScan = new Promise(resolve => { notifyPublic = resolve; });
@@ -273,13 +298,44 @@ try {
   await heldScan;
   await page.getByRole('button', {name: 'Cancel request'}).waitFor();
   assert.deepEqual(await landingPositions(), beforeScan, 'Starting a scan must keep the landing controls in place');
+  assert.equal(await sprout.isVisible(), true);
+  assert.equal(await publicButton.evaluate(node => getComputedStyle(node).cursor), 'default');
+  const dots = landing.locator('.scan-dots');
+  assert.equal(await dots.getAttribute('aria-hidden'), 'true');
+  const dotFrames = await dots.evaluate(node => {
+    const animation = node.getAnimations()[0];
+    animation.pause();
+    return [0, 450, 850, 1250].map(time => {
+      animation.currentTime = time;
+      return getComputedStyle(node).clipPath;
+    });
+  });
+  assert.equal(new Set(dotFrames.slice(0, 3)).size, 3);
+  assert.equal(dotFrames[0], dotFrames[3]);
+  assert.equal(await frog.evaluate(node => getComputedStyle(node).animationName), 'none');
+  assert.equal(await sprout.getAttribute('aria-hidden'), 'true');
+  assert.equal(await sprout.evaluate(node => getComputedStyle(node).animationName), 'landing-sprite-frames');
+  await page.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await dots.evaluate(node => getComputedStyle(node).animationName), 'none');
+  for (const sprite of [frog, sprout]) {
+    assert.equal(await sprite.isVisible(), true);
+    assert.equal(await sprite.evaluate(node => getComputedStyle(node).animationName), 'none');
+  }
+  assert.deepEqual(await landingPositions(), beforeScan);
+  await page.emulateMedia({reducedMotion:'no-preference'});
   delayPublic = false;
   releasePublic();
   await page.locator('.results').getByText('Scanned page: ' + publicReport.url, { exact: true }).waitFor();
   assert.equal(await websiteEntry.inputValue(),publicReport.requestedUrl);
   await page.locator('.results').getByText('Requested URL: ' + publicReport.requestedUrl, { exact: true }).waitFor();
   const viewReport = page.getByRole('button', {name: 'View report'});
+  assert.equal(await page.locator('.results').evaluate(node => getComputedStyle(node).backgroundColor), 'rgba(0, 0, 0, 0)');
+  assert.equal(appBackground, 'rgb(29, 39, 35)');
+  assert.equal(await page.locator('.finding').first().evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(37, 51, 45)');
   assert.deepEqual(await landingPositions(), beforeScan, 'Receiving a report must keep the viewport and landing controls in place');
+  assert.equal(await sprout.count(), 0);
+  assert.equal(await frog.evaluate(node => getComputedStyle(node).animationName), 'landing-sprite-frames');
+  assert.equal(await frog.evaluate(node => getComputedStyle(node).animationIterationCount), '1');
   assert.equal(await viewReport.evaluate(node => node === document.activeElement), true);
   await page.emulateMedia({reducedMotion:'no-preference'});
   await page.locator('.results').evaluate(node => {
@@ -292,7 +348,10 @@ try {
   await viewReport.press('Enter');
   await page.waitForFunction(() => document.activeElement?.matches('.results') && window.scrollY > 0);
   assert.equal(await page.locator('.results').getAttribute('data-scroll-behavior'), 'smooth');
+  assert.equal(await page.locator('.results').evaluate(node => getComputedStyle(node).outlineStyle), 'none');
+  assert.equal(await page.locator('#report-title').evaluate(node => getComputedStyle(node).textDecorationLine), 'underline');
   await page.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await frog.evaluate(node => getComputedStyle(node).animationName), 'none');
   await viewReport.press('Enter');
   assert.equal(await page.locator('.results').getAttribute('data-scroll-behavior'), 'instant');
   await page.emulateMedia({reducedMotion:'no-preference'});
@@ -344,7 +403,22 @@ try {
   publicResponse=publicReport;
   await publicButton.click();
   await page.locator('.results').waitFor();
+  const controlBoxes = locator => locator.evaluateAll(nodes => nodes.map(node => {
+    const box = node.getBoundingClientRect();
+    return [box.x + scrollX, box.y + scrollY, box.width, box.height];
+  }));
+  const assertControlBoxes = async (locator, expected, message) => {
+    const actual = await controlBoxes(locator);
+    assert.equal(actual.length, expected.length, message);
+    // Reconstructing document coordinates from viewport bounds can introduce subpixel rounding.
+    for (const [index, box] of actual.entries()) {
+      assert.ok(box.every((value, axis) => Math.abs(value - expected[index][axis]) < 0.05), message);
+    }
+  };
+  const viewButtons = page.locator('.view-switch button');
+  const viewBoxes = await controlBoxes(viewButtons);
   await page.getByRole('button', { name: /Visual preview/ }).click();
+  await assertControlBoxes(viewButtons, viewBoxes, 'Choosing a report view must keep both buttons in place');
   assert.equal(await page.locator('iframe').count(), 0);
   await page.getByText('Website image capture is disabled. Your accessibility report and JSON download are still available.', {exact:true}).waitFor();
   await assertDownload(publicResponse);
@@ -466,6 +540,7 @@ try {
   await publicButton.click();await page.locator('.results').waitFor();
   await page.getByRole('button',{name:/Visual preview/}).click();
   assert.equal(await page.getByRole('status').filter({hasText: /KindPath received a .* screen/}).count(), 0);
+  assert.equal(await page.locator('.vision-controls').first().evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(41, 58, 48)');
   const imageFrames=page.locator('iframe');
   for(let i=0;i<2;i++){
     const frame=page.frameLocator('iframe').nth(i);
@@ -505,7 +580,27 @@ try {
     assert.equal(await imageFrames.first().getAttribute('style'),imageOriginalStyle);
   }
   const imagePresets=page.getByRole('group',{name:'Vision presets',exact:true});
-  await imagePresets.getByRole('button',{name:'Original',exact:true}).click();
+  const originalPreset = imagePresets.getByRole('button',{name:'Original',exact:true});
+  const presetBoxes = await controlBoxes(imagePresets.getByRole('button'));
+  const resetEffects = page.getByRole('button',{name:'Reset effects',exact:true});
+  const resetBox = await controlBoxes(resetEffects);
+  const resetFill = await resetEffects.evaluate(node => getComputedStyle(node).backgroundColor);
+  await resetEffects.hover();
+  await page.waitForFunction(fill => getComputedStyle(document.querySelector('.vision-preset-controls > button')).backgroundColor !== fill, resetFill);
+  await assertControlBoxes(resetEffects, resetBox);
+  await originalPreset.click();
+  await assertControlBoxes(imagePresets.getByRole('button'), presetBoxes, 'Choosing a vision preset must keep every preset button in place');
+  assert.equal(await originalPreset.locator('.preset-eye').isVisible(), true);
+  await page.waitForFunction(() => {
+    const selected = document.querySelector('.vision-preset-buttons [aria-pressed=true] .preset-eye-slash');
+    const unselected = document.querySelectorAll('.vision-preset-buttons [aria-pressed=false] .preset-eye-slash');
+    return parseFloat(getComputedStyle(selected).strokeDashoffset) === 1
+      && unselected.length === 5
+      && Array.from(unselected).every(slash => parseFloat(getComputedStyle(slash).strokeDashoffset) === 0);
+  });
+  await page.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await originalPreset.locator('.preset-eye-slash').evaluate(node => getComputedStyle(node).transitionDuration), '0s');
+  await page.emulateMedia({reducedMotion:'no-preference'});
   const visiblePixel=async index=>{
     if(index===1)await waitForModifiedDocument();
     const element=imageFrames.nth(index);
@@ -522,6 +617,7 @@ try {
     },{data:bytes.toString('base64'),x:Math.floor(imageWidth*1270/1280),y:Math.floor(imageWidth*500/1280)});
   };
   const assertPixel=(actual,expected)=>expected.forEach((value,index)=>assert.ok(Math.abs(actual[index]-value)<=3,`Expected rendered pixel ${expected}, got ${actual}`));
+  await page.mouse.move(0,0);
   const originalPixels=await imageFrames.first().screenshot();
   const unfilteredPixels=await imageFrames.nth(1).screenshot();
   assertPixel(await visiblePixel(0),[192,32,64]);
@@ -534,13 +630,42 @@ try {
   const fineTuning = page.getByText('Fine-tune effects', {exact:true});
   assert.equal(await slider('Colour strength').isVisible(), false);
   await fineTuning.press('Enter');
-  await page.getByLabel('Colour preset',{exact:true}).selectOption('grayscale');
+  const colourPreset = page.getByLabel('Colour preset',{exact:true});
+  // Geometry reads use CSS selectors to avoid Firefox's cross-world label reflection crash.
+  const colourControl = page.locator('#colour-preset');
+  const colourBox = await controlBoxes(colourControl);
+  assert.ok(colourBox[0][3] >= 44);
+  await colourPreset.hover();
+  await assertControlBoxes(colourControl, colourBox);
+  await colourPreset.selectOption('grayscale');
+  await assertControlBoxes(colourControl, colourBox);
   assertPixel(await visiblePixel(1),[68,68,68]);
   await slider('Colour strength').press('Home');
   assertPixel(await visiblePixel(1),[192,32,64]);
   await imagePresets.getByRole('button',{name:'Blurred vision',exact:true}).click();
+  await page.mouse.move(0,0);
   assert.notDeepEqual(await imageFrames.nth(1).screenshot(),unfilteredPixels,'Blur must change the raster preview');
-  assert.deepEqual(await imageFrames.first().screenshot(),originalPixels,'The original image must remain visually unchanged');
+  const originalAfterBlur = await imageFrames.first().screenshot();
+  // Chromium can round some resampled JPEG channels one level differently between captures.
+  assert.ok(await page.evaluate(async pngs => {
+    const [before, after] = await Promise.all(pngs.map(async bytes => {
+      const img = new Image();
+      img.src = 'data:image/png;base64,' + bytes;
+      await img.decode();
+      return img;
+    }));
+    if (before.width !== after.width || before.height !== after.height) return false;
+    const canvas = document.createElement('canvas');
+    canvas.width = before.width;
+    canvas.height = before.height;
+    const ctx = canvas.getContext('2d');
+    const pixels = img => {
+      ctx.drawImage(img, 0, 0);
+      return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    };
+    const expected = pixels(before);
+    return pixels(after).every((channel, index) => Math.abs(channel - expected[index]) <= 1);
+  }, [originalPixels, originalAfterBlur].map(buffer => buffer.toString('base64'))), 'The original image must remain visually unchanged');
   await page.getByRole('button',{name:'Reset effects',exact:true}).click();
   assert.equal(await slider('Blur strength').inputValue(), '0');
   assert.equal(await slider('Colour strength').inputValue(), '100');
@@ -563,7 +688,10 @@ try {
   await page.getByLabel('Preview size',{exact:true}).selectOption('actual');
   const scroller = page.getByRole('region', {name:'Snapshot images'});
   await scroller.evaluate(node => { node.scrollLeft = 150; node.scrollTop = 300; });
+  const mobileViewButtons = mobileViews.getByRole('button');
+  const mobileViewBoxes = await controlBoxes(mobileViewButtons);
   await mobileOriginal.press('Enter');
+  await assertControlBoxes(mobileViewButtons, mobileViewBoxes);
   assert.equal(await imageFrames.first().isVisible(), true);
   assert.equal(await imageFrames.nth(1).isVisible(), false);
   assert.deepEqual(await scroller.evaluate(node => [node.scrollLeft, node.scrollTop]), [150, 300]);
@@ -572,7 +700,31 @@ try {
   await page.getByLabel('Preview size',{exact:true}).selectOption('fit');
   assert.ok(await page.frameLocator('iframe').nth(1).locator('img').evaluate(img=>img.getBoundingClientRect().width<=innerWidth));
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-  await page.setViewportSize({width:1280,height:900});await assertDownload(publicResponse);
+  const severitySelect = page.getByLabel('Filter violations by severity', {exact:true});
+  const styledSelects = ['#finding-severity', '#colour-preset', '#preview-size'].map(id => page.locator(id));
+  for (const width of [320, 390, 700, 768, 900, 1280]) {
+    await page.setViewportSize({width,height:900});
+    const boxes = await controlBoxes(viewButtons);
+    assert.ok(Math.abs(boxes[0][2] - boxes[1][2]) < 0.05);
+    assert.ok(Math.abs(boxes[0][3] - boxes[1][3]) < 0.05);
+    await viewButtons.first().click();
+    await assertControlBoxes(viewButtons, boxes);
+    await severitySelect.waitFor();
+    await viewButtons.nth(1).click();
+    await assertControlBoxes(viewButtons, boxes);
+    for (const select of styledSelects) {
+      const style = await select.evaluate(node => {
+        const css = getComputedStyle(node);
+        return [parseFloat(css.paddingInlineStart), parseFloat(css.paddingInlineEnd), css.cursor];
+      });
+      assert.ok(style[0] >= 12 && style[0] <= 16);
+      assert.ok(style[1] > style[0] + 12);
+      assert.equal(style[2], 'pointer');
+    }
+    assert.equal(await page.locator('#colour-strength').evaluate(node => getComputedStyle(node).cursor), 'grab');
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  }
+  await assertDownload(publicResponse);
   publicResponse={...publicReport,scanId:data.imagePreview.scanId,previewUnavailable:true};
   await publicButton.click();await page.locator('.results').waitFor();
   await page.getByRole('button',{name:/Visual preview/}).click();
@@ -692,11 +844,19 @@ try {
   assert.equal(await firstCard.locator('img').count(), 0, 'Guidance must be displayed as text');
   await reviews.locator('summary').click();
   await reviews.getByText('No element details were returned. Review this rule manually.', { exact: true }).waitFor();
+  const captureFindings = async () => {
+    // A page screenshot avoids WebKit adopting a stale element handle during resize.
+    const clip = await page.locator('.results').evaluate(node => {
+      const {x, y, width, height} = node.getBoundingClientRect();
+      return {x:x+scrollX,y:y+scrollY,width,height};
+    });
+    return (await page.screenshot({fullPage:true,clip})).toString('base64');
+  };
   await page.setViewportSize({ width: 1280, height: 1800 });
-  const findingsDesktop = (await page.locator('.results').screenshot()).toString('base64');
+  const findingsDesktop = await captureFindings();
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  const findingsMobile = (await page.locator('.results').screenshot()).toString('base64');
+  const findingsMobile = await captureFindings();
   // A new report resets filters; a severity with no matches differs from an empty report.
   await filter.selectOption('Minor');
   publicResponse = { ...publicResponse, generatedAt: '2026-11-08T00:00:01.000Z', findings: [makeFinding('Serious', 0)] };
@@ -717,6 +877,7 @@ try {
   publicResponse = {...publicReport, previewUnavailable: true, generatedAt: '2026-11-08T01:00:00.000Z'};
   delayPublic = true;
   const heldCancellation = new Promise(resolve => { notifyPublic = resolve; });
+  await page.setViewportSize({width:320,height:844});
   await publicButton.scrollIntoViewIfNeeded();
   const beforeMobileScan = await landingPositions();
   await publicButton.click();
@@ -726,6 +887,8 @@ try {
   assert.deepEqual(await landingPositions(), beforeMobileScan, 'A pending scan must also keep the mobile landing controls in place');
   await page.getByRole('button', {name:'Cancel request',exact:true}).click();
   await page.getByRole('status').filter({hasText:'Request cancelled'}).waitFor();
+  assert.equal(await sprout.count(), 0);
+  assert.equal(await frog.evaluate(node => getComputedStyle(node).animationName), 'none');
   assert.equal(await page.locator('.results').count(), 0);
   assert.equal(await scanRetry.evaluate(node => node === document.activeElement), true);
   delayPublic = false;
@@ -733,6 +896,7 @@ try {
   publicResponseOverride = {status:503,contentType:'text/html',body:'private-response-marker: invalid response'};
   await scanRetry.click();
   await page.getByRole('alert').filter({hasText:'The response could not be read.'}).waitFor();
+  assert.equal(await frog.evaluate(node => getComputedStyle(node).animationName), 'none');
   assert.equal(await page.locator('.results').count(), 0);
   assert.equal(await page.getByText(/private-response-marker/).count(), 0);
   assert.equal(await scanRetry.evaluate(node => node === document.activeElement), true);

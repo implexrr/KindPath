@@ -4,7 +4,7 @@ import { colourMatrix } from './visualEffects';
 const deuteranopiaMatrix = colourMatrix('deuteranopia', 100).join(' ');
 
 function SampleArtwork({ filterId }: { filterId?: string }) {
-  return <svg viewBox="0 0 440 320" aria-hidden="true">
+  return <svg width="440" height="320" viewBox="0 0 440 320" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
     {filterId && <defs>
       <filter id={filterId} x="-5%" y="-5%" width="110%" height="110%" colorInterpolationFilters="linearRGB">
         <feColorMatrix type="matrix" values={deuteranopiaMatrix}/>
@@ -47,6 +47,6 @@ export function LandingComparison() {
         <div className="landing-comparison-page"><SampleArtwork filterId={filterId}/></div>
       </div>
     </div>
-    <figcaption>Same page, with blur and a red–green colour vision simulation on the right.</figcaption>
+    <figcaption>Same page, with a deuteranopia + blurred vision simulation on the right.</figcaption>
   </figure>;
 }

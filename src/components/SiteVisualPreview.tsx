@@ -35,9 +35,11 @@ export function SiteVisualPreview({ snapshot }: { snapshot: SitePreview }) {
         </div>
         {image && <div className="preview-size">
           <label htmlFor="preview-size">Preview size</label>
-          <select id="preview-size" value={actualSize ? 'actual' : 'fit'} onChange={event => setActualSize(event.target.value === 'actual')}>
-            <option value="fit">Fit width</option><option value="actual">Actual size</option>
-          </select>
+          <div className="select-field">
+            <select id="preview-size" value={actualSize ? 'actual' : 'fit'} onChange={event => setActualSize(event.target.value === 'actual')}>
+              <option value="fit">Fit width</option><option value="actual">Actual size</option>
+            </select>
+          </div>
         </div>}
       </div>
       {image && snapshot.truncated && <p className="preview-caption">Long page: first 6,000 pixels shown.</p>}
