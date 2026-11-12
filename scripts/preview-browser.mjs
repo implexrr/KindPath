@@ -175,11 +175,24 @@ try {
   assert.equal(await panes.nth(1).locator('svg > g').getAttribute('filter'), `url(#${filterId})`);
   assert.equal(await panes.nth(1).locator('feColorMatrix').count(), 1);
   assert.equal(await panes.nth(1).locator('feGaussianBlur').count(), 1);
+  const pageFooter = page.getByRole('contentinfo');
+  const copyright = pageFooter.getByText('© 2026 Chenhao Wang', {exact:true});
+  const repository = pageFooter.getByRole('link', {name:'GitHub repository',exact:true});
+  assert.equal(await repository.getAttribute('href'), 'https://github.com/implexrr/KindPath');
+  await landing.getByRole('button', {name:'Scan website',exact:true}).focus();
+  await page.keyboard.press('Tab');
+  assert.ok(await repository.evaluate(node => node === document.activeElement && node.matches(':focus-visible')));
+  await repository.blur();
   const landingImages = {};
   for (const [size, width, height] of [['desktop', 1200, 720], ['mobile', 390, 740]]) {
     await page.setViewportSize({width, height});
     const [left, right] = await panes.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
     const form = await landing.locator('form').boundingBox();
+    const owner = await copyright.boundingBox();
+    const link = await repository.boundingBox();
+    assert.ok(owner.x + owner.width < link.x, 'Footer items must sit apart');
+    assert.ok(Math.abs(owner.y + owner.height / 2 - link.y - link.height / 2) < 1, 'Footer items must align on the same row');
+    assert.ok(link.height >= (size === 'mobile' ? 44 : 24), 'The link must have a usable target height');
     assert.equal(left.top, right.top);
     assert.ok(left.right < right.left);
     if (size === 'mobile') assert.ok(left.top > form.y + form.height);
