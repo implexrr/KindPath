@@ -96,9 +96,9 @@ try {
     const before = requests;
     const input = page.getByLabel("Your website URL");
     const entered = args[index + 1];
-    const previous = await input.inputValue();
+    const reportsBeforeEdit = await page.locator(".results").count();
     await input.fill(entered);
-    if (previous !== entered) assert.equal(await page.locator(".results").count(), 0);
+    assert.equal(await page.locator(".results").count(), reportsBeforeEdit);
     if (index === 0) await input.press("Enter");
     else await page.getByRole("button", { name: "Scan website", exact: true }).click();
     await page.locator(".results").waitFor({ state: "detached" });

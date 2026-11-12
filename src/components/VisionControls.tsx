@@ -4,15 +4,14 @@ import type { ColourPreset, Effect, IntensityPreset, VisionPreset, VisionSetting
 const sliderLabels: Record<Effect, string> = {
   colour: 'Colour strength', contrast: 'Contrast reduction', blur: 'Blur strength', peripheral: 'Peripheral restriction',
 };
-export function VisionControls({ settings, onChange }: { settings: VisionSettings; onChange: (value: VisionSettings) => void }) {
+interface VisionControlsProps {
+  settings: VisionSettings;
+  onChange: (value: VisionSettings) => void;
+}
+
+export function VisionPresetControls({ settings, onChange }: VisionControlsProps) {
   const activePreset = activeVisionPreset(settings);
-  return <section className="vision-controls" aria-labelledby="vision-controls-title">
-    <div className="vision-toolbar">
-      <div><h3 id="vision-controls-title">Adjust the modified preview</h3><p>Combine effects or explore one at a time. The original snapshot stays unchanged.</p></div>
-      <div className="vision-actions">
-        <button type="button" className="secondary" onClick={() => onChange(defaultVisionSettings())}>Reset effects</button>
-      </div>
-    </div>
+  return <section className="vision-controls vision-preset-controls" aria-label="Preview effects">
     <div className="vision-presets" role="group" aria-label="Vision presets" aria-describedby="vision-presets-note">
       <h4>Choose a vision preset</h4>
       <div className="vision-preset-buttons">
@@ -20,8 +19,15 @@ export function VisionControls({ settings, onChange }: { settings: VisionSetting
           <button type="button" className="secondary" key={key} aria-pressed={activePreset === key}
             onClick={() => onChange(applyVisionPreset(key))}>{visionPresets[key].name}</button>)}
       </div>
-      <p id="vision-presets-note" className="vision-note">Selecting a preset updates the sliders below.</p>
+      <p id="vision-presets-note" className="vision-note">Educational approximations. Individual experiences vary.</p>
     </div>
+    <button type="button" className="secondary" onClick={() => onChange(defaultVisionSettings())}>Reset effects</button>
+  </section>;
+}
+
+export function VisionFineTuning({ settings, onChange }: VisionControlsProps) {
+  return <details className="vision-controls vision-fine-tuning">
+    <summary>Fine-tune effects</summary>
     <div className="intensity-presets" role="group" aria-label="Intensity presets">
       <span>Starting points</span>
       {(Object.entries(intensityPresets) as [IntensityPreset, { name: string; strength: number }][]).map(([key, value]) =>
@@ -47,5 +53,5 @@ export function VisionControls({ settings, onChange }: { settings: VisionSetting
         <p id={`${key}-description`}>{effects[key].description}</p>
       </div>)}
     </div>
-  </section>;
+  </details>;
 }

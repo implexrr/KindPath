@@ -16,14 +16,13 @@ export function ReportExports({ report }: { report: Report }) {
     return () => { if (url) URL.revokeObjectURL(url); };
   }, [report]);
   return <section className="report-exports" aria-labelledby="export-report-title">
-    <div><h3 id="export-report-title">Take your report with you</h3>
-      <p id="export-report-note">Both exports include the full report, regardless of the severity filter. Website previews and visual effects are not included.</p>
-      <p>To save a PDF, choose the PDF destination in your browser’s print dialog. PDF accessibility tagging depends on your browser; JSON preserves the structured report data.</p></div>
+    <h3 id="export-report-title" className="visually-hidden">Export report</h3>
     <div className="report-export-actions">
       {download ? <a className="secondary" href={download.url} download={download.filename} aria-describedby="export-report-note">Download report JSON</a>
         : <button type="button" className="secondary" disabled>Preparing JSON download…</button>}
       <button type="button" className="secondary" aria-describedby="export-report-note" onClick={() => window.print()}>Print / save as PDF</button>
     </div>
+    <p id="export-report-note">Exports include all findings and exclude website previews. For PDF, choose a PDF destination in the print dialog. PDF accessibility tagging varies by browser.</p>
     {error && <p role="alert">{error}</p>}
   </section>;
 }

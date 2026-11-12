@@ -33,7 +33,7 @@ KindPath follows at most ten main-document requests and analyzes only the final 
 
 Each destination independently passes public DNS/address validation, destination pinning, verified firewall approval and HTTPS certificate validation. Loading assets is separate from crawling. Source scripts run only in the isolated browser to render the submitted page; captured scripts are never replayed in the app.
 
-The API returns JSON; **Download report JSON** exports the findings, incomplete checks, coverage and limitations without embedding the preview image. Automated results do not establish accessibility conformance. Manual keyboard, screen-reader and usability review is still necessary.
+When a scan finishes, select **View report** to move to the results. The API returns JSON. **Download report JSON** near the report heading exports the findings, incomplete checks, coverage and limitations without embedding the preview image. Automated results do not establish accessibility conformance. Manual keyboard, screen-reader and usability review is still necessary.
 
 After five seconds, KindPath can stop unfinished resource loads when the successful main document has fully arrived, its HTML is parsed, and the page has rendered text. Other pages keep the full 15-second loading window. The report is explicitly marked `pageLoadIncomplete: true`, with a partial-coverage notice in the interface and JSON export. An unfinished main document or rejected navigation still fails.
 
@@ -43,7 +43,8 @@ A site may return an error, a login/consent page, or different content to the an
 
 Real-page previews use a JPEG rendered in the same isolated visit as the report. This preserves the loaded page's layout, images, fonts, colours and rendered component content without rebuilding its HTML/CSS.
 
-- **Fit width** shows the desktop-width image inside each comparison panel. **Actual size** supports scrolling to inspect small details. Both panels can scroll vertically.
+- The vision presets sit above the snapshots. Open **Fine-tune effects** for intensity, colour and individual strengths.
+- **Fit width** shows the desktop-width image inside each comparison panel. **Actual size** supports scrolling to inspect small details. Desktop shows both panels. On phones, switch between **Original** and **Simulated** to compare the same scroll position in the captured image.
 - The vision buttons offer **Original**, **Protanopia**, **Deuteranopia**, **Tritanopia**, **Blurred vision**, and **Reduced peripheral vision**. The colour dropdown also offers **Grayscale**. The named colour buttons start at 100% strength, and lower settings interpolate between the [Machado model’s published severity matrices](https://pubmed.ncbi.nlm.nih.gov/19834201/). The previews illustrate possible colour differences. Individual vision varies.
 - Effects render inside the sandboxed preview document, alongside its image. Changing effects refreshes only the modified document from the stored capture and can reset its scroll position; it does not rescan the website.
 - The original panel stays unchanged. Link areas highlight on hover; navigation and form interaction are disabled. Hover highlights do not reproduce a source site's scripted hover behavior. Visible ads are part of the static image.
