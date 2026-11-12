@@ -18,7 +18,7 @@ export function SiteVisualPreview({ snapshot }: { snapshot: SitePreview }) {
     {!empty && <><VisionControls settings={settings} onChange={setSettings}/>
     <div className="comparison">
       <div><h3><span className="status-dot"/>Original snapshot</h3><SnapshotFrame snapshot={snapshot} modified={false} settings={settings} actualSize={actualSize}/></div>
-      <div><h3><span className="status-dot altered"/>With visual effects</h3><SnapshotFrame snapshot={snapshot} modified settings={settings} actualSize={actualSize}/></div>
+      <div><h3><span className="status-dot altered"/>With visual impairment</h3><SnapshotFrame snapshot={snapshot} modified settings={settings} actualSize={actualSize}/></div>
     </div>
     <p className="preview-caption">{image?'This is a static image. Links highlight on hover, but navigation and forms are inactive. Visible advertisements are part of the image.':'Links and form controls are inactive. Visible advertisement text is static; embedded advertisements and tracking are omitted.'}</p></>}
     <ul aria-label="Website snapshot limitations">{snapshot.limitations.map(text=><li key={text}>{text}</li>)}</ul>

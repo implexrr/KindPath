@@ -401,7 +401,7 @@ try {
   await page.getByRole('button',{name:/Visual preview/}).click();
   await page.frameLocator('iframe').first().getByText('New captured page marker',{exact:true}).waitFor();
   assert.equal(await oldFrame.evaluate(node=>node.isConnected),false);
-  assert.equal(await page.getByRole('heading',{name:'With visual effects',exact:true}).count(),1);
+  assert.equal(await page.getByRole('heading',{name:'With visual impairment',exact:true}).count(),1);
   for(const bad of [undefined,{...data.sitePreview,scanId:nextId},{...data.sitePreview,url:'https://example.com/old'}]) {
     publicResponse={...publicReport,scanId:data.sitePreview.scanId,sitePreview:bad};
     await publicButton.click();

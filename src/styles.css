@@ -57,7 +57,7 @@
 .landing-comparison svg{display:block;width:100%;height:auto}
 .landing-comparison figcaption{margin-top:12px;font-size:12px;line-height:1.5;color:#52635b}
 footer{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px 20px;border-top:1px solid var(--line);padding:3px 6%;font-size:12px;line-height:1.25;color:#52635b}
-footer a{display:inline-flex;align-items:center;gap:4px;min-height:24px;margin-inline-start:auto;color:var(--green);text-underline-offset:3px}
+footer a{display:inline-flex;align-items:center;min-height:24px;margin-inline-start:auto;color:var(--green);text-underline-offset:3px;text-decoration-skip-ink:none}
 .hero .landing-comparison{grid-row:2;margin-bottom:18px;padding:12px}
 .hero .landing-comparison svg{max-height:155px}
 .hero .landing-comparison figcaption{margin-top:8px}
