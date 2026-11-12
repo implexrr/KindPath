@@ -6,9 +6,9 @@ const scanErrorMessage = (value: unknown, status: number) => scanFailureFeedback
 test('scan failures give bounded guidance without exposing internal diagnostics',()=>{
   assert.match(scanErrorMessage({code:'SCANNER_BUSY',error:'private diagnostic'},429),/finishing/);
   assert.match(scanErrorMessage({code:'SCANNER_CLEANUP_FAILED'},503),/safely/);
-  assert.match(scanErrorMessage({code:'PUBLIC_SCANNING_DISABLED'},503),/built-in page/);
+  assert.match(scanErrorMessage({code:'PUBLIC_SCANNING_DISABLED'},503),/unavailable/);
   assert.deepEqual(scanFailureFeedback({error:'PRIVATE_SENTINEL'},400), {
-    message: 'The scan request was rejected. Check the address or built-in page selection.', retryable: false,
+    message: 'The scan request was rejected. Check the website address.', retryable: false,
   });
   for(const value of [{code:'constructor',error:'private diagnostic'}, {code:'__proto__'}, {error:'private diagnostic'}, null]) {
     assert.equal(scanErrorMessage(value,503),'The request could not finish. No report was created.');

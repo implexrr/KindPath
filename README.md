@@ -15,7 +15,7 @@ Open [KindPath locally](http://127.0.0.1:5173/). The API listens on `127.0.0.1:3
 
 `npm run dev` builds the current scanner and firewall runtime images before starting the API and Vite. The first build can download public packages and images; subsequent builds reuse Docker's cache. Browser QA images are only needed for the browser checks, not normal development. If Docker is unavailable, setup stops with an explanation; Chromium never runs directly on the host as a fallback. Ctrl+C stops the dev processes.
 
-Website scanning and capture are **enabled by default for local use**. Enter a URL, select **Scan website**, and download the JSON report or open **Visual preview**. Addresses without a scheme default to HTTPS. The URL scan button waits for the bounded capability check before accepting a submission. Ordinary URL submissions never silently become sample findings. The explicitly labelled example and built-in pages remain available separately.
+Website scanning and capture are **enabled by default for local use**. Enter a URL, select **Scan website**, and download the JSON report or open **Visual preview**. Addresses without a scheme default to HTTPS. The URL scan button waits for the bounded capability check before accepting a submission. Ordinary URL submissions never silently become sample findings. The landing page includes a static side-by-side illustration of blur and a red–green colour vision simulation.
 
 To disable real scanning or capture in a local process:
 
@@ -50,7 +50,7 @@ Real-page previews use a JPEG rendered in the same isolated visit as the report.
 - Captures are bounded to the scan viewport's width (up to 1,280 pixels), the first 6,000 pixels of height, and 1.5 MB of JPEG data. Long-page truncation is labelled. Horizontal overflow outside the scan viewport, content requiring interaction, and resources not loaded by the source browser are not included.
 - A screenshot is an image rather than a semantic, responsive or interactive replica. Changing the panel width scales the captured desktop page; it does not rerun its responsive layout. Live content can change between scans.
 
-Images are independently validated and embedded in sandboxed, opaque-origin iframes. The image document permits only embedded image data and trusted styling; scripts, external connections, frames, forms and navigation targets are absent. No third-party page markup or resource URL is copied into it. Legacy controlled DOM previews remain for the built-in illustration checks.
+Images are independently validated and embedded in sandboxed, opaque-origin iframes. The image document permits only embedded image data and trusted styling; scripts, external connections, frames, forms and navigation targets are absent. No third-party page markup or resource URL is copied into it. Controlled DOM previews are also exercised by the automated browser checks.
 
 ## API
 
@@ -59,8 +59,8 @@ Images are independently validated and embedded in sandboxed, opaque-origin ifra
 | GET | `/api/health` | Local API status |
 | GET | `/api/scanning-capabilities` | Current scanning/capture flags and URL policy |
 | POST | `/api/scan-public` | One `{ "url": "https://example.com/" }` request; real report and optional image preview |
-| POST | `/api/scan-fixture` | Scan a fixed built-in page |
-| POST | `/api/analyze` | Explicit illustrative example; never fetches its URL |
+| POST | `/api/scan-fixture` | Scan a fixed fixture for controlled checks |
+| POST | `/api/analyze` | Return an illustrative report without fetching the URL |
 
 For successful scans, KindPath labels clearly identifiable browser verification and sign-in screens in the report and preview. The API and JSON download include an optional `pageNotice` code and a plain-language limitation. Detection uses the rendered page and can miss unfamiliar screens. Findings and previews describe the page KindPath received.
 

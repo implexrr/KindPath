@@ -13,7 +13,7 @@ const failures = new Map<string, ScanFailureFeedback>([
   ['SCANNER_BUSY', { message: 'Another scan is still finishing. Try again shortly.', retryable: true }],
   ['SCANNER_CLEANUP_FAILED', { message: 'The previous scan could not finish safely. Scanning is unavailable until cleanup is verified.', retryable: false }],
   ['SCANNER_UNAVAILABLE', { message: 'The scanner is currently unavailable.', retryable: false }],
-  ['PUBLIC_SCANNING_DISABLED', { message: 'Website scanning is not available yet. Scan a built-in page or explore an example.', retryable: false }],
+  ['PUBLIC_SCANNING_DISABLED', { message: 'Website scanning is currently unavailable.', retryable: false }],
   ['SCAN_FAILED', { message: 'The scan could not finish. No report was created.', retryable: false }],
 ]);
 
@@ -45,7 +45,7 @@ export function scanFailureFeedback(value: unknown, status: number): ScanFailure
   const known = typeof data.code === 'string' ? failures.get(data.code) : undefined;
   if (known) return known;
   if (status === 400) {
-    return { message: 'The scan request was rejected. Check the address or built-in page selection.', retryable: false };
+    return { message: 'The scan request was rejected. Check the website address.', retryable: false };
   }
   return { message: 'The request could not finish. No report was created.', retryable: temporaryHttpStatuses.has(status) };
 }
