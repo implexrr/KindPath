@@ -403,7 +403,22 @@ try {
   publicResponse=publicReport;
   await publicButton.click();
   await page.locator('.results').waitFor();
+  const controlBoxes = locator => locator.evaluateAll(nodes => nodes.map(node => {
+    const box = node.getBoundingClientRect();
+    return [box.x + scrollX, box.y + scrollY, box.width, box.height];
+  }));
+  const assertControlBoxes = async (locator, expected, message) => {
+    const actual = await controlBoxes(locator);
+    assert.equal(actual.length, expected.length, message);
+    // Reconstructing document coordinates from viewport bounds can introduce subpixel rounding.
+    for (const [index, box] of actual.entries()) {
+      assert.ok(box.every((value, axis) => Math.abs(value - expected[index][axis]) < 0.05), message);
+    }
+  };
+  const viewButtons = page.locator('.view-switch button');
+  const viewBoxes = await controlBoxes(viewButtons);
   await page.getByRole('button', { name: /Visual preview/ }).click();
+  await assertControlBoxes(viewButtons, viewBoxes, 'Choosing a report view must keep both buttons in place');
   assert.equal(await page.locator('iframe').count(), 0);
   await page.getByText('Website image capture is disabled. Your accessibility report and JSON download are still available.', {exact:true}).waitFor();
   await assertDownload(publicResponse);
@@ -565,7 +580,27 @@ try {
     assert.equal(await imageFrames.first().getAttribute('style'),imageOriginalStyle);
   }
   const imagePresets=page.getByRole('group',{name:'Vision presets',exact:true});
-  await imagePresets.getByRole('button',{name:'Original',exact:true}).click();
+  const originalPreset = imagePresets.getByRole('button',{name:'Original',exact:true});
+  const presetBoxes = await controlBoxes(imagePresets.getByRole('button'));
+  const resetEffects = page.getByRole('button',{name:'Reset effects',exact:true});
+  const resetBox = await controlBoxes(resetEffects);
+  const resetFill = await resetEffects.evaluate(node => getComputedStyle(node).backgroundColor);
+  await resetEffects.hover();
+  await page.waitForFunction(fill => getComputedStyle(document.querySelector('.vision-preset-controls > button')).backgroundColor !== fill, resetFill);
+  await assertControlBoxes(resetEffects, resetBox);
+  await originalPreset.click();
+  await assertControlBoxes(imagePresets.getByRole('button'), presetBoxes, 'Choosing a vision preset must keep every preset button in place');
+  assert.equal(await originalPreset.locator('.preset-eye').isVisible(), true);
+  await page.waitForFunction(() => {
+    const selected = document.querySelector('.vision-preset-buttons [aria-pressed=true] .preset-eye-slash');
+    const unselected = document.querySelectorAll('.vision-preset-buttons [aria-pressed=false] .preset-eye-slash');
+    return parseFloat(getComputedStyle(selected).strokeDashoffset) === 1
+      && unselected.length === 5
+      && Array.from(unselected).every(slash => parseFloat(getComputedStyle(slash).strokeDashoffset) === 0);
+  });
+  await page.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await originalPreset.locator('.preset-eye-slash').evaluate(node => getComputedStyle(node).transitionDuration), '0s');
+  await page.emulateMedia({reducedMotion:'no-preference'});
   const visiblePixel=async index=>{
     if(index===1)await waitForModifiedDocument();
     const element=imageFrames.nth(index);
@@ -582,6 +617,7 @@ try {
     },{data:bytes.toString('base64'),x:Math.floor(imageWidth*1270/1280),y:Math.floor(imageWidth*500/1280)});
   };
   const assertPixel=(actual,expected)=>expected.forEach((value,index)=>assert.ok(Math.abs(actual[index]-value)<=3,`Expected rendered pixel ${expected}, got ${actual}`));
+  await page.mouse.move(0,0);
   const originalPixels=await imageFrames.first().screenshot();
   const unfilteredPixels=await imageFrames.nth(1).screenshot();
   assertPixel(await visiblePixel(0),[192,32,64]);
@@ -594,13 +630,42 @@ try {
   const fineTuning = page.getByText('Fine-tune effects', {exact:true});
   assert.equal(await slider('Colour strength').isVisible(), false);
   await fineTuning.press('Enter');
-  await page.getByLabel('Colour preset',{exact:true}).selectOption('grayscale');
+  const colourPreset = page.getByLabel('Colour preset',{exact:true});
+  // Geometry reads use CSS selectors to avoid Firefox's cross-world label reflection crash.
+  const colourControl = page.locator('#colour-preset');
+  const colourBox = await controlBoxes(colourControl);
+  assert.ok(colourBox[0][3] >= 44);
+  await colourPreset.hover();
+  await assertControlBoxes(colourControl, colourBox);
+  await colourPreset.selectOption('grayscale');
+  await assertControlBoxes(colourControl, colourBox);
   assertPixel(await visiblePixel(1),[68,68,68]);
   await slider('Colour strength').press('Home');
   assertPixel(await visiblePixel(1),[192,32,64]);
   await imagePresets.getByRole('button',{name:'Blurred vision',exact:true}).click();
+  await page.mouse.move(0,0);
   assert.notDeepEqual(await imageFrames.nth(1).screenshot(),unfilteredPixels,'Blur must change the raster preview');
-  assert.deepEqual(await imageFrames.first().screenshot(),originalPixels,'The original image must remain visually unchanged');
+  const originalAfterBlur = await imageFrames.first().screenshot();
+  // Chromium can round some resampled JPEG channels one level differently between captures.
+  assert.ok(await page.evaluate(async pngs => {
+    const [before, after] = await Promise.all(pngs.map(async bytes => {
+      const img = new Image();
+      img.src = 'data:image/png;base64,' + bytes;
+      await img.decode();
+      return img;
+    }));
+    if (before.width !== after.width || before.height !== after.height) return false;
+    const canvas = document.createElement('canvas');
+    canvas.width = before.width;
+    canvas.height = before.height;
+    const ctx = canvas.getContext('2d');
+    const pixels = img => {
+      ctx.drawImage(img, 0, 0);
+      return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    };
+    const expected = pixels(before);
+    return pixels(after).every((channel, index) => Math.abs(channel - expected[index]) <= 1);
+  }, [originalPixels, originalAfterBlur].map(buffer => buffer.toString('base64'))), 'The original image must remain visually unchanged');
   await page.getByRole('button',{name:'Reset effects',exact:true}).click();
   assert.equal(await slider('Blur strength').inputValue(), '0');
   assert.equal(await slider('Colour strength').inputValue(), '100');
@@ -623,7 +688,10 @@ try {
   await page.getByLabel('Preview size',{exact:true}).selectOption('actual');
   const scroller = page.getByRole('region', {name:'Snapshot images'});
   await scroller.evaluate(node => { node.scrollLeft = 150; node.scrollTop = 300; });
+  const mobileViewButtons = mobileViews.getByRole('button');
+  const mobileViewBoxes = await controlBoxes(mobileViewButtons);
   await mobileOriginal.press('Enter');
+  await assertControlBoxes(mobileViewButtons, mobileViewBoxes);
   assert.equal(await imageFrames.first().isVisible(), true);
   assert.equal(await imageFrames.nth(1).isVisible(), false);
   assert.deepEqual(await scroller.evaluate(node => [node.scrollLeft, node.scrollTop]), [150, 300]);
@@ -632,7 +700,31 @@ try {
   await page.getByLabel('Preview size',{exact:true}).selectOption('fit');
   assert.ok(await page.frameLocator('iframe').nth(1).locator('img').evaluate(img=>img.getBoundingClientRect().width<=innerWidth));
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-  await page.setViewportSize({width:1280,height:900});await assertDownload(publicResponse);
+  const severitySelect = page.getByLabel('Filter violations by severity', {exact:true});
+  const styledSelects = ['#finding-severity', '#colour-preset', '#preview-size'].map(id => page.locator(id));
+  for (const width of [320, 390, 700, 768, 900, 1280]) {
+    await page.setViewportSize({width,height:900});
+    const boxes = await controlBoxes(viewButtons);
+    assert.ok(Math.abs(boxes[0][2] - boxes[1][2]) < 0.05);
+    assert.ok(Math.abs(boxes[0][3] - boxes[1][3]) < 0.05);
+    await viewButtons.first().click();
+    await assertControlBoxes(viewButtons, boxes);
+    await severitySelect.waitFor();
+    await viewButtons.nth(1).click();
+    await assertControlBoxes(viewButtons, boxes);
+    for (const select of styledSelects) {
+      const style = await select.evaluate(node => {
+        const css = getComputedStyle(node);
+        return [parseFloat(css.paddingInlineStart), parseFloat(css.paddingInlineEnd), css.cursor];
+      });
+      assert.ok(style[0] >= 12 && style[0] <= 16);
+      assert.ok(style[1] > style[0] + 12);
+      assert.equal(style[2], 'pointer');
+    }
+    assert.equal(await page.locator('#colour-strength').evaluate(node => getComputedStyle(node).cursor), 'grab');
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  }
+  await assertDownload(publicResponse);
   publicResponse={...publicReport,scanId:data.imagePreview.scanId,previewUnavailable:true};
   await publicButton.click();await page.locator('.results').waitFor();
   await page.getByRole('button',{name:/Visual preview/}).click();
@@ -752,11 +844,19 @@ try {
   assert.equal(await firstCard.locator('img').count(), 0, 'Guidance must be displayed as text');
   await reviews.locator('summary').click();
   await reviews.getByText('No element details were returned. Review this rule manually.', { exact: true }).waitFor();
+  const captureFindings = async () => {
+    // A page screenshot avoids WebKit adopting a stale element handle during resize.
+    const clip = await page.locator('.results').evaluate(node => {
+      const {x, y, width, height} = node.getBoundingClientRect();
+      return {x:x+scrollX,y:y+scrollY,width,height};
+    });
+    return (await page.screenshot({fullPage:true,clip})).toString('base64');
+  };
   await page.setViewportSize({ width: 1280, height: 1800 });
-  const findingsDesktop = (await page.locator('.results').screenshot()).toString('base64');
+  const findingsDesktop = await captureFindings();
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-  const findingsMobile = (await page.locator('.results').screenshot()).toString('base64');
+  const findingsMobile = await captureFindings();
   // A new report resets filters; a severity with no matches differs from an empty report.
   await filter.selectOption('Minor');
   publicResponse = { ...publicResponse, generatedAt: '2026-11-08T00:00:01.000Z', findings: [makeFinding('Serious', 0)] };

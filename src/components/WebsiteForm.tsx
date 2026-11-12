@@ -67,7 +67,7 @@ export function WebsiteForm({ url, activity, reportReady, onViewReport, onCancel
       </div>
       {busy && <button type="button" className="secondary" onClick={onCancel}>Cancel request</button>}
       {canRetry && <button ref={retryButton} type="button" className="secondary" aria-describedby={scanError ? 'scan-error' : undefined} onClick={onRetry}>Try again</button>}
-      {reportReady && <button ref={reportButton} type="button" className="secondary" onClick={onViewReport}>View report <span aria-hidden="true">↓</span></button>}
+      {reportReady && <button ref={reportButton} type="button" className="secondary view-report-action" onClick={onViewReport}>View report <span aria-hidden="true">↓</span></button>}
     </div>
   </form>;
 }

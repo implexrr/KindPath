@@ -31,10 +31,12 @@ export function FindingsReport({ report }: { report: Report }) {
         </ul>
         <div className="finding-filter">
           <label htmlFor="finding-severity">Filter violations by severity</label>
-          <select ref={filter} id="finding-severity" value={severity} onChange={event => setSeverity(event.target.value as Finding['severity'] | 'All')}>
-            <option value="All">All severities</option>
-            {severityOrder.map(level => <option key={level} value={level}>{level}</option>)}
-          </select>
+          <div className="select-field">
+            <select ref={filter} id="finding-severity" value={severity} onChange={event => setSeverity(event.target.value as Finding['severity'] | 'All')}>
+              <option value="All">All severities</option>
+              {severityOrder.map(level => <option key={level} value={level}>{level}</option>)}
+            </select>
+          </div>
           {severity !== 'All' && <button type="button" className="secondary" onClick={() => { setSeverity('All'); filter.current?.focus(); }}>Clear severity filter</button>}
         </div>
         <p className="finding-status" role="status">Showing {visible.length} of {report.findings.length} {report.mode === 'demo' ? 'example rules' : 'rules with violations'}.</p>
