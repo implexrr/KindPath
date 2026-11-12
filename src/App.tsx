@@ -156,10 +156,7 @@ export function App() {
           </div>
           <span className="demo-badge">Automated page scan</span>
         </div>
-        <div className="notice">Automated results for the final scanned page only. Manual review is still required.</div>
         {pageNotice && <p className="notice" role="status">{pageNotice}</p>}
-        <ScanCoverageNotice report={report}/>
-        <ReportExports key={`${report.scanId}:${report.generatedAt}`} report={report}/>
         <div className="view-switch" role="group" aria-label="Report view">
           <button aria-pressed={view === 'findings'} onClick={() => setView('findings')}>Accessibility findings <span>{report.findings.length}</span></button>
           <button aria-pressed={view === 'preview'} onClick={() => setView('preview')}>Visual preview</button>
@@ -171,6 +168,9 @@ export function App() {
               {report.previewUnavailable ? 'The website image could not be captured.' : 'Website image capture is disabled.'} Your accessibility report and JSON download are still available.
             </div>}
         </div>
+        <div className="notice">Automated results for the final scanned page only. Manual review is still required.</div>
+        <ScanCoverageNotice report={report}/>
+        <ReportExports key={`${report.scanId}:${report.generatedAt}`} report={report}/>
       </section>}
     </main>
     <footer>

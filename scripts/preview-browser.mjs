@@ -257,6 +257,17 @@ try {
   assert.equal(await websiteEntry.inputValue(),publicReport.requestedUrl);
   await page.locator('.results').getByText('Requested URL: ' + publicReport.requestedUrl, { exact: true }).waitFor();
   await page.waitForFunction(() => document.activeElement?.matches('.results'));
+  assert.equal(await page.locator('.results .manual-card').getByText(/axe-core/).count(), 0);
+  const reportSupportFollows = async content => {
+    const bottom = await content.evaluate(node => node.getBoundingClientRect().bottom);
+    for (const block of [
+      page.locator('.results').getByText('Automated results for the final scanned page only. Manual review is still required.', {exact:true}),
+      page.locator('.results .scan-coverage'),
+      page.locator('.results .report-exports'),
+    ]) assert.ok(await block.evaluate(node => node.getBoundingClientRect().top) >= bottom);
+  };
+  await reportSupportFollows(page.locator('.results .findings-layout'));
+
   assert.equal(await page.getByText('Automated page scan', { exact: true }).count(), 1);
   const coverageNotice=page.locator('.results').getByRole('region',{name:'Scan coverage',exact:true});
   await coverageNotice.getByText('Scan coverage is limited',{exact:true}).waitFor();
@@ -362,6 +373,7 @@ try {
   await printablePdf(publicResponse);
   await page.getByRole('button', {name:/Visual preview/}).click();
   await page.getByRole('heading', {name:'Scanned website snapshot',exact:true}).waitFor();
+  await reportSupportFollows(page.locator('.preview-workspace'));
   const captured = page.frameLocator('iframe').first();
   await captured.getByText('Captured website marker',{exact:true}).waitFor();
   assert.equal(await page.locator('iframe').count(),2);

@@ -64,7 +64,6 @@ export function FindingsReport({ report }: { report: Report }) {
       <span aria-hidden="true">✳</span>
       <h3>People complete<br/>the picture.</h3>
       <p>Automated checks are a starting point. Make room for manual review and feedback from disabled people.</p>
-      {report.scanner && <p>axe-core {report.scanner.engineVersion} · {report.scanner.passedChecks} checks passed. Zero findings would not establish accessibility conformance.</p>}
       {report.limitations && <><h4>Scan limitations</h4><ul>{report.limitations.map(limit => <li key={limit}>{limit}</li>)}</ul></>}
       <h4>Try these checks</h4>
       <ul>{report.manualChecks.map(check => <li key={check}>{check}</li>)}</ul>
