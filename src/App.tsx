@@ -173,6 +173,9 @@ export function App() {
         </div>
       </section>}
     </main>
-    <footer>KindPath</footer>
+    <footer>
+      <span>© 2026 Chenhao Wang</span>
+      <a href="https://github.com/implexrr/KindPath">GitHub repository <span aria-hidden="true">↗</span></a>
+    </footer>
   </>;
 }
