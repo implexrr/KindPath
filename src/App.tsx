@@ -7,6 +7,7 @@ import type { Report } from '../shared/types';
 import { normalizeWebsiteEntry } from './components/websiteEntry';
 import { scanFailureFeedback } from './components/scanFeedback';
 import type { ScanFailureFeedback } from './components/scanFeedback';
+import { ThemeToggle } from './components/ThemeToggle';
 import { WebsiteForm } from './components/WebsiteForm';
 import { ReportExports } from './components/ReportExports';
 import { ScanCoverageNotice } from './components/ScanCoverageNotice';
@@ -137,6 +138,7 @@ export function App() {
     <a className="skip-link" href="#main">Skip to content</a>
     <header className="site-header">
       <a className="brand" href="#">KindPath</a>
+      <ThemeToggle/>
     </header>
     <main id="main" tabIndex={-1}>
       <section className="hero" aria-labelledby="landing-title">

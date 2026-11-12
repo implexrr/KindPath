@@ -154,6 +154,53 @@ try {
     await route.fulfill(asset ? { body: asset.body, contentType: asset.type } : { status: 404, body: '' });
   });
   await page.goto('http://kindpath-ui.invalid/');
+  const lightMode = page.getByRole('button', {name:'Light mode',exact:true});
+  const darkMode = page.getByRole('button', {name:'Dark mode',exact:true});
+  const supportsThemeTransition = await page.evaluate(() => {
+    if (!document.startViewTransition) return false;
+    const start = document.startViewTransition.bind(document);
+    window.themeTransitionCount = 0;
+    document.startViewTransition = update => {
+      const transition = start(update);
+      window.themeTransitionCount++;
+      window.themeTransitionFinished = transition.finished;
+      return transition;
+    };
+    return true;
+  });
+  const themeTransitionCount = () => page.evaluate(() => window.themeTransitionCount ?? 0);
+  const switchTheme = async (theme, key = 'Enter') => {
+    await (theme === 'light' ? lightMode : darkMode).press(key);
+    await page.waitForFunction(expected => document.documentElement.dataset.theme === expected, theme);
+    await page.evaluate(() => window.themeTransitionFinished);
+  };
+  const rootTheme = () => page.evaluate(() => ({
+    name: document.documentElement.dataset.theme,
+    background: getComputedStyle(document.documentElement).backgroundColor,
+    colourScheme: getComputedStyle(document.documentElement).colorScheme,
+  }));
+  await lightMode.waitFor();
+  assert.deepEqual(await rootTheme(), {name:'dark',background:'rgb(29, 39, 35)',colourScheme:'dark'});
+  const themeButton = await lightMode.boundingBox();
+  await switchTheme('light');
+  assert.deepEqual(await rootTheme(), {name:'light',background:'rgb(250, 248, 239)',colourScheme:'light'});
+  assert.deepEqual(await darkMode.boundingBox(), themeButton);
+  assert.equal(await page.locator('.url-field button').evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(23, 62, 56)');
+  const comparisonLabels = page.locator('.landing-comparison-label');
+  const panelStyles = () => page.locator('.landing-comparison-panes').evaluate(node => ({
+    background: getComputedStyle(node).backgroundColor,
+    label: getComputedStyle(node.querySelector('.landing-comparison-label')).color,
+  }));
+  assert.deepEqual(await panelStyles(), {background:'rgba(0, 0, 0, 0)',label:'rgb(23, 62, 56)'});
+  const transitions = supportsThemeTransition ? 1 : 0;
+  assert.equal(await themeTransitionCount(), transitions);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await switchTheme('dark', 'Space');
+  assert.equal(await themeTransitionCount(), transitions);
+  assert.deepEqual(await panelStyles(), {background:'rgba(0, 0, 0, 0)',label:'rgb(226, 240, 227)'});
+  assert.equal(await comparisonLabels.count(), 2);
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  assert.equal((await rootTheme()).name, 'dark');
   const websiteEntry=page.getByLabel('Your website URL');
   assert.equal(await websiteEntry.getAttribute('type'),'text');
   assert.equal(await websiteEntry.getAttribute('inputmode'),'url');
@@ -366,15 +413,19 @@ try {
   await page.emulateMedia({reducedMotion:'no-preference'});
   assert.equal(await page.locator('.results .manual-card').getByText(/axe-core/).count(), 0);
   const reportSupportFollows = async content => {
-    const bottom = await content.evaluate(node => node.getBoundingClientRect().bottom);
-    const top = await content.evaluate(node => node.getBoundingClientRect().top);
-    assert.ok(await page.locator('.results .report-exports').evaluate(node => node.getBoundingClientRect().bottom) <= top);
+    const bottom = await content.evaluate(node => node.getBoundingClientRect().bottom + scrollY);
+    const top = await content.evaluate(node => node.getBoundingClientRect().top + scrollY);
+    assert.ok(await page.locator('.results .report-exports').evaluate(node => node.getBoundingClientRect().bottom + scrollY) <= top);
     for (const block of [
       page.locator('.results').getByText('Automated results for the final scanned page only. Manual review is still required.', {exact:true}),
       page.locator('.results .scan-coverage'),
-    ]) assert.ok(await block.evaluate(node => node.getBoundingClientRect().top) >= bottom);
+    ]) assert.ok(await block.evaluate(node => node.getBoundingClientRect().top + scrollY) >= bottom);
   };
   await reportSupportFollows(page.locator('.results .findings-layout'));
+  await switchTheme('light');
+  assert.equal(await page.locator('.finding').first().evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(255, 254, 250)');
+  assert.equal(await page.locator('.report-exports').evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(232, 237, 223)');
+  await switchTheme('dark');
 
   assert.equal(await page.getByText('Automated page scan', { exact: true }).count(), 1);
   const coverageNotice=page.locator('.results').getByRole('region',{name:'Scan coverage',exact:true});
@@ -551,6 +602,14 @@ try {
   assert.equal(await page.getByRole('status').filter({hasText: /KindPath received a .* screen/}).count(), 0);
   assert.equal(await page.locator('.vision-controls').first().evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(41, 58, 48)');
   const imageFrames=page.locator('iframe');
+  const lightThemeSources = await imageFrames.evaluateAll(frames => frames.map(frame => frame.getAttribute('srcdoc')));
+  await page.setViewportSize({width:320,height:844});
+  await switchTheme('light');
+  assert.equal(await page.locator('.vision-controls').first().evaluate(node => getComputedStyle(node).backgroundColor), 'rgb(232, 237, 223)');
+  assert.deepEqual(await imageFrames.evaluateAll(frames => frames.map(frame => frame.getAttribute('srcdoc'))), lightThemeSources);
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await switchTheme('dark');
+  await page.setViewportSize({width:1280,height:900});
   for(let i=0;i<2;i++){
     const frame=page.frameLocator('iframe').nth(i);
     await frame.locator('img').evaluate(img=>img.decode());
