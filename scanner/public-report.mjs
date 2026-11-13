@@ -11,19 +11,22 @@ export function analyzePublicPage(page) {
 
 // Bound worker output without presenting a shortened list as the complete result.
 export function summarizeRules(rules) {
-  const selected = rules.slice(0, 100);
+  const selected = rules.slice(0, 100).map(rule => ({
+    id: rule.id, impact: rule.impact ?? 'unknown', help: rule.help,
+    description: rule.description, helpUrl: rule.helpUrl,
+    nodes: rule.nodes.slice(0, 20).flatMap(node => {
+      if (node.target.length > 100) return [];
+      const target = node.target.map(selector => typeof selector === 'string' ? selector : JSON.stringify(selector));
+      // A shortened selector could point to the wrong element.
+      if (target.some(selector => selector.length > 4000)) return [];
+      return [{ target, summary: (node.failureSummary ?? '').slice(0, 2000) }];
+    }),
+  }));
   return {
     omittedRules: rules.length - selected.length,
     omittedNodes: rules.reduce((count, rule) => count + rule.nodes.length, 0)
-      - selected.reduce((count, rule) => count + Math.min(rule.nodes.length, 20), 0),
-    rules: selected.map(rule => ({
-      id: rule.id, impact: rule.impact ?? 'unknown', help: rule.help,
-      description: rule.description, helpUrl: rule.helpUrl,
-      nodes: rule.nodes.slice(0, 20).map(node => ({
-        target: node.target.map(selector => typeof selector === 'string' ? selector : JSON.stringify(selector)),
-        summary: (node.failureSummary ?? '').slice(0, 2000),
-      })),
-    })),
+      - selected.reduce((count, rule) => count + rule.nodes.length, 0),
+    rules: selected,
   };
 }
 
