@@ -446,7 +446,6 @@ try {
     {...publicReport.coverage,failedRequests:-1},{blockedRequests:0,failedRequests:0,omittedRules:0,omittedNodes:2}]) {
     publicResponse={...publicReport,findings:[],coverage};
     await publicButton.click();
-    await page.waitForFunction(()=>document.querySelector('form').getAttribute('aria-busy')==='false');
     await coverageNotice.waitFor();
     const text=await coverageNotice.textContent();
     assert.ok(text.includes('Zero violations does not establish accessibility conformance.'));
@@ -951,10 +950,13 @@ try {
   await publicButton.click();
   await heldCancellation;
   assert.equal(publicHeld, true);
+  const scanStatus = page.locator('form').getByRole('status');
+  await scanStatus.filter({ hasText: 'Checking the page and preparing your report' }).waitFor();
+  assert.equal(await scanStatus.evaluate(status => status.closest('[aria-busy="true"]')), null);
   assert.equal(await websiteEntry.getAttribute('readonly'), '');
   assert.deepEqual(await landingPositions(), beforeMobileScan, 'A pending scan must also keep the mobile landing controls in place');
   await page.getByRole('button', {name:'Cancel request',exact:true}).click();
-  await page.getByRole('status').filter({hasText:'Request cancelled'}).waitFor();
+  await scanStatus.filter({hasText:'Request cancelled'}).waitFor();
   assert.equal(await sprout.count(), 0);
   assert.equal(await frog.evaluate(node => getComputedStyle(node).animationName), 'none');
   assert.equal(await page.locator('.results').count(), 0);
@@ -970,7 +972,7 @@ try {
   assert.equal(await scanRetry.evaluate(node => node === document.activeElement), true);
   publicResponseOverride = undefined;
   await scanRetry.click();
-  await page.locator('.results').waitFor();
+  await scanStatus.filter({hasText:'Report ready.'}).waitFor();
   await assertDownload(publicResponse);
   // The draft URL and the already-completed report are independent.
   await page.getByRole('button', { name: /Visual preview/ }).click();

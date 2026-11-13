@@ -21,3 +21,17 @@ test('complete and empty result sets have no omitted items', () => {
   assert.equal(output.omittedRules, 0); assert.equal(output.omittedNodes, 0);
   assert.equal(output.rules[0].nodes[0].summary, 'review');
 });
+
+test('oversized selector paths omit the element and preserve the rule and valid elements', () => {
+  const boundary = 'a'.repeat(4000);
+  const output = summarizeRules([{ ...rule, nodes: [
+    { ...node, target: [boundary + 'a'] },
+    { ...node, target: [[boundary]] },
+    { ...node, target: Array(101).fill('a') },
+    { ...node, target: Array(100).fill(boundary) },
+  ] }]);
+  assert.equal(output.omittedRules, 0);
+  assert.equal(output.omittedNodes, 3);
+  assert.equal(output.rules[0].id, rule.id);
+  assert.deepEqual(output.rules[0].nodes, [{ target: Array(100).fill(boundary), summary: 'review' }]);
+});

@@ -102,7 +102,7 @@ try {
     if (index === 0) await input.press("Enter");
     else await page.getByRole("button", { name: "Scan website", exact: true }).click();
     await page.locator(".results").waitFor({ state: "detached" });
-    await page.waitForFunction(() => document.querySelector("form")?.getAttribute("aria-busy") === "false", void 0, { timeout: 1e5 });
+    await page.waitForFunction(() => document.querySelector('button[type="submit"]')?.disabled === false, void 0, { timeout: 1e5 });
     assert.equal(requests, before + 1);
     assert.ok(actual);
     const report = actual.report;

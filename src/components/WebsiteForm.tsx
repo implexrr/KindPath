@@ -39,7 +39,7 @@ export function WebsiteForm({ url, activity, reportReady, onViewReport, onCancel
   return <form ref={form} onSubmit={event => {
     if (fieldError) urlInput.current?.focus();
     onSubmit(event);
-  }} aria-busy={busy}>
+  }}>
     <label htmlFor="website">Your website URL</label>
     <div className={fieldError ? "url-field url-field-invalid" : "url-field"}>
       <input

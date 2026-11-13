@@ -18,7 +18,5 @@
 !codec/*.c
 !codec/*.patch
 
-!site-preview.mjs
-
 !page-image.mjs
 !jpeg.mjs
