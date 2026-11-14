@@ -2,6 +2,8 @@
 
 KindPath runs locally and uses an isolated Chromium browser to check one public webpage for accessibility issues. It returns a downloadable JSON report and, when capture succeeds, a JPEG preview from the same scan.
 
+![KindPath scans CityLights, opens the accessibility report, and compares the original preview with three vision presets.](assets/kindpath-citylights.gif)
+
 ## Run locally
 
 Install Git and Node.js 22.12 or later. Start Docker on a supported setup:
